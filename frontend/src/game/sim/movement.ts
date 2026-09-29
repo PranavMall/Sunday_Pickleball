@@ -16,8 +16,12 @@ export interface MovementInfo {
   serverSlot: number | null;
 }
 
-function sideCenterX(side: "L" | "R"): number {
-  return side === "R" ? COURT.WIDTH * 0.72 : COURT.WIDTH * 0.28;
+function globalRight(team: Team, side: "L" | "R"): boolean {
+  return (team === "near") === (side === "R");
+}
+
+function sideCenterX(team: Team, side: "L" | "R"): number {
+  return globalRight(team, side) ? COURT.WIDTH * 0.72 : COURT.WIDTH * 0.28;
 }
 
 function readyDepth(team: Team, atKitchen: boolean): number {
@@ -47,7 +51,7 @@ export function updateMovement(
     let retriever: PlayerState | null = null;
     if (ballComingHere && pred.reachable) {
       const targetHalfRight = pred.x > COURT.CENTER_X;
-      const byside = mates.find((m) => (m.courtSide === "R") === targetHalfRight);
+      const byside = mates.find((m) => globalRight(m.team, m.courtSide) === targetHalfRight);
       const nearest = mates
         .slice()
         .sort((a, b) => dist2(a, pred) - dist2(b, pred))[0];
@@ -82,7 +86,7 @@ export function updateMovement(
           info.rallyStrikeCount >= 2 &&
           info.affinityFor(p.slot) > 0.3;
         const atKitchen = advance;
-        p.targetX = sideCenterX(p.courtSide);
+        p.targetX = sideCenterX(p.team, p.courtSide);
         p.targetY = readyDepth(team, atKitchen);
         if (isServer && info.serving) {
           // Server stays at the baseline until the serve is struck.

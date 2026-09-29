@@ -26,10 +26,11 @@ export const ScoreManager = {
     };
   },
 
-  // serve side for the CURRENT server, in GLOBAL terms (R = right half x>10).
-  // Rule: when the serving team's score is EVEN the serve is from the RIGHT,
-  // when ODD from the LEFT (this is why the game opens 0-0-2 serving from the
-  // right). The server number tracks sequence, not side.
+  // Reference helper: the TEAM-RELATIVE side the FIRST server of a service turn
+  // stands on for a given team score — RIGHT when the score is EVEN, LEFT when
+  // ODD (this is why the game opens 0-0-2 serving from the right). The live sim
+  // drives the actual serving side from player POSITIONS (players swap sides on
+  // a point win), so this is used for reference/tests, not to place the server.
   serveSide(score: ScoreState): "L" | "R" {
     const teamScore = score.servingTeam === "near" ? score.nearScore : score.farScore;
     return teamScore % 2 === 0 ? "R" : "L";

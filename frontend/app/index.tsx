@@ -15,7 +15,7 @@ export default function MainMenu() {
   return (
     <View style={styles.root} testID="main-menu-screen">
       <Image
-        source={require("@/assets/images/court_background.png")}
+        source={require("@/assets/images/court_background.webp")}
         style={styles.bg}
         contentFit="cover"
       />

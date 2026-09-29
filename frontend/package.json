@@ -9,7 +9,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test:game": "tsx src/game/__tests__/run.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "57.0.16",
@@ -51,6 +52,7 @@
     "eslint": "9.25.0",
     "eslint-config-expo": "57.0.2",
     "expo-doctor": "1.19.8",
+    "tsx": "4.19.2",
     "typescript": "6.0.3"
   },
   "resolutions": {

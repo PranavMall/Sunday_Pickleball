@@ -1,6 +1,6 @@
 import { COURT, serviceBoxFor, teamOfY } from "../config/court";
-import { DIFFICULTY_TABLE, PERSONALITY_BIAS, type AIParams } from "../config/ai";
-import { KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT } from "../config/tuning";
+import { DIFFICULTY_TABLE, PARTNER_DIFFICULTY, PERSONALITY_BIAS, type AIParams } from "../config/ai";
+import { HUMAN, KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT } from "../config/tuning";
 import { RNG } from "../core/rng";
 import { decideServe, decideShot } from "./aiController";
 import { updateMovement, type MovementInfo } from "./movement";
@@ -36,6 +36,7 @@ export interface SimOptions {
   controllers?: ControllerType[]; // 4 slots, default human + 3 AI
   personalities?: (Personality | undefined)[]; // 4 slots
   names?: string[];
+  partnerDifficulty?: Difficulty; // fixed level for the human's AI partner
 }
 
 export interface FloatingMessage {
@@ -74,6 +75,7 @@ export class GameSimulation {
   private pointResetTimer = 0;
   private serveTimer = 0;
   private pendingInput: SwipeInput | null = null;
+  private pendingInputTime = -1;
   private canHit: boolean[] = [false, false, false, false];
   private strikerSlot: number | null = null;
 
@@ -89,6 +91,16 @@ export class GameSimulation {
     this.personalities =
       opts.personalities ?? [undefined, "DEFENSIVE", "AGGRESSIVE", "TACTICAL"];
     const names = opts.names ?? ["You", "Partner", "Rival", "Rival"];
+    const partnerDiff = opts.partnerDifficulty ?? PARTNER_DIFFICULTY;
+
+    // AI difficulty per slot: explicit per-slot override wins; otherwise the two
+    // OPPONENTS (far team) use the chosen match difficulty while the near-team
+    // AI partner stays fixed at partnerDiff.
+    const diffForSlot = (slot: number, team: Team): Difficulty | undefined => {
+      if (this.controllers[slot] !== "AI") return undefined;
+      if (opts.difficulties?.[slot]) return opts.difficulties[slot];
+      return team === "near" ? partnerDiff : this.difficulty;
+    };
 
     const mk = (slot: number, team: Team, side: CourtSide): PlayerState => ({
       slot,
@@ -111,16 +123,25 @@ export class GameSimulation {
       lastHitTime: -10,
       reactionUntil: 0,
       committedToBall: false,
-      difficulty: this.controllers[slot] === "AI" ? (opts.difficulties?.[slot] ?? this.difficulty) : undefined,
+      difficulty: diffForSlot(slot, team),
       personality: this.personalities[slot],
       swingCue: -10,
     });
+    // courtSide is TEAM-RELATIVE ("R" = that player's own right service court).
     this.players = [
       mk(0, "near", "R"),
       mk(1, "near", "L"),
       mk(2, "far", "R"),
       mk(3, "far", "L"),
     ];
+
+    // Sensible ready positions so the very first frame doesn't snap from (0,0).
+    for (const p of this.players) {
+      p.x = this.sideX(p.team, p.courtSide);
+      p.y = p.team === "near" ? COURT.LENGTH - PLAYER.RECOVER_DEPTH_BASELINE : PLAYER.RECOVER_DEPTH_BASELINE;
+      p.targetX = p.x;
+      p.targetY = p.y;
+    }
 
     this.ball = {
       x: COURT.CENTER_X,
@@ -149,6 +170,19 @@ export class GameSimulation {
     return DIFFICULTY_TABLE[this.players[slot].difficulty ?? this.difficulty];
   }
 
+  // The slot of a team's partner (the other player on the same team).
+  private partnerSlot(slot: number): number {
+    const team = this.players[slot].team;
+    return this.players.find((p) => p.team === team && p.slot !== slot)!.slot;
+  }
+
+  // On a side-out, the incoming serving team's player currently standing in
+  // their TEAM-RELATIVE right court becomes Server 1.
+  private pickServerSlot(team: Team): number {
+    const right = this.players.find((p) => p.team === team && p.courtSide === "R");
+    return (right ?? this.players.find((p) => p.team === team)!).slot;
+  }
+
   // ---- Serve setup ---------------------------------------------------------
   setupServe() {
     this.phase = "waiting_serve";
@@ -169,54 +203,59 @@ export class GameSimulation {
       p.committedToBall = false;
     }
 
-    const servingTeam = this.score.servingTeam;
-    const serveSide = ScoreManager.serveSide(this.score);
-    const serving = this.players.filter((p) => p.team === servingTeam);
-    const receiving = this.players.filter((p) => p.team !== servingTeam);
-
-    // Server occupies serveSide; partner opposite.
-    const server = serving.find((p) => p.courtSide === serveSide) ?? serving[0];
-    const partner = serving.find((p) => p !== server)!;
-    server.courtSide = serveSide;
-    partner.courtSide = serveSide === "R" ? "L" : "R";
+    if (this.serverSlot === null) this.serverSlot = this.pickServerSlot(this.score.servingTeam);
+    const server = this.players[this.serverSlot];
     server.isServing = true;
-    this.serverSlot = server.slot;
 
-    const nearTeam = servingTeam === "near";
-    const baseY = nearTeam ? COURT.LENGTH - 1.0 : 1.0;
-    server.x = this.sideX(server.courtSide);
-    server.y = baseY;
-    partner.x = this.sideX(partner.courtSide);
-    partner.y = nearTeam ? COURT.LENGTH - PLAYER.RECOVER_DEPTH_BASELINE : PLAYER.RECOVER_DEPTH_BASELINE;
-
-    // Receiving team: diagonal receiver deep to return the serve.
-    receiving[0].courtSide = "R";
-    receiving[1].courtSide = "L";
-    for (const r of receiving) {
-      r.x = this.sideX(r.courtSide);
-      r.y = r.team === "near" ? COURT.LENGTH - PLAYER.RECOVER_DEPTH_BASELINE - 1 : PLAYER.RECOVER_DEPTH_BASELINE + 1;
-      r.targetX = r.x;
-      r.targetY = r.y;
-    }
+    // Position ONLY the server, at their baseline in their current court. The
+    // partner and BOTH receivers keep their positions (they are not reset each
+    // point); automatic movement flows them to ready spots during the wait.
+    const nearTeam = server.team === "near";
+    server.x = this.sideX(server.team, server.courtSide);
+    server.y = nearTeam ? COURT.LENGTH - 1.0 : 1.0;
     server.targetX = server.x;
     server.targetY = server.y;
-    partner.targetX = partner.x;
-    partner.targetY = partner.y;
 
-    // Place ball at server.
+    // Place the ball at the server.
     this.ball.x = server.x;
     this.ball.y = server.y;
     this.ball.z = 0;
     this.ball.vx = this.ball.vy = this.ball.vz = 0;
   }
 
-  private sideX(side: CourtSide): number {
-    return side === "R" ? COURT.WIDTH * 0.72 : COURT.WIDTH * 0.28;
+  // Global x for a TEAM-RELATIVE court side.
+  private sideX(team: Team, side: CourtSide): number {
+    const globalRight = (team === "near") === (side === "R");
+    return globalRight ? COURT.WIDTH * 0.72 : COURT.WIDTH * 0.28;
   }
 
   // ---- Input ---------------------------------------------------------------
   submitSwipe(input: SwipeInput) {
     this.pendingInput = input;
+    this.pendingInputTime = this.time;
+  }
+
+  // For tests: is a swipe currently buffered (not yet consumed or expired)?
+  hasBufferedSwipe(): boolean {
+    return this.pendingInput !== null;
+  }
+
+  // For tests: resolve one point with a given rally winner (no physics needed),
+  // then advance to the next serve. Exercises the real scoring + serve-rotation
+  // path so tests can assert the actual serving PLAYER and SIDE deterministically.
+  debugPlayPoint(rallyWinner: Team) {
+    const faultingTeam: Team = rallyWinner === "near" ? "far" : "near";
+    this.registerFault({
+      reason: "OUT",
+      faultingTeam,
+      x: COURT.CENTER_X,
+      y: COURT.NET_Y,
+      message: "debug point",
+    });
+    if (this.phase !== "game_over") {
+      this.pointResetTimer = 0;
+      this.setupServe();
+    }
   }
 
   // Public: is the human currently able to strike?
@@ -236,6 +275,12 @@ export class GameSimulation {
 
     // decay floating messages
     this.messages = this.messages.filter((m) => (m.life -= dt) > 0);
+
+    // Expire a stale swipe: an input only stays valid for a short deterministic
+    // window, so an early swipe can never fire seconds later.
+    if (this.pendingInput && this.time - this.pendingInputTime > INPUT.SWIPE_BUFFER_TIME) {
+      this.pendingInput = null;
+    }
 
     if (this.phase === "game_over") return;
 
@@ -525,7 +570,35 @@ export class GameSimulation {
     let targetX = p.x + lateral;
     targetX = Math.max(COURT.RADIUS_MARGIN, Math.min(COURT.WIDTH - COURT.RADIUS_MARGIN, targetX));
 
-    this.executeShot(p, shotType, targetX, targetY, { accuracy: 1, unforcedError: 0 });
+    // Timing quality: how good the contact is (ball right at the player = good;
+    // reaching at the edge, taking a high ball, or an extreme aim = poor).
+    const q = this.humanShotQuality(p, lateral);
+    this.executeShot(p, shotType, targetX, targetY, {
+      accuracy: q.accuracy,
+      unforcedError: q.unforcedError,
+    });
+  }
+
+  // Convert contact timing + aim into a shot accuracy and a small fault chance.
+  // Good timing → accurate & safe (no random miss). Slightly off → modest
+  // spread. Very poor timing or an extreme aim → can occasionally net/out.
+  private humanShotQuality(p: PlayerState, lateralFt: number): { accuracy: number; unforcedError: number } {
+    const b = this.ball;
+    const d = Math.hypot(b.x - p.x, b.y - p.y);
+    const maxReach = PLAYER.REACH * HUMAN.reachMax;
+    const reachFrac = Math.min(1, d / maxReach);
+    const tErr = clamp01((reachFrac - HUMAN.perfectReachFrac) / (1 - HUMAN.perfectReachFrac));
+    const zErr = b.z > HUMAN.highZ ? Math.min(1, (b.z - HUMAN.highZ) / HUMAN.highZRange) : 0;
+    const aimExtreme = clamp01((Math.abs(lateralFt) - HUMAN.extremeAimFt) / HUMAN.extremeAimRange);
+    let errLevel = Math.max(tErr, zErr * 0.6);
+    errLevel = Math.min(1, errLevel + aimExtreme * 0.5);
+    errLevel = Math.min(1, errLevel / HUMAN.forgiveness);
+    const accuracy = 1 - errLevel * HUMAN.maxInaccuracy;
+    const unforcedError =
+      errLevel > HUMAN.faultThreshold
+        ? ((errLevel - HUMAN.faultThreshold) / (1 - HUMAN.faultThreshold)) * HUMAN.maxFaultChance
+        : 0;
+    return { accuracy, unforcedError };
   }
 
   // depth = ft from the RECEIVING baseline; returns a logical y for that team.
@@ -561,10 +634,12 @@ export class GameSimulation {
     const wasVolley = !opts.isServe && b.bouncesSinceHit === 0 && b.z > 0.05;
 
     // Pressure ramp: the longer a rally goes, the more likely a mistake — keeps
-    // rallies believable and guarantees they resolve. Skill (base
-    // unforcedError) still dominates, so the better AI errs less and wins more.
-    const pressure = opts.isServe ? 0 : Math.min(0.3, this.rallyStrikeCount * 0.006);
-    const effUnforced = p.controller === "AI" ? opts.unforcedError + pressure : 0;
+    // rallies believable, snappy (arcade pacing) and guarantees they resolve.
+    // Skill (base unforcedError) still dominates early, so the better AI errs
+    // less and wins more; the ramp only bites in long grinds. AI only.
+    const rally = this.rallyStrikeCount;
+    const pressure = opts.isServe ? 0 : Math.min(0.6, rally * 0.015 + Math.max(0, rally - 20) * 0.03);
+    const effUnforced = opts.isServe ? 0 : opts.unforcedError + (p.controller === "AI" ? pressure : 0);
     const forcedMiss = !opts.isServe && effUnforced > 0 && this.rng.chance(effUnforced);
 
     if (forcedMiss) {
@@ -585,7 +660,7 @@ export class GameSimulation {
     const shot = solveShot(p.x, p.y, targetX, targetY, shotType, {
       accuracy: opts.accuracy,
       unforcedError: 0,
-      rng: p.controller === "AI" ? this.rng : undefined,
+      rng: opts.accuracy < 1 || effUnforced > 0 ? this.rng : undefined,
     });
 
     b.x = p.x;
@@ -650,12 +725,16 @@ export class GameSimulation {
     const outcome = ScoreManager.resolve(this.score, rallyWinner);
     this.score = outcome.score;
 
-    if (outcome.serverSwitchSides) {
-      // Serving team keeps the serve; the two serving players swap sides.
-      const serving = this.players.filter((p) => p.team === this.score.servingTeam);
-      const tmp = serving[0].courtSide;
-      serving[0].courtSide = serving[1].courtSide;
-      serving[1].courtSide = tmp;
+    // Advance the SERVER (tracked as a real player), per doubles rules:
+    //  - point         → same server keeps serving; the two teammates swap sides
+    //  - second_server → the PARTNER becomes Server 2, serving from where they stand
+    //  - side_out      → the incoming team's right-court player is the new Server 1
+    if (outcome.event === "point") {
+      this.swapServingSides();
+    } else if (outcome.event === "second_server") {
+      this.serverSlot = this.partnerSlot(this.serverSlot!);
+    } else if (outcome.event === "side_out") {
+      this.serverSlot = this.pickServerSlot(this.score.servingTeam);
     }
 
     if (outcome.event === "side_out") this.pushMessage("Side out", COURT.CENTER_X, COURT.NET_Y, "warning");
@@ -672,6 +751,19 @@ export class GameSimulation {
     this.messages.push({ text, x, y, color, life: 1.4 });
     if (this.messages.length > 6) this.messages.shift();
   }
+
+  // Serving team keeps the serve after a point; the two teammates swap courts so
+  // the same server moves to the other service box (keeps score-parity valid).
+  private swapServingSides() {
+    const serving = this.players.filter((p) => p.team === this.score.servingTeam);
+    const tmp = serving[0].courtSide;
+    serving[0].courtSide = serving[1].courtSide;
+    serving[1].courtSide = tmp;
+  }
+}
+
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 function cap(s: string): string {

@@ -50,27 +50,32 @@ export function distToOwnKitchenLine(team: "near" | "far", y: number): number {
   return team === "near" ? Math.abs(y - COURT.NEAR_KITCHEN_Y) : Math.abs(y - COURT.FAR_KITCHEN_Y);
 }
 
+// courtSide is TEAM-RELATIVE: "R" = the player's own right-hand service court,
+// "L" = their own left. Because the far team faces the camera, its right court
+// is on the LEFT of the screen (low global x). Convert to a GLOBAL side here so
+// the rest of the sim/render can reason in shared global x.
+//   near "R" -> global right (x>10)   near "L" -> global left (x<10)
+//   far  "R" -> global left  (x<10)   far  "L" -> global right (x>10)
+export function isGlobalRight(team: "near" | "far", side: CourtSideT): boolean {
+  return (team === "near") === (side === "R");
+}
+
 // The diagonal service box a serve must land in.
-// side = the serving player's court side (L/R). Serves go cross-court, so a
-// server on the R serves into the receiver's L box (from the server's view).
-// Returns the rectangle (in logical coords) of the target service box on the
-// RECEIVING side, EXCLUDING the kitchen (serve must clear the kitchen line).
+// serverSide = the serving player's TEAM-RELATIVE court side (L/R). Serves go
+// cross-court, so the ball lands in the receiver's diagonally-opposite box.
+// Returns the rectangle (in GLOBAL logical coords) of the target service box on
+// the RECEIVING side, EXCLUDING the kitchen (serve must clear the kitchen line).
 export function serviceBoxFor(servingTeam: "near" | "far", serverSide: CourtSideT) {
   const receivingIsFar = servingTeam === "near";
   // y-range: from the receiving baseline to the receiving kitchen line
   // (kitchen line itself is a fault on the serve → exclude it).
   const yLo = receivingIsFar ? COURT.BASELINE_FAR_Y : COURT.NEAR_KITCHEN_Y;
   const yHi = receivingIsFar ? COURT.FAR_KITCHEN_Y : COURT.BASELINE_NEAR_Y;
-  // x-range: cross-court. Server on R (x>10 from their own orientation) must
-  // land in the receiver's box that is diagonally opposite.
-  // Because both teams share the same global x axis, a serve from the near-team
-  // Right (global x in [10,20]) goes to the far box on global x in [0,10], etc.
-  // Near team's "R" is global x>10; its diagonal is far-left (x<10).
+  // x-range: cross-court. The serve leaves the server's global half and lands in
+  // the diagonally-opposite (mirrored) global half on the receiving side.
+  const serverGlobalRight = isGlobalRight(servingTeam, serverSide);
+  const targetGlobalRight = !serverGlobalRight;
   let xLo: number, xHi: number;
-  const serverRightGlobal = serverSide === "R";
-  // near team R == global right; far team R == global left (mirror). We store
-  // courtSide already in GLOBAL terms in the sim, so just mirror by team.
-  const targetGlobalRight = servingTeam === "near" ? !serverRightGlobal : !serverRightGlobal;
   if (targetGlobalRight) {
     xLo = COURT.CENTER_X;
     xHi = COURT.WIDTH;

@@ -1,5 +1,10 @@
 import type { Difficulty, Personality } from "../sim/types";
 
+// The AI PARTNER (the human's teammate) always plays at a fixed, moderate level
+// regardless of the match difficulty the player picked — difficulty only scales
+// the two OPPONENTS. Change this one value to make the partner stronger/weaker.
+export const PARTNER_DIFFICULTY: Difficulty = "CLUB";
+
 // ONE configurable AI. Difficulty scales INTELLIGENCE parameters, not ball or
 // foot speed (higher tiers play better pickleball, they do not cheat with
 // physics). Personality is INDEPENDENT of difficulty and biases shot choice.

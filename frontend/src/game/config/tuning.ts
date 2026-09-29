@@ -46,6 +46,27 @@ export const INPUT = {
   DINK_POWER_MAX: 0.32, // power under this near the net = dink
   DRIVE_POWER_MIN: 0.55,
   DROP_POWER_MAX: 0.4,
+  // A swipe is only valid for a short deterministic window; if the player can't
+  // legally strike within it, the input EXPIRES so an early swipe can never
+  // fire seconds later.
+  SWIPE_BUFFER_TIME: 0.28, // s
+} as const;
+
+// HUMAN shot quality. Direction → aim, swipe length → power, and TIMING (how
+// well-placed the contact is) → quality. All windows/error amounts live here.
+// `forgiveness` is the single master knob to tune after playtesting: higher =
+// more forgiving (shots stay accurate/safe even with sloppy timing).
+export const HUMAN = {
+  reachMax: 1.15, // must match GameSimulation.computeReach() reach multiplier
+  perfectReachFrac: 0.55, // contact distance/maxReach below this = perfect timing
+  highZ: 3.6, // ball height (ft) above which contact gets harder
+  highZRange: 3.0, // ft over which the height penalty ramps to full
+  maxInaccuracy: 0.8, // cap on (1-accuracy) fed to the shot solver's spread
+  faultThreshold: 0.6, // error level above which a shot can actually net/out
+  maxFaultChance: 0.4, // at the worst timing, chance the shot faults
+  extremeAimFt: 8, // |lateral aim ft| beyond this counts as an extreme aim
+  extremeAimRange: 8, // ft over which the extreme-aim penalty ramps to full
+  forgiveness: 1.0, // MASTER tuner: >1 = more forgiving, <1 = punishing
 } as const;
 
 // Kitchen mechanic timings.

@@ -1,12 +1,14 @@
 import React, { useMemo } from "react";
-import { Canvas, Image as SkImage, useImage, Path, Circle, Oval, Group, Skia } from "@shopify/react-native-skia";
+import { View } from "react-native";
+import { Image } from "expo-image";
+import { Canvas, Path, Circle, Oval, Group, Skia } from "@shopify/react-native-skia";
 
 import { COURT, netHeightAt } from "../config/court";
 import type { GameSimulation } from "../sim/GameSimulation";
-import type { Projector } from "../render/perspective";
+import { IMAGE_H, IMAGE_W, type Projector } from "../render/perspective";
 import { useTheme } from "@/src/theme";
 
-const courtImg = require("@/assets/images/court_background.png");
+const courtImg = require("@/assets/images/court_background.webp");
 
 interface Props {
   sim: GameSimulation;
@@ -22,7 +24,6 @@ interface Props {
 // depth-scaled screen offset so the ball and its shadow separate as it rises.
 export function GameCanvas({ sim, projector, width, height }: Props) {
   const { colors } = useTheme();
-  const image = useImage(courtImg);
 
   const seg = (
     pts: [number, number][],
@@ -123,7 +124,8 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
     const swinging = sim.time - p.swingCue < 0.25;
     const paddleR = scale * 0.5;
     const side = p.team === "near" ? -1 : 1;
-    const px = g.x + (p.courtSide === "R" ? 1 : -1) * bodyW * 0.7;
+    const isGlobalRight = (p.team === "near") === (p.courtSide === "R");
+    const px = g.x + (isGlobalRight ? 1 : -1) * bodyW * 0.7;
     const py = bodyTop + headR + (swinging ? -scale * 0.6 : scale * 0.2);
     return (
       <Group key={slot}>
@@ -167,39 +169,47 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
   const ballFar = sim.ball.y < COURT.NET_Y;
 
   return (
-    <Canvas style={{ width, height }}>
-      {image && (
-        <SkImage
-          image={image}
-          x={projector.offsetX}
-          y={projector.offsetY}
-          width={1024 * projector.scale}
-          height={1536 * projector.scale}
-          fit="fill"
-        />
-      )}
-      {/* Kitchen fills (own drawable layer, can flash) */}
-      <Path path={kitchenFills.far} color={flash ? colors.kitchenFlash : colors.kitchenFill} opacity={flash ? 0.35 : 0.16} />
-      <Path path={kitchenFills.near} color={flash ? colors.kitchenFlash : colors.kitchenFill} opacity={flash ? 0.35 : 0.16} />
+    <View style={{ width, height }}>
+      {/* Painted court as a background layer (expo-image reliably decodes the
+          bundled asset on Expo Go, unlike Skia's image loader). It uses the
+          SAME projector scale/offset so it stays pixel-aligned with the
+          code-drawn lines rendered by the transparent Skia canvas above. */}
+      <Image
+        source={courtImg}
+        style={{
+          position: "absolute",
+          left: projector.offsetX,
+          top: projector.offsetY,
+          width: IMAGE_W * projector.scale,
+          height: IMAGE_H * projector.scale,
+        }}
+        contentFit="fill"
+        onError={(e) => console.warn("[court] background image failed to load", e)}
+      />
+      <Canvas style={{ width, height, backgroundColor: "transparent" }}>
+        {/* Kitchen fills (own drawable layer, can flash) */}
+        <Path path={kitchenFills.far} color={flash ? colors.kitchenFlash : colors.kitchenFill} opacity={flash ? 0.35 : 0.16} />
+        <Path path={kitchenFills.near} color={flash ? colors.kitchenFlash : colors.kitchenFill} opacity={flash ? 0.35 : 0.16} />
 
-      {/* Code-drawn lines */}
-      <Path path={lines.boundary} style="stroke" strokeWidth={3.2} color={colors.courtLine} opacity={0.9} />
-      <Path path={lines.center} style="stroke" strokeWidth={2.4} color={colors.courtLine} opacity={0.85} />
-      <Path path={lines.kitchen} style="stroke" strokeWidth={2.6} color={colors.courtLine} opacity={0.9} />
+        {/* Code-drawn lines */}
+        <Path path={lines.boundary} style="stroke" strokeWidth={3.2} color={colors.courtLine} opacity={0.9} />
+        <Path path={lines.center} style="stroke" strokeWidth={2.4} color={colors.courtLine} opacity={0.85} />
+        <Path path={lines.kitchen} style="stroke" strokeWidth={2.6} color={colors.courtLine} opacity={0.9} />
 
-      {/* Far team behind the net */}
-      {farPlayers.map(drawPlayer)}
-      {ballFar && drawBall()}
+        {/* Far team behind the net */}
+        {farPlayers.map(drawPlayer)}
+        {ballFar && drawBall()}
 
-      {/* Net */}
-      <Path path={net.band} color={colors.netColor} opacity={0.42} />
-      <Path path={net.tape} style="stroke" strokeWidth={3} color={colors.courtLine} />
-      <Circle cx={net.bl.x} cy={net.bl.y - net.hSide} r={4} color={colors.netPost} />
-      <Circle cx={net.br.x} cy={net.br.y - net.hSide} r={4} color={colors.netPost} />
+        {/* Net */}
+        <Path path={net.band} color={colors.netColor} opacity={0.42} />
+        <Path path={net.tape} style="stroke" strokeWidth={3} color={colors.courtLine} />
+        <Circle cx={net.bl.x} cy={net.bl.y - net.hSide} r={4} color={colors.netPost} />
+        <Circle cx={net.br.x} cy={net.br.y - net.hSide} r={4} color={colors.netPost} />
 
-      {/* Near team in front of the net */}
-      {nearPlayers.map(drawPlayer)}
-      {!ballFar && drawBall()}
-    </Canvas>
+        {/* Near team in front of the net */}
+        {nearPlayers.map(drawPlayer)}
+        {!ballFar && drawBall()}
+      </Canvas>
+    </View>
   );
 }

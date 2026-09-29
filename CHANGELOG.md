@@ -39,3 +39,31 @@ Format: **[area]** change — reason.
 
 ### Verified
 - 45/45 automated tests pass (rules + seeded AI-vs-AI). ROOKIE < CLUB < PRO win rates 100% in cross-difficulty smoke matches; no stuck states.
+
+## Milestone 1.1 — correction pass (2026-06)
+
+### Serving rotation (real doubles)
+- **[serve/rotation]** The server is now tracked as a real PLAYER (`serverSlot`), separate from the score's `serverNumber`. Previously the server was re-derived from score parity every serve, so when Server 1 lost, the SAME player re-served as "Server 2". Now: on a point the same server keeps serving and the two teammates swap courts; on a Server-1 loss the PARTNER becomes Server 2 and serves from where they stand; on a side-out the incoming team's right-court player is Server 1 from the right — regardless of score parity.
+- **[serve/sides]** `courtSide` is now TEAM-RELATIVE ("R" = that player's own right service court). The far team faces the camera, so its right court is on the LEFT of the screen (low global x). `serviceBoxFor`, `sideX`, movement and rendering convert team-relative → global consistently; serves land in the correct diagonal box for both teams.
+- **[serve/receivers]** Receivers are no longer re-positioned or re-sided every point; `setupServe` only places the server. Automatic movement flows the others to ready spots (no teleport resets).
+
+### AI partner
+- **[ai/partner]** Match difficulty now scales the two OPPONENTS only. The human's AI partner is fixed at `PARTNER_DIFFICULTY` (CLUB) — configurable in `config/ai.ts`.
+
+### Input
+- **[input]** Swipes now expire after `INPUT.SWIPE_BUFFER_TIME` (0.28 s) if the player can't legally strike — an early/late swipe can no longer fire seconds later.
+
+### Human shot quality
+- **[shots/human]** Human shots are no longer perfectly accurate. Direction → aim, swipe length → power, and TIMING → quality: good contact (ball at the player) is accurate & safe; reaching at the edge / taking a high ball / an extreme aim adds spread and, when very poor, an occasional net/out. Good swipes never randomly miss. All windows/error amounts live in `config/tuning.ts` `HUMAN` with a single master `forgiveness` knob.
+- **[shots/pacing]** Rally pressure ramp firmed (bites in long grinds) so rallies stay snappy and always resolve; AI only, human unaffected.
+
+### Rendering
+- **[render/court]** The painted court is now drawn with `expo-image` as a background layer behind a TRANSPARENT Skia canvas (Skia's bundled-image loader didn't decode reliably in Expo Go). Same projector scale/offset keeps it pixel-aligned with the code-drawn lines. Added load-error logging. Asset compressed from a 2.9 MB PNG to a 274 KB WebP (dimensions unchanged, 1024×1536).
+
+### Housekeeping
+- **[app]** Renamed to Picklewood (name/slug/scheme); bundle IDs unchanged.
+- **[test]** Added `yarn test:game` (pinned `tsx` runner). Debug overlay now shows the match seed.
+
+### Verified (M1.1)
+- 71/71 automated tests pass, including new serve-rotation and stale-swipe tests.
+- 150 seeded AI-vs-AI matches (50 per ROOKIE/CLUB/PRO) complete with **0 stuck states**; worst single point ~26 s, longest full match ~13 min (a 101-point PRO deuce). ROOKIE<CLUB<PRO cross-difficulty win rate 100%.

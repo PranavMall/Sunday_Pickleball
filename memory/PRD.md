@@ -42,5 +42,17 @@ ROOKIE/CLUB/PRO (M1) with personalities; result + rematch; rules unit tests.
   + Sentry; share; performance pass; installable builds + web beta.
 - P2 (future, NOT now): accounts/sign-in, online multiplayer, store/purchases, ads, extra courts.
 
+## Milestone 1.1 correction pass (2026-06)
+- Serving tracked as a real PLAYER; correct doubles rotation (server keeps serve + teammates
+  swap on a point; partner becomes Server 2 on a loss; side-out picks the right-court player).
+- courtSide is now TEAM-RELATIVE (far team's right = screen-left); serve boxes correct both ways.
+- Receivers no longer reset each point; only the server is placed.
+- AI partner fixed at CLUB; difficulty scales the two opponents only.
+- Swipes expire after 0.28 s (no stale/delayed shots).
+- Human shot quality: timing/aim → accuracy & occasional net/out (master `forgiveness` knob).
+- Court painted via expo-image behind a transparent Skia canvas (fixes Expo Go); WebP 274 KB.
+- Renamed to Picklewood; `yarn test:game`; seed shown in debug overlay.
+- 71/71 tests pass; 150 seeded AI-vs-AI matches (50/tier) complete, 0 stuck states.
+
 ## Next tasks
-Await user "go" on M1 review, then begin M2 (sprites/audio + game feel + lob/smash + new tiers).
+Await user sign-off on Milestone 1 (post-1.1 corrections). Do NOT start M2 until approved.

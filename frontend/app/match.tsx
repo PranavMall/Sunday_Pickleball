@@ -173,7 +173,7 @@ export default function Match() {
       {__DEV__ && (
         <View style={[styles.debug, { top: insets.top + 70 }]} pointerEvents="none">
           <Text style={styles.debugText}>
-            {fps} fps · {sim.phase} · z{sim.ball.z.toFixed(1)} · b{sim.ball.bouncesSinceHit}
+            {fps} fps · seed {sim.rng.seed} · {sim.phase} · z{sim.ball.z.toFixed(1)} · b{sim.ball.bouncesSinceHit}
           </Text>
         </View>
       )}
