@@ -25,8 +25,8 @@ export interface AIParams {
 export const DIFFICULTY_TABLE: Record<Difficulty, AIParams> = {
   // Milestone 1 tiers
   ROOKIE: {
-    reactionDelay: 0.28, positionError: 2.6, predictError: 0.45, shotAccuracy: 0.6,
-    unforcedError: 0.17, kitchenAffinity: 0.22, anticipation: 0.28, aggressiveness: 0.35, tacticalVariety: 0.2,
+    reactionDelay: 0.24, positionError: 2.8, predictError: 0.5, shotAccuracy: 0.5,
+    unforcedError: 0.3, kitchenAffinity: 0.22, anticipation: 0.24, aggressiveness: 0.33, tacticalVariety: 0.18,
   },
   CLUB: {
     reactionDelay: 0.2, positionError: 1.8, predictError: 0.28, shotAccuracy: 0.74,

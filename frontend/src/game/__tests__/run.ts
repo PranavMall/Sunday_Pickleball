@@ -5,11 +5,11 @@
  * Pure TypeScript, no RN/Skia dependency.
  */
 import { COURT, serviceBoxFor } from "../config/court";
-import { INPUT } from "../config/tuning";
+import { INPUT, PLAYER } from "../config/tuning";
 import { RuleManager } from "../sim/rules";
 import { ScoreManager } from "../sim/score";
-import { GameSimulation } from "../sim/GameSimulation";
-import type { BallState, PlayerState, Team } from "../sim/types";
+import { GameSimulation, humanShotQuality, humanServeQuality } from "../sim/GameSimulation";
+import type { BallState, Difficulty, PlayerState, Team } from "../sim/types";
 
 let passed = 0;
 let failed = 0;
@@ -259,6 +259,111 @@ function inputTests() {
   ok(!sim.hasBufferedSwipe(), "an old swipe EXPIRES and can never fire later");
 }
 
+// ==================== SERVER POSITION TESTS ====================
+function serverPositionTests() {
+  console.log("\n[Server position]");
+  // Near human server: walks BEHIND the near baseline (y > 44) while waiting.
+  const near = new GameSimulation({ seed: 11, difficulty: "CLUB" });
+  for (let i = 0; i < 60; i++) near.step(); // ~1s to walk into position (human won't auto-serve)
+  const ns = near.players[near.serverSlot!];
+  ok(ns.team === "near" && near.phase === "waiting_serve", "near human is still the waiting server");
+  ok(ns.y > COURT.LENGTH, `near server stands BEHIND the baseline (y=${ns.y.toFixed(1)} > ${COURT.LENGTH})`);
+
+  // Far server: walks BEHIND the far baseline (y < 0) while waiting.
+  const far = new GameSimulation({ seed: 12, difficulty: "CLUB" });
+  far.score = { ...far.score, servingTeam: "far" };
+  far.serverSlot = 2;
+  far.setupServe();
+  for (let i = 0; i < 40; i++) far.step(); // <1.1s SERVE_DELAY, so still waiting
+  const fs = far.players[far.serverSlot!];
+  ok(fs.team === "far", "far team is serving");
+  ok(fs.y < 0, `far server stands BEHIND the baseline (y=${fs.y.toFixed(1)} < 0)`);
+}
+
+// ==================== CONTROLS / QUALITY TESTS ====================
+function controlsTests() {
+  console.log("\n[Controls & shot quality]");
+
+  // --- swipe-direction mapping ---
+  const good = humanShotQuality(1.3, 0, { dx: 0, dy: -120 }); // forward, on-time
+  ok(good.unforcedError === 0 && good.accuracy > 0.95, "a good forward on-time swipe never randomly misses");
+  const down = humanShotQuality(1.3, 0, { dx: 0, dy: 120 }); // downward/backward swipe
+  ok(down.errLevel > good.errLevel && down.accuracy < good.accuracy, "a downward/backward swipe is a mishit (lower quality)");
+  ok(down.unforcedError > 0, "a downward swipe can go out/net");
+  const wideAim = humanShotQuality(1.3, 0, { dx: 260, dy: -120 }); // extreme lateral aim
+  ok(wideAim.errLevel > good.errLevel, "an extreme aim lowers quality");
+
+  // --- timing: early (buffered then fired at closest approach, lateness~0) vs late ---
+  const early = humanShotQuality(1.3, 0.0, { dx: 10, dy: -120 });
+  const late = humanShotQuality(1.3, 2.4, { dx: 10, dy: -120 });
+  ok(early.accuracy > 0.95 && early.unforcedError === 0, "a swipe timed at closest approach (0.1-0.2s early buffered) is high quality");
+  ok(late.errLevel > early.errLevel, "a clearly mistimed (late) swipe is lower quality");
+
+  // --- human serve faults ---
+  const goodServe = humanServeQuality({ dx: 0, dy: -120, power: 0.6 });
+  ok(goodServe.unforcedError === 0 && goodServe.accuracy > 0.9, "a normal serve stays safe");
+  const shortServe = humanServeQuality({ dx: 0, dy: -20, power: 0.08 }); // very short swipe
+  ok(shortServe.unforcedError > 0, "a very short serve swipe can fault");
+  const angleServe = humanServeQuality({ dx: 240, dy: -40, power: 0.5 }); // extreme angle
+  ok(angleServe.accuracy < goodServe.accuracy, "an extreme-angle serve is lower quality");
+}
+
+// ==================== AI PARTNER TESTS ====================
+function partnerTests() {
+  console.log("\n[AI partner]");
+  for (const d of ["ROOKIE", "CLUB", "PRO"] as Difficulty[]) {
+    const sim = new GameSimulation({ seed: 5, difficulty: d });
+    eq(sim.players[1].difficulty, "CLUB", `partner stays CLUB when match difficulty is ${d}`);
+    eq(sim.players[2].difficulty, d, `opponent uses match difficulty ${d}`);
+    eq(sim.players[3].difficulty, d, `second opponent uses match difficulty ${d}`);
+  }
+}
+
+// ==================== REAL-CONFIG SIMULATION TESTS ====================
+// Slot 0 = CLUB "human", slot 1 = default partner (CLUB), slots 2-3 = opponents.
+function realConfigTests() {
+  console.log("\n[Real default-config matches]");
+  for (const opp of ["ROOKIE", "CLUB", "PRO"] as Difficulty[]) {
+    let stuck = 0, rallySum = 0, points = 0, returns = 0, returnable = 0, farScoreSum = 0, games = 0;
+    for (let i = 0; i < 20; i++) {
+      const sim = new GameSimulation({
+        seed: 3000 + i,
+        difficulty: opp,
+        controllers: ["AI", "AI", "AI", "AI"],
+        difficulties: ["CLUB", undefined as any, undefined as any, undefined as any],
+      });
+      let ticks = 0, last = 0, stall = 0, maxStall = 0;
+      const max = 60 * 60 * 20;
+      let servingThisPoint: Team = sim.score.servingTeam;
+      let recorded = -1;
+      while (sim.phase !== "game_over" && ticks < max) {
+        const before = sim.phase;
+        sim.step();
+        ticks++;
+        if (before === "waiting_serve" && sim.phase === "rally") servingThisPoint = sim.score.servingTeam;
+        if (sim.phase === "point_over" && sim.stats.pointsPlayed !== recorded) {
+          recorded = sim.stats.pointsPlayed;
+          const strikes = sim.rallyStrikeCount;
+          rallySum += strikes; points++;
+          if (!(sim.lastFault?.reason ?? "").startsWith("SERVE")) {
+            returns++;
+            if (strikes >= 2) returnable++;
+          }
+        }
+        if (sim.stats.pointsPlayed !== last) { last = sim.stats.pointsPlayed; stall = 0; }
+        else { stall++; if (stall > maxStall) maxStall = stall; }
+      }
+      if (ticks >= max || maxStall > 60 * 45) stuck++;
+      farScoreSum += sim.score.farScore; games++;
+    }
+    const avgRally = (rallySum / points).toFixed(1);
+    const retPct = ((returnable / returns) * 100).toFixed(0);
+    ok(stuck === 0, `${opp} real-config: 20/20 matches complete, no stuck states`);
+    ok(returnable / returns > 0.3, `${opp} real-config: serves are returned (>30%), got ${retPct}%`);
+    console.log(`  ${opp}: avgRally=${avgRally} returnRate=${retPct}% avgFarScore=${(farScoreSum / games).toFixed(1)}`);
+  }
+}
+
 // ==================== SIMULATION SMOKE TESTS ====================
 const MATCHES_PER_DIFF = 50; // 50+ seeded AI-vs-AI matches per difficulty
 
@@ -345,7 +450,11 @@ function simTests() {
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
+serverPositionTests();
 inputTests();
+controlsTests();
+partnerTests();
+realConfigTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

@@ -1,0 +1,38 @@
+{
+  "summary": "Milestone 1.2 correction pass VERIFIED on the external preview URL. Portrait flow (390x844): main-menu-screen -> play-button -> difficulty-screen (rookie/club/pro visible, back-button returns to menu) -> difficulty-club -> match-screen. Watercolour Skia court renders after ~8-10s. HUD score-display reads exactly '0 – 0 – 2'. KITCHEN-TOGGLE REMOVAL CONFIRMED: no element with testID 'kitchen-toggle' exists on the match screen. PAUSE OVERLAY CORRECT: tapping pause-button shows pause-overlay containing EXACTLY three buttons (resume-button / restart-button / quit-button labelled Resume / Restart / Quit to Menu). No share-button inside pause-overlay. result-overlay is NOT visible while paused. Resume closes the overlay. Pause layout verified fully on-screen and tappable at both 390x844 and 360x640 viewports (all three buttons have in-viewport bounding boxes). Serve: upward swipe (mouse down at 195,600 -> 12 small upward steps -> mouse up) correctly advanced debug phase from 'waiting_serve' to 'rally' (ball z 0.0 -> 0.4) and Rally counter 0 -> 1 with no crash. Landscape viewport (844x390) correctly displays rotate-overlay. No red screens, no runtime errors, no backend calls (client-only). Only non-blocking console deprecation warnings (same as iteration_1): react-native-skia path API, props.pointerEvents, shadow* style props.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-skia paths", "issue": "SkPath.moveTo/lineTo/addPath/close/quadTo/addRRect are deprecated; migrate to Skia.PathBuilder.Make(). Non-blocking. Reference: /app/frontend/src/game/render/CourtRenderer.tsx (and GameCanvas.tsx) path building."},
+      {"component": "pointerEvents prop", "issue": "'props.pointerEvents is deprecated. Use style.pointerEvents.' Reference: /app/frontend/app/match.tsx lines 144, 163, 168, 175 (<View pointerEvents=\"box-none\"/\"none\">)."},
+      {"component": "shadow* style props", "issue": "'shadow*' style props are deprecated. Use 'boxShadow'. Reference: /app/frontend/app/index.tsx playBtn style (shadowColor/shadowOpacity/shadowRadius/shadowOffset)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_1.json",
+    "/app/test_reports/iteration_2.json"
+  ],
+  "action_items": [
+    "No functional fixes required for Milestone 1.2 correction pass — all requested changes landed correctly.",
+    "Optional (carried over): migrate Skia path building to Skia.PathBuilder.Make() in CourtRenderer.tsx / GameCanvas.tsx.",
+    "Optional (carried over): move pointerEvents from prop to style in match.tsx.",
+    "Optional (carried over): replace shadow* props with boxShadow in index.tsx playBtn style."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx pause overlay (lines 190-205) correctly renders only Resume/Restart/Quit — share-button is scoped exclusively to the result overlay (lines 229-240), matching the spec.",
+    "Pause overlay is wrapped in a padded modalWrap with pauseModal maxWidth 360 — layout verified to fit 360x640 small-phone viewport without clipping.",
+    "Result overlay is gated on `gameOver && !paused` effectively because pause overlay rendering block is `paused && !gameOver` — they are mutually exclusive, so result cannot bleed through pause.",
+    "No kitchen-toggle testID remains in match.tsx; stale `kitchenBtn*` styles still linger in the StyleSheet (lines 271-274) — dead-code cleanup only, not blocking.",
+    "All interactive elements correctly expose testID: play-button, back-button, difficulty-{rookie,club,pro}, match-screen, score-display, pause-button, pause-overlay, resume-button, restart-button, quit-button, rotate-overlay, result-overlay, rematch-button, menu-button, share-button, final-score."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100% (all requested M1.2 flows pass)"},
+  "seed_data_creation": "None (client-only offline game).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Portrait required (test both 390x844 and 360x640). Allow ~8-12s on /match for CanvasKit WASM. Swipe serve pattern that reliably triggers phase transition: mouse.move(195,600) -> mouse.down() -> 12 upward move steps of ~20px with ~15ms wait -> mouse.up(); confirm 'waiting_serve' -> 'rally' in the dev debug overlay (top-right).",
+  "rca_of_issue": "N/A — all Milestone 1.2 correction requirements verified passing."
+}

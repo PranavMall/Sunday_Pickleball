@@ -110,6 +110,11 @@ export default function Match() {
 
   const gameOver = sim.phase === "game_over";
   const nearWon = sim.winner === "near";
+  const dinkCue = sim.humanInDinkRange();
+  const shotLabel =
+    sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
+      ? sim.lastHumanShot.type.toUpperCase()
+      : null;
   const servingScore = sim.score.servingTeam === "near" ? sim.score.nearScore : sim.score.farScore;
   const recvScore = sim.score.servingTeam === "near" ? sim.score.farScore : sim.score.nearScore;
 
@@ -153,14 +158,17 @@ export default function Match() {
         </View>
       </View>
 
-      {/* Kitchen hold toggle (optional) */}
-      <Pressable
-        testID="kitchen-toggle"
-        onPress={() => (sim.holdKitchen = !sim.holdKitchen)}
-        style={[styles.kitchenBtn, { bottom: insets.bottom + 20 }, sim.holdKitchen && styles.kitchenBtnOn]}
-      >
-        <Text style={[styles.kitchenBtnText, sim.holdKitchen && styles.kitchenBtnTextOn]}>KITCHEN</Text>
-      </Pressable>
+      {/* Dink-range cue + last-shot-type label */}
+      {!paused && !gameOver && dinkCue && (
+        <View style={[styles.dinkCue, { bottom: insets.bottom + 74 }]} pointerEvents="none">
+          <Text style={styles.dinkCueText}>Dink range — short swipe</Text>
+        </View>
+      )}
+      {!paused && !gameOver && shotLabel && (
+        <View style={[styles.shotLabel, { bottom: insets.bottom + 108 }]} pointerEvents="none">
+          <Text style={styles.shotLabelText}>{shotLabel}</Text>
+        </View>
+      )}
 
       {/* Serve / hit hint */}
       {serveHint ? (
@@ -180,17 +188,17 @@ export default function Match() {
 
       {/* Pause overlay */}
       {paused && !gameOver && (
-        <View style={styles.modalWrap} testID="pause-overlay">
-          <View style={styles.modal}>
+        <View style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} testID="pause-overlay">
+          <View style={styles.pauseModal}>
             <Text style={styles.modalTitle}>Paused</Text>
             <Pressable testID="resume-button" style={styles.primaryBtn} onPress={() => setPaused(false)}>
               <Text style={styles.primaryText}>Resume</Text>
             </Pressable>
-            <Pressable testID="restart-button" style={styles.secondaryBtn} onPress={rematch}>
+            <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
               <Text style={styles.secondaryText}>Restart</Text>
             </Pressable>
-            <Pressable testID="quit-button" style={styles.secondaryBtn} onPress={goMenu}>
-              <Text style={styles.secondaryText}>Quit to menu</Text>
+            <Pressable testID="quit-button" style={styles.pauseSecondaryBtn} onPress={goMenu}>
+              <Text style={styles.secondaryText}>Quit to Menu</Text>
             </Pressable>
           </View>
         </View>
@@ -260,16 +268,18 @@ const useStyles = makeStyles((c) => ({
   rally: { color: c.onSurfaceInverse, backgroundColor: "rgba(46,61,42,0.72)", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, fontSize: 12, fontWeight: "600", overflow: "hidden" },
   iconBtn: { backgroundColor: "rgba(46,61,42,0.72)", width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   iconText: { color: c.onSurfaceInverse, fontSize: 18 },
-  kitchenBtn: { position: "absolute", right: 16, backgroundColor: "rgba(46,61,42,0.72)", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 2, borderColor: "transparent" },
-  kitchenBtnOn: { backgroundColor: c.accentGold, borderColor: c.onSurfaceInverse },
-  kitchenBtnText: { color: c.onSurfaceInverse, fontSize: 12, fontWeight: "800", letterSpacing: 1 },
-  kitchenBtnTextOn: { color: c.surfaceInverse },
+  dinkCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(197,160,40,0.9)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
+  dinkCueText: { color: "#1c2417", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
+  shotLabel: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.6)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4 },
+  shotLabelText: { color: c.accentGold, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
   hint: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(46,61,42,0.78)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 9 },
   hintText: { color: c.onSurfaceInverse, fontSize: 14, fontWeight: "600" },
   debug: { position: "absolute", right: 12, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   debugText: { color: "#fff", fontSize: 10, fontFamily: "monospace" as any },
   modalWrap: { ...StyleSheetAbsolute(), backgroundColor: "rgba(20,26,18,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
   modal: { backgroundColor: c.surface, borderRadius: 24, padding: 24, width: "100%", maxWidth: 380, alignItems: "center" },
+  pauseModal: { backgroundColor: c.surface, borderRadius: 24, paddingVertical: 20, paddingHorizontal: 20, width: "100%", maxWidth: 360, alignItems: "center", gap: 10 },
+  pauseSecondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, width: "100%", alignItems: "center", borderWidth: 1, borderColor: c.border },
   resultKicker: { color: c.accentGold, fontSize: 13, fontWeight: "800", letterSpacing: 3 },
   modalTitle: { color: c.onSurface, fontSize: 28, fontWeight: "800", marginTop: 4 },
   finalScore: { color: c.brandPrimary, fontSize: 44, fontWeight: "800", marginVertical: 8 },

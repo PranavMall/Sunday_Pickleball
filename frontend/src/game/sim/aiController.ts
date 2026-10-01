@@ -21,6 +21,7 @@ interface Ctx {
   bias: PersonalityBias;
   opponents: PlayerState[];
   rng: RNG;
+  strikeNumber: number; // ordinal of THIS strike in the rally (serve = 1)
 }
 
 function oppRegion(team: Team) {
@@ -68,6 +69,23 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
     Math.abs(p.y - (p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y)) < 3;
   const ballLow = ball.z < 2.2;
   const attackable = ball.z > 2.4; // a ball sitting up invites an attack
+  const clampX = (x: number) => Math.max(COURT.RADIUS_MARGIN, Math.min(COURT.WIDTH - COURT.RADIUS_MARGIN, x));
+
+  // SERVE RETURN (strike 2) and THIRD SHOT (strike 3): deliberately soft,
+  // central and MID-COURT so the other team can comfortably field it — never a
+  // deep/fast winner. This is what keeps rallies alive off the serve.
+  if (ctx.strikeNumber <= 3) {
+    const returnY = p.team === "near" ? 12 : COURT.LENGTH - 12; // ~12 ft from opp baseline
+    const targetX = clampX(COURT.CENTER_X + ctx.rng.noise(3.0));
+    const targetY = returnY + ctx.rng.noise(1.5);
+    return {
+      shotType: "drop", // soft, loopy, reachable
+      targetX,
+      targetY,
+      accuracy: ctx.params.shotAccuracy,
+      unforcedError: ctx.params.unforcedError * 0.4, // keep the rally alive
+    };
+  }
 
   // Weighted shot selection.
   let wDrive = 0.3 + ctx.bias.driveBias + ctx.params.aggressiveness * 0.35;
@@ -113,13 +131,25 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
   let targetX: number;
   let targetY: number;
   if (shotType === "drive") {
-    targetX = gapX(ctx);
-    // Attack toward the opponents' feet at the kitchen if they are up, else deep.
     const opponentsAtKitchen = ctx.opponents.every(
       (o) => Math.abs(o.y - reg.kitchenLineY) < 4,
     );
-    targetY = (opponentsAtKitchen ? reg.kitchenLineY + (p.team === "near" ? -1.5 : 1.5) : reg.deepY) +
-      ctx.rng.noise(1.5);
+    // VARIETY (scales with tacticalVariety, i.e. Club/Pro): mix attacking the
+    // opponents' feet at the kitchen, pushing them back deep, and side-to-side
+    // placement. Rookie (low variety) just drives at the obvious target.
+    const pushDeep = ctx.rng.chance(ctx.params.tacticalVariety * 0.55);
+    if (opponentsAtKitchen && !pushDeep) {
+      targetY = reg.kitchenLineY + (p.team === "near" ? -1.5 : 1.5); // at their feet
+    } else {
+      targetY = reg.deepY; // push them back to the baseline
+    }
+    targetY += ctx.rng.noise(1.5);
+    // Side-to-side: sometimes jam the open sideline lane instead of the gap.
+    if (ctx.rng.chance(ctx.params.tacticalVariety * 0.4)) {
+      targetX = ctx.rng.chance(0.5) ? COURT.WIDTH * 0.2 : COURT.WIDTH * 0.8;
+    } else {
+      targetX = gapX(ctx);
+    }
   } else if (shotType === "drop") {
     targetX = gapX(ctx);
     targetY = reg.kitchenY + ctx.rng.noise(1.5);
@@ -127,7 +157,7 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
     targetX = gapX(ctx);
     targetY = reg.kitchenY + ctx.rng.noise(1.2);
   }
-  targetX = Math.max(COURT.RADIUS_MARGIN, Math.min(COURT.WIDTH - COURT.RADIUS_MARGIN, targetX));
+  targetX = clampX(targetX);
 
   return {
     shotType,

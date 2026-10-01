@@ -21,7 +21,7 @@ export function solveShot(
   targetX: number,
   targetY: number,
   shotType: ShotType,
-  opts?: { accuracy?: number; rng?: RNG; unforcedError?: number },
+  opts?: { accuracy?: number; rng?: RNG; unforcedError?: number; clampInBounds?: boolean },
 ): ShotResult {
   const tune = SHOTS[shotType];
   const g = PHYS.GRAVITY;
@@ -29,6 +29,7 @@ export function solveShot(
 
   let tx = targetX;
   let ty = targetY;
+  const clampInBounds = opts?.clampInBounds ?? true;
 
   // Apply AI/human error: jitter the target and occasionally a bad mishit.
   if (opts?.rng) {
@@ -36,9 +37,11 @@ export function solveShot(
     const spread = (1 - acc) * 3.5; // ft
     tx += opts.rng.noise(spread);
     ty += opts.rng.noise(spread);
-    // Normal shots stay in bounds — a competent player keeps the ball in.
-    tx = Math.max(1, Math.min(COURT.WIDTH - 1, tx));
-    ty = Math.max(1, Math.min(COURT.LENGTH - 1, ty));
+    if (clampInBounds) {
+      // Normal shots stay in bounds — a competent player keeps the ball in.
+      tx = Math.max(1, Math.min(COURT.WIDTH - 1, tx));
+      ty = Math.max(1, Math.min(COURT.LENGTH - 1, ty));
+    }
     // Genuine UNFORCED errors (bad AI does this more) can sail out or net.
     if (opts.unforcedError && opts.rng.chance(opts.unforcedError)) {
       if (opts.rng.chance(0.5)) ty += opts.rng.range(-6, -2) * Math.sign(ty - fromY || 1);

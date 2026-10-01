@@ -20,16 +20,21 @@ export const PLAYER = {
   SPEED: 15.5, // ft/s base foot speed
   RADIUS: 0.9, // ft, body radius (spacing / collision)
   MIN_SEPARATION: 3.2, // ft, teammates keep at least this apart
-  REACH: 3.0, // ft, how close to the ball to be able to strike it
+  REACH: 3.3, // ft, how close to the ball to be able to strike it
+  REACH_MULT: 1.15, // single shared reach tolerance (computeReach + human quality)
   HIT_COOLDOWN: 0.35, // s between strikes by the same player
   RECOVER_DEPTH_BASELINE: 6.5, // ft in from baseline when recovering deep
+  RECEIVE_DEPTH: 2.6, // ft in from baseline when positioned to RECEIVE a serve
+  SERVE_STANDOFF: 1.6, // ft BEHIND the baseline the server stands to serve
   KITCHEN_LINE_STANDOFF: 1.2, // ft behind own kitchen line when playing net
 } as const;
 
 // Flight times (seconds) and target depths per shot type. Depth is measured
 // from the receiving baseline inward (ft).
 export const SHOTS = {
-  serve: { flight: 1.15, contactH: 1.3, minDepth: 4, maxDepth: 13, netClear: 1.2 },
+  // Serve: a soft, loopy, returnable arc (NOT a winner). Lands mid-court so the
+  // bounce sits up and the receiver has time to set and return it.
+  serve: { flight: 1.4, contactH: 1.3, minDepth: 5, maxDepth: 10, netClear: 1.4 },
   drive: { flight: 0.72, contactH: 1.4, minDepth: 3, maxDepth: 16, netClear: 0.8 },
   drop: { flight: 1.0, contactH: 1.3, minDepth: 0.5, maxDepth: 5, netClear: 1.0 }, // lands in/near far kitchen
   dink: { flight: 0.85, contactH: 1.1, minDepth: 0.5, maxDepth: 6, netClear: 0.35 }, // soft into kitchen
@@ -43,7 +48,8 @@ export type ShotTuning = (typeof SHOTS)[keyof typeof SHOTS];
 export const INPUT = {
   MIN_SWIPE: 18, // px, below this = tap (serve release / no-op)
   POWER_MAX_PX: 230, // px swipe length that maps to full power
-  DINK_POWER_MAX: 0.32, // power under this near the net = dink
+  DINK_POWER_MAX: 0.42, // power under this near the net = dink (widened for feel)
+  DINK_RANGE_FT: 4.5, // ft from the kitchen line counted as "dink range"
   DRIVE_POWER_MIN: 0.55,
   DROP_POWER_MAX: 0.4,
   // A swipe is only valid for a short deterministic window; if the player can't
@@ -52,21 +58,31 @@ export const INPUT = {
   SWIPE_BUFFER_TIME: 0.28, // s
 } as const;
 
-// HUMAN shot quality. Direction → aim, swipe length → power, and TIMING (how
-// well-placed the contact is) → quality. All windows/error amounts live here.
-// `forgiveness` is the single master knob to tune after playtesting: higher =
-// more forgiving (shots stay accurate/safe even with sloppy timing).
+// HUMAN shot quality. Direction (full swipe vector) → aim, swipe length → power,
+// and TIMING (how early/late vs the ball's closest approach) → quality. All
+// windows/error amounts live here. `forgiveness` is the single master knob:
+// higher = more forgiving (shots stay accurate/safe even with sloppy timing).
 export const HUMAN = {
-  reachMax: 1.15, // must match GameSimulation.computeReach() reach multiplier
-  perfectReachFrac: 0.55, // contact distance/maxReach below this = perfect timing
   highZ: 3.6, // ball height (ft) above which contact gets harder
   highZRange: 3.0, // ft over which the height penalty ramps to full
+  lateRangeFt: 2.4, // ft past closest approach that reads as fully mistimed
+  downwardPenalty: 0.9, // a pure downward/backward swipe adds this much error
   maxInaccuracy: 0.8, // cap on (1-accuracy) fed to the shot solver's spread
-  faultThreshold: 0.6, // error level above which a shot can actually net/out
-  maxFaultChance: 0.4, // at the worst timing, chance the shot faults
+  faultThreshold: 0.6, // error level above which a shot can actually net/out/wide
+  maxFaultChance: 0.4, // at the worst execution, chance the shot faults
   extremeAimFt: 8, // |lateral aim ft| beyond this counts as an extreme aim
   extremeAimRange: 8, // ft over which the extreme-aim penalty ramps to full
   forgiveness: 1.0, // MASTER tuner: >1 = more forgiving, <1 = punishing
+  // Serve quality (the human controls serve timing, so quality comes from the
+  // swipe itself): a very short swipe or an extreme angle can fault.
+  serve: {
+    lowPower: 0.35, // swipe power below this = a poor (short) serve
+    maxInaccuracy: 0.7,
+    faultThreshold: 0.55,
+    maxFaultChance: 0.35,
+    extremeAimFt: 7,
+    extremeAimRange: 7,
+  },
 } as const;
 
 // Kitchen mechanic timings.

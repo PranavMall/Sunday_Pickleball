@@ -41,6 +41,8 @@ export function updateMovement(
   info: MovementInfo,
   dt: number,
 ) {
+  const servingTeam: Team | null =
+    info.serving && info.serverSlot != null ? players[info.serverSlot].team : null;
   for (const team of ["near", "far"] as Team[]) {
     const mates = players.filter((p) => p.team === team);
     const ballComingHere = ball.inPlay && teamOfY(ball.y) === team && isApproaching(ball, team);
@@ -89,8 +91,16 @@ export function updateMovement(
         p.targetX = sideCenterX(p.team, p.courtSide);
         p.targetY = readyDepth(team, atKitchen);
         if (isServer && info.serving) {
-          // Server stays at the baseline until the serve is struck.
-          p.targetY = team === "near" ? COURT.LENGTH - 1.2 : 1.2;
+          // Server walks BEHIND their baseline to serve (exempt from the clamp).
+          p.targetY =
+            team === "near"
+              ? COURT.LENGTH + PLAYER.SERVE_STANDOFF
+              : -PLAYER.SERVE_STANDOFF;
+        } else if (info.serving && servingTeam && team !== servingTeam) {
+          // Receiving the serve: stand DEEP near the baseline to field a deep
+          // serve and move forward into the bounce (reachable returns).
+          p.targetY =
+            team === "near" ? COURT.LENGTH - PLAYER.RECEIVE_DEPTH : PLAYER.RECEIVE_DEPTH;
         }
       }
       moveToward(p, dt);
@@ -99,6 +109,8 @@ export function updateMovement(
     // Keep doubles spacing — never overlap or pass through a teammate.
     enforceSpacing(mates[0], mates[1]);
     for (const p of mates) {
+      // The serving player may legally stand behind the baseline while waiting.
+      if (info.serving && info.serverSlot === p.slot) continue;
       const c = clampToHalf(team, p.x, p.y);
       p.x = c.x;
       p.y = c.y;

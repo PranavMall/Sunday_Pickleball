@@ -101,3 +101,37 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+## user_problem_statement: "Picklewood 2v2 pickleball — Milestone 1.2 correction pass (server behind baseline, serve returns playable, Rookie 4-7 ppg, remove kitchen button, responsive pause, human serve faults, full-vector aim, varied errors, closest-approach timing, dink cue/label, Club/Pro variety). Client-only Expo + Skia game; no backend."
+
+## frontend:
+##   - task: "Match screen gameplay, serve behind baseline, dink cue + shot label, kitchen button removed"
+##     implemented: true
+##     working: "NA"
+##     file: "app/match.tsx, src/game/sim/*"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Engine suite 99/99 pass. Need UI verification: match playable, no kitchen button, dink cue appears, pause correctness."
+##   - task: "Pause screen = Resume/Restart/Quit to Menu, responsive, no Share, no result bleed-through"
+##     implemented: true
+##     working: "NA"
+##     file: "app/match.tsx"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Verified via screenshot on 360x640: resume/restart/quit present, share absent. Needs agent confirmation on small + normal viewports."
+
+## metadata:
+##   created_by: "main_agent"
+##   version: "1.2"
+##   test_sequence: 2
+
+## agent_communication:
+##     -agent: "main"
+##     -message: "M1.2 correction pass. Engine (headless) 99/99 pass incl. serve rotation, server-behind-baseline, human serve faults, swipe-direction, timing, real-config sims. Please verify FRONTEND flows only (client-only game, NO backend): menu->difficulty->match; pause overlay has exactly Resume/Restart/Quit to Menu and NO Share and no result overlay showing through; kitchen toggle button is GONE; court renders; a swipe up serves; difficulty screen works. Test on a small phone viewport (360x640) and a normal one (390x844)."

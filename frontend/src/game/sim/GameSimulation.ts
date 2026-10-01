@@ -78,11 +78,14 @@ export class GameSimulation {
   private pendingInputTime = -1;
   private canHit: boolean[] = [false, false, false, false];
   private strikerSlot: number | null = null;
+  private humanMinDist = Infinity; // closest approach seen while human is striker
+  private humanLastDist = Infinity; // previous tick distance (to detect receding)
 
   messages: FloatingMessage[] = [];
   lastFault: FaultEvent | null = null;
   winner: Team | null = null;
   holdKitchen = false; // optional player toggle: hold near team at the kitchen
+  lastHumanShot: { type: ShotType; time: number } | null = null; // for the HUD label
 
   constructor(opts: SimOptions) {
     this.rng = new RNG(opts.seed);
@@ -207,16 +210,17 @@ export class GameSimulation {
     const server = this.players[this.serverSlot];
     server.isServing = true;
 
-    // Position ONLY the server, at their baseline in their current court. The
-    // partner and BOTH receivers keep their positions (they are not reset each
-    // point); automatic movement flows them to ready spots during the wait.
-    const nearTeam = server.team === "near";
-    server.x = this.sideX(server.team, server.courtSide);
-    server.y = nearTeam ? COURT.LENGTH - 1.0 : 1.0;
-    server.targetX = server.x;
-    server.targetY = server.y;
+    // Aim the server at their serve spot BEHIND the baseline, but let them WALK
+    // there (don't snap). The partner and BOTH receivers keep their positions
+    // (not reset each point); automatic movement flows everyone to ready spots.
+    server.targetX = this.sideX(server.team, server.courtSide);
+    server.targetY =
+      server.team === "near"
+        ? COURT.LENGTH + PLAYER.SERVE_STANDOFF
+        : -PLAYER.SERVE_STANDOFF;
 
-    // Place the ball at the server.
+    // The ball sits with the server until the serve is struck (tracked each tick
+    // while waiting), so it follows them as they walk into position.
     this.ball.x = server.x;
     this.ball.y = server.y;
     this.ball.z = 0;
@@ -326,18 +330,27 @@ export class GameSimulation {
 
     // Handle serving.
     if (this.phase === "waiting_serve") {
-      const serverIsHuman = this.players[this.serverSlot!].controller === "LOCAL_HUMAN";
-      if (serverIsHuman) {
-        if (this.pendingInput) {
+      // players settle into position first
+      this.updateMovementAndReach(dt);
+      const server = this.players[this.serverSlot!];
+      // The ball stays in the server's hand until struck.
+      this.ball.x = server.x;
+      this.ball.y = server.y;
+      this.ball.z = 0;
+      // The server must have walked into position behind the baseline.
+      const inPosition = Math.hypot(server.targetX - server.x, server.targetY - server.y) < 0.6;
+      if (server.controller === "LOCAL_HUMAN") {
+        if (this.pendingInput && inPosition) {
           this.executeServe(this.pendingInput);
           this.pendingInput = null;
         }
       } else {
         this.serveTimer += dt;
-        if (this.serveTimer >= MATCH.SERVE_DELAY) this.executeServe(null);
+        // Serve once settled AND the delay has elapsed (hard cap avoids stalls).
+        if ((this.serveTimer >= MATCH.SERVE_DELAY && inPosition) || this.serveTimer >= MATCH.SERVE_DELAY * 2.5) {
+          this.executeServe(null);
+        }
       }
-      // players still settle into position
-      this.updateMovementAndReach(dt);
       return;
     }
 
@@ -374,7 +387,10 @@ export class GameSimulation {
   private computeReach() {
     this.canHit = [false, false, false, false];
     this.strikerSlot = null;
-    if (!this.ball.inPlay) return;
+    if (!this.ball.inPlay) {
+      this.humanMinDist = this.humanLastDist = Infinity;
+      return;
+    }
     const side = teamOfY(this.ball.y);
     const requireBounce = this.rallyStrikeCount < 3;
     let best: { slot: number; d: number } | null = null;
@@ -383,22 +399,43 @@ export class GameSimulation {
       const cooldownOk = this.time - p.lastHitTime > PLAYER.HIT_COOLDOWN;
       const bounceOk = !requireBounce || this.ball.bouncesSinceHit >= 1;
       const d = Math.hypot(this.ball.x - p.x, this.ball.y - p.y);
-      const reachOk = d <= PLAYER.REACH * 1.15 && this.ball.z <= 4.6;
+      const reachOk = d <= PLAYER.REACH * PLAYER.REACH_MULT && this.ball.z <= 4.6;
       if (cooldownOk && bounceOk && reachOk) {
         this.canHit[p.slot] = true;
         if (!best || d < best.d) best = { slot: p.slot, d };
       }
     }
     if (best) this.strikerSlot = best.slot;
+    // Reset human contact tracking whenever the human is not the current striker.
+    const humanSlot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
+    if (this.strikerSlot !== humanSlot) {
+      this.humanMinDist = this.humanLastDist = Infinity;
+    }
   }
 
   private resolveStrikes() {
     if (this.strikerSlot === null) return;
     const p = this.players[this.strikerSlot];
     if (p.controller === "LOCAL_HUMAN") {
+      // Track the ball's closest approach to the player while in the hit window,
+      // so a buffered swipe is executed at the BEST contact moment (not at the
+      // edge of reach) and timing quality is scored by how early/late the swipe
+      // was relative to that ideal contact — not by raw player-to-ball distance.
+      const d = Math.hypot(this.ball.x - p.x, this.ball.y - p.y);
+      if (d < this.humanMinDist) this.humanMinDist = d;
+      const receding = d > this.humanLastDist + 1e-3;
+      this.humanLastDist = d;
       if (this.pendingInput && !this.pendingInput.tap) {
-        this.executeHumanHit(p, this.pendingInput);
-        this.pendingInput = null;
+        const windowClosing =
+          this.ball.z > 4.0 || d > PLAYER.REACH * PLAYER.REACH_MULT * 0.98;
+        if (receding || windowClosing) {
+          const lateness = Math.max(0, d - this.humanMinDist);
+          this.executeHumanHit(p, this.pendingInput, lateness);
+          this.pendingInput = null;
+          this.humanMinDist = this.humanLastDist = Infinity;
+        }
+        // else: the ball is still approaching and comfortably reachable — wait a
+        // tick for a cleaner contact. (The 0.28 s buffer still bounds the wait.)
       }
       return;
     }
@@ -417,6 +454,7 @@ export class GameSimulation {
           bias: PERSONALITY_BIAS[p.personality ?? "TACTICAL"],
           opponents: this.players.filter((o) => o.team !== p.team),
           rng: this.rng,
+          strikeNumber: this.rallyStrikeCount + 1,
         });
         this.executeShot(p, intent.shotType, intent.targetX, intent.targetY, {
           accuracy: intent.accuracy,
@@ -538,7 +576,12 @@ export class GameSimulation {
       targetY = lo + (hi - lo) * depthT;
       const cx = (box.xLo + box.xHi) / 2;
       const lateral = (input.dx / INPUT.POWER_MAX_PX) * (box.xHi - box.xLo) * 0.7;
-      targetX = Math.max(box.xLo + 0.4, Math.min(box.xHi - 0.4, cx + lateral));
+      // NOTE: no hard clamp into the box — a poor serve must be able to miss.
+      targetX = cx + lateral;
+      // Serve quality: a very short swipe or an extreme angle can fault.
+      const q = humanServeQuality(input);
+      accuracy = q.accuracy;
+      unforced = q.unforcedError;
     } else {
       const intent = decideServe(server, box, this.paramsFor(server.slot), this.rng);
       targetX = intent.targetX;
@@ -553,52 +596,45 @@ export class GameSimulation {
     this.pushMessage("Serve!", server.x, server.y, "info");
   }
 
-  private executeHumanHit(p: PlayerState, input: SwipeInput) {
+  private executeHumanHit(p: PlayerState, input: SwipeInput, lateness: number) {
     const power = input.power;
-    const nearKitchen = Math.abs(p.y - COURT.NEAR_KITCHEN_Y) < 3 || p.inKitchen;
+    const kitchenLineY = p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+    const nearKitchen = Math.abs(p.y - kitchenLineY) < INPUT.DINK_RANGE_FT || p.inKitchen;
     let shotType: ShotType;
     if (nearKitchen && power < INPUT.DINK_POWER_MAX) shotType = "dink";
     else if (power < INPUT.DROP_POWER_MAX && !nearKitchen) shotType = "drop";
-    else if (power >= INPUT.DRIVE_POWER_MIN) shotType = "drive";
     else shotType = "drive";
 
-    // Aim from swipe: lateral from dx, depth from power & shot type.
+    // Aim from the FULL swipe vector: lateral from dx, depth from power & shot
+    // type. A downward/backward swipe (dy > 0) is a mishit — it overcooks the
+    // depth (tends long/out) and is penalised in quality below.
     const tune = SHOTS[shotType];
-    const depth = tune.maxDepth + (tune.minDepth - tune.maxDepth) * Math.min(1, power / 0.9);
+    const len = Math.hypot(input.dx, input.dy) || 1;
+    const downward = clamp01(input.dy / len); // 0 = pure up, 1 = pure down
+    let depth = tune.maxDepth + (tune.minDepth - tune.maxDepth) * Math.min(1, power / 0.9);
+    depth -= downward * 7; // backward swipe sends it long (toward/over the baseline)
     const targetY = this.depthToY(p.team, depth);
     const lateral = (input.dx / INPUT.POWER_MAX_PX) * 12;
     let targetX = p.x + lateral;
     targetX = Math.max(COURT.RADIUS_MARGIN, Math.min(COURT.WIDTH - COURT.RADIUS_MARGIN, targetX));
 
-    // Timing quality: how good the contact is (ball right at the player = good;
-    // reaching at the edge, taking a high ball, or an extreme aim = poor).
-    const q = this.humanShotQuality(p, lateral);
+    // Timing quality: how early/late the swipe was vs the ball's closest
+    // approach (lateness), plus height, aim and swipe-direction penalties.
+    const q = humanShotQuality(this.ball.z, lateness, input);
+    this.lastHumanShot = { type: shotType, time: this.time };
     this.executeShot(p, shotType, targetX, targetY, {
       accuracy: q.accuracy,
       unforcedError: q.unforcedError,
     });
   }
 
-  // Convert contact timing + aim into a shot accuracy and a small fault chance.
-  // Good timing → accurate & safe (no random miss). Slightly off → modest
-  // spread. Very poor timing or an extreme aim → can occasionally net/out.
-  private humanShotQuality(p: PlayerState, lateralFt: number): { accuracy: number; unforcedError: number } {
-    const b = this.ball;
-    const d = Math.hypot(b.x - p.x, b.y - p.y);
-    const maxReach = PLAYER.REACH * HUMAN.reachMax;
-    const reachFrac = Math.min(1, d / maxReach);
-    const tErr = clamp01((reachFrac - HUMAN.perfectReachFrac) / (1 - HUMAN.perfectReachFrac));
-    const zErr = b.z > HUMAN.highZ ? Math.min(1, (b.z - HUMAN.highZ) / HUMAN.highZRange) : 0;
-    const aimExtreme = clamp01((Math.abs(lateralFt) - HUMAN.extremeAimFt) / HUMAN.extremeAimRange);
-    let errLevel = Math.max(tErr, zErr * 0.6);
-    errLevel = Math.min(1, errLevel + aimExtreme * 0.5);
-    errLevel = Math.min(1, errLevel / HUMAN.forgiveness);
-    const accuracy = 1 - errLevel * HUMAN.maxInaccuracy;
-    const unforcedError =
-      errLevel > HUMAN.faultThreshold
-        ? ((errLevel - HUMAN.faultThreshold) / (1 - HUMAN.faultThreshold)) * HUMAN.maxFaultChance
-        : 0;
-    return { accuracy, unforcedError };
+  // Is the human currently positioned within dink range of their kitchen line?
+  humanInDinkRange(): boolean {
+    const slot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
+    if (slot < 0) return false;
+    const p = this.players[slot];
+    const kl = p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+    return Math.abs(p.y - kl) < INPUT.DINK_RANGE_FT || p.inKitchen;
   }
 
   // depth = ft from the RECEIVING baseline; returns a logical y for that team.
@@ -639,20 +675,41 @@ export class GameSimulation {
     // less and wins more; the ramp only bites in long grinds. AI only.
     const rally = this.rallyStrikeCount;
     const pressure = opts.isServe ? 0 : Math.min(0.6, rally * 0.015 + Math.max(0, rally - 20) * 0.03);
-    const effUnforced = opts.isServe ? 0 : opts.unforcedError + (p.controller === "AI" ? pressure : 0);
-    const forcedMiss = !opts.isServe && effUnforced > 0 && this.rng.chance(effUnforced);
+    const effUnforced = opts.unforcedError + (opts.isServe ? 0 : p.controller === "AI" ? pressure : 0);
+    const forcedMiss = effUnforced > 0 && this.rng.chance(effUnforced);
 
     if (forcedMiss) {
-      // Unforced error: a weak dump that faults right away (into the net / own
-      // court) — it cannot be volley-rescued, so rallies always resolve.
+      // A genuine mishit, varied so errors aren't all the same flat net dump:
+      //   net  — too flat, fails to clear the net (short)
+      //   long — overcooked past the baseline (out deep)
+      //   wide — sprayed outside the sideline (out wide)
       const contactZ = SHOTS[shotType].contactH;
       const dir = p.team === "near" ? -1 : 1; // toward the net
+      const kind = this.rng.int(0, 3);
+      if (kind === 0) {
+        // NET: a flat dump that cannot clear the net.
+        b.x = p.x;
+        b.y = p.y + dir * 0.4;
+        b.z = contactZ;
+        b.vx = this.rng.noise(5);
+        b.vy = dir * 16;
+        b.vz = 3;
+        this.finishStrike(p, shotType, wasVolley, opts.isServe, true);
+        return;
+      }
+      // LONG or WIDE: solve a shot to an OUT target so it clears the net but
+      // lands out (no in-bounds clamp). Keeps the miss believable and varied.
+      const longY = this.depthToY(p.team, -2.5); // past the far baseline
+      const wideX = this.rng.chance(0.5) ? -2 : COURT.WIDTH + 2;
+      const missTargetX = kind === 2 ? wideX : p.x + this.rng.noise(3);
+      const missTargetY = kind === 1 ? longY : this.depthToY(p.team, this.rng.range(2, 6));
+      const shotM = solveShot(p.x, p.y, missTargetX, missTargetY, shotType, { accuracy: 1, clampInBounds: false });
       b.x = p.x;
-      b.y = p.y + dir * 0.4;
-      b.z = contactZ;
-      b.vx = this.rng.noise(6);
-      b.vy = dir * 16;
-      b.vz = 3; // too flat to clear the net from here → dumps short
+      b.y = p.y + (p.team === "near" ? -0.4 : 0.4);
+      b.z = shotM.contactZ;
+      b.vx = shotM.vx;
+      b.vy = shotM.vy;
+      b.vz = shotM.vz;
       this.finishStrike(p, shotType, wasVolley, opts.isServe, true);
       return;
     }
@@ -660,7 +717,8 @@ export class GameSimulation {
     const shot = solveShot(p.x, p.y, targetX, targetY, shotType, {
       accuracy: opts.accuracy,
       unforcedError: 0,
-      rng: opts.accuracy < 1 || effUnforced > 0 ? this.rng : undefined,
+      rng: opts.accuracy < 1 ? this.rng : undefined,
+      clampInBounds: !opts.isServe, // serves may spray out/wrong-box; rallies stay in
     });
 
     b.x = p.x;
@@ -768,4 +826,56 @@ function clamp01(v: number): number {
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ---- Human shot/serve quality (pure, unit-testable) ----------------------
+// Timing quality comes from how LATE the swipe was vs the ball's closest
+// approach (ft past the minimum distance), NOT raw contact distance. A
+// downward/backward swipe (dy > 0) is treated as a mishit. Good swipes
+// (on-time, forward, sane aim) never randomly miss.
+export function humanShotQuality(
+  ballZ: number,
+  lateness: number,
+  input: { dx: number; dy: number },
+): { accuracy: number; unforcedError: number; errLevel: number } {
+  const timingErr = clamp01(lateness / HUMAN.lateRangeFt);
+  const zErr = ballZ > HUMAN.highZ ? Math.min(1, (ballZ - HUMAN.highZ) / HUMAN.highZRange) : 0;
+  const len = Math.hypot(input.dx, input.dy) || 1;
+  const downward = clamp01(input.dy / len); // >0 when swiping downward/backward
+  const lateralFt = (input.dx / INPUT.POWER_MAX_PX) * 12;
+  const aimExtreme = clamp01((Math.abs(lateralFt) - HUMAN.extremeAimFt) / HUMAN.extremeAimRange);
+  let errLevel = Math.max(timingErr, zErr * 0.6, downward * HUMAN.downwardPenalty);
+  errLevel = Math.min(1, errLevel + aimExtreme * 0.5);
+  errLevel = Math.min(1, errLevel / HUMAN.forgiveness);
+  const accuracy = 1 - errLevel * HUMAN.maxInaccuracy;
+  const unforcedError =
+    errLevel > HUMAN.faultThreshold
+      ? ((errLevel - HUMAN.faultThreshold) / (1 - HUMAN.faultThreshold)) * HUMAN.maxFaultChance
+      : 0;
+  return { accuracy, unforcedError, errLevel };
+}
+
+// Serve quality: the human controls the serve's timing, so quality comes from
+// the swipe itself — a very short swipe (low power) or an extreme angle can
+// fault. Normal serves stay safe.
+export function humanServeQuality(input: { dx: number; dy: number; power: number }): {
+  accuracy: number;
+  unforcedError: number;
+  errLevel: number;
+} {
+  const S = HUMAN.serve;
+  const powerErr = clamp01((S.lowPower - input.power) / S.lowPower); // short swipe = poor
+  const lateralFt = (input.dx / INPUT.POWER_MAX_PX) * 12;
+  const aimExtreme = clamp01((Math.abs(lateralFt) - S.extremeAimFt) / S.extremeAimRange);
+  const len = Math.hypot(input.dx, input.dy) || 1;
+  const downward = clamp01(input.dy / len);
+  let errLevel = Math.max(powerErr, downward * HUMAN.downwardPenalty);
+  errLevel = Math.min(1, errLevel + aimExtreme * 0.5);
+  errLevel = Math.min(1, errLevel / HUMAN.forgiveness);
+  const accuracy = 1 - errLevel * S.maxInaccuracy;
+  const unforcedError =
+    errLevel > S.faultThreshold
+      ? ((errLevel - S.faultThreshold) / (1 - S.faultThreshold)) * S.maxFaultChance
+      : 0;
+  return { accuracy, unforcedError, errLevel };
 }
