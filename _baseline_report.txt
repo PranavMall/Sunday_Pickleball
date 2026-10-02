@@ -1,0 +1,25 @@
+=== Picklewood gameplay report (real default config) ===
+
+[ROOKIE opponents]  (near = CLUB "me"+partner)
+  ROOKIE return-of-serve success (far receiving): 94%  (629/671)
+  CLUB return-of-serve success (near receiving):  100%  (472/472)
+  share of ROOKIE serve-returns my team reaches:  85%  (536/629)
+  avg rally length: 6.9 strikes/point  (1249 points)
+
+[CLUB opponents]  (near = CLUB "me"+partner)
+  CLUB return-of-serve success (far receiving): 100%  (703/703)
+  CLUB return-of-serve success (near receiving):  100%  (655/655)
+  share of CLUB serve-returns my team reaches:  94%  (663/703)
+  avg rally length: 11.2 strikes/point  (1435 points)
+
+[PRO opponents]  (near = CLUB "me"+partner)
+  PRO return-of-serve success (far receiving): 100%  (520/520)
+  CLUB return-of-serve success (near receiving):  100%  (689/689)
+  share of PRO serve-returns my team reaches:  93%  (486/520)
+  avg rally length: 12.8 strikes/point  (1252 points)
+
+[Rookie points-per-game] CLUB near vs ROOKIE far over 40 games: avg=5.2  range=0-12
+
+[Input latency] engine swipe→contact over 400 contacts: avg=8.9 ticks (149 ms), p90=14 ticks (233 ms)
+
+done

@@ -1,3 +1,5 @@
+import type { StatMultipliers } from "../config/profiles";
+
 export type Team = "near" | "far";
 export type ControllerType = "LOCAL_HUMAN" | "AI" | "REMOTE_HUMAN";
 export type CourtSide = "L" | "R"; // GLOBAL: R = right half (x>10), L = left half (x<10)
@@ -37,8 +39,44 @@ export interface PlayerState {
   difficulty?: Difficulty;
   personality?: Personality;
 
-  // animation cue (transient, for renderer)
-  swingCue: number; // sim time of last swing (for follow-through pose)
+  // Per-player stat multipliers (gear/partner bonuses). Neutral 1.0 by default,
+  // forced neutral under stat normalization (ranked play).
+  stats: StatMultipliers;
+  // Neutral chemistry hook (1.0 = no change); may later nudge partner params.
+  chemistry: number;
+
+  // animation cues (transient, for renderer)
+  swingCue: number; // sim time of last CONTACT (follow-through / "pop" pose)
+  windUpCue: number; // sim time a valid human swipe was ACCEPTED (anticipation)
+}
+
+// A real ball contact, emitted EXACTLY ONCE per strike. The renderer/UI consume
+// new events to fire the contact flash, sound, haptic and ball squash a single
+// time, on the contact frame — never faked, never doubled.
+export interface ContactEvent {
+  id: number;
+  time: number;
+  slot: number;
+  team: Team;
+  shotType: ShotType;
+  isServe: boolean;
+  isVolley: boolean;
+  miss: boolean;
+  power: number; // 0..1 contact strength (for sound/haptic intensity)
+  x: number;
+  y: number;
+}
+
+// Dev-only circular input/contact trace entry (hidden in production).
+export interface InputTraceEntry {
+  time: number;
+  kind: "received" | "buffered" | "consumed" | "expired";
+  dx: number;
+  dy: number;
+  power: number;
+  strikerSlot: number | null;
+  contactTime?: number;
+  lastHitBy?: number | null;
 }
 
 export interface BallState {

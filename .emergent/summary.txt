@@ -6,27 +6,27 @@ PRODUCT REQUIREMENTS:
 - Fast, arcade-style gameplay with authentic pickleball fundamentals (two-bounce rule, kitchen rules, correct scoring). 
 - Automatic player movement with swipe-based shot control. 
 - Pseudo-3D ball flight on a perspective court (using React Native Skia). 
-- Milestone 1 (The rally works): Core gameplay loop, headless fixed-timestep simulation, rules enforcement, basic AI (Rookie, Club, Pro), and placeholder graphics.
+- Milestone 1 (The rally works): Core gameplay loop, headless fixed-timestep simulation, rules enforcement, basic AI, and placeholder graphics.
 - Milestone 2 (It feels great): Custom sprites/audio integration, advanced AI, new shot types, Kitchen Mastery power-up.
 - Milestone 3 (Ready for beta): UI polish, analytics, settings, crash reporting.
 
 **User's preferred language**: English (INSTRUCT next agent to respond in English)
 
 **what currently exists?** 
-Milestone 1 is completely implemented. A headless, deterministic (seeded RNG), fixed-timestep TypeScript game engine handles all pickleball physics, AI logic, and strict rule enforcement. The frontend uses  to project the logical simulation onto a beautifully calibrated pseudo-3D perspective court matching the provided background asset. The core match flow (Menu -> Difficulty -> Match -> Result -> Rematch) is fully functional.
+Milestone 1 (including 1.1 and 1.2 correction passes) is fully implemented. The headless fixed-timestep TypeScript game engine handles pickleball physics, AI logic, and strict rule enforcement (seeded RNG). The frontend uses  for a painted background with  overlaying a transparent pseudo-3D perspective court. The core match flow (Menu -> Difficulty -> Match (with responsive Pause) -> Result) is fully functional and tuned. The testing suite has 99 headless simulation tests passing.
 
 **Last working item**:
-- Last item agent was working: Finalizing Milestone 1 requirements, implementing Skia web-fallback, running simulation unit tests, and verifying gameplay rendering via screenshots.
+- Last item agent was working: Milestone 1.2 correction pass. This included making the server walk behind the baseline to serve, tuning Rookie/Club/Pro serve-return mechanics to ensure playable rally starts, making the Pause screen responsive (Resume, Restart, Quit), implementing varied errors (net, long, wide), human serve faults, and adding a dink UI cue. 
 - Status: USER VERIFICATION PENDING
 - Agent Testing Done: Y
-- Which testing method agent to use?: NA (Testing agent already ran successfully in this session).
+- Which testing method agent to use?: NA (Testing agent already ran successfully for the UI bugs, and headless tests via  pass 99/99).
 - User Testing Done: N
 
-**All Pending/In progress Issue list**:
-None. Engine simulation tests (45/45) are passing and UI renders correctly.
+**All Pending/In progress Issue list**: 
+None. Engine simulation tests (99/99) are passing, testing agent verified UI, and the baseline gameplay tuning is locked in.
 
-**In progress Task List**:
-None. Milestone 1 is completed.
+**In progress Task List**: 
+None. Milestone 1.2 is completed.
 
 **Upcoming and Future Tasks**:
 Upcoming Tasks:
@@ -36,28 +36,22 @@ Upcoming Tasks:
   - Implement Lob and Power/Smash shot types.
   - Advanced AI parameters (Casual, Advanced, Legend) and Personalities (Defensive, Aggressive, Tactical).
   - Implement Kitchen Mastery mechanic (pressure meter / power-up) toggleable, ensuring it does NOT override core rules.
+  *(CRITICAL: DO NOT START MILESTONE 2 until user explicitly provides Milestone 1 approval).*
 - **Milestone 3 - Ready for beta** (P1): 
   - Onboarding Nickname flow and random anonymous ID generation.
-  - How to Play screens, In-match Pause menu, Settings (volume, haptics).
+  - How to Play screens, Settings (volume, haptics).
   - Privacy policy and Delete my data logic.
   - Sentry crash reporting and PostHog/Firebase Analytics integration.
 
 Future Tasks:
-- Online multiplayer architecture, cosmetic store, additional court environments (Out of scope for M1-M3, but architecture should not block them).
+- Online multiplayer architecture, cosmetic store, additional court environments (Out of scope for M1-M3).
 
 **Completed work in this session**:
-- Established  rendering pipeline with Web support (DONE).
-- : Built pure headless TS simulation including , , , , and  (DONE).
-- : Created headless automated test suite validating rules, faults, and AI difficulty win-rates (DONE).
-- : Calibrated homography matrix to perfectly map logical coordinates to the hand-painted court asset (DONE).
-- , , : UI flow for game menus and match screen (DONE).
+- Milestone 1.1 Correction: Serve rotation logic, stale swipe buffering, human shot quality, app rename, rendering court via  behind  (DONE).
+- Milestone 1.2 Correction: Server behind baseline, Rookie/Club serve-return tuning, Pause screen responsive UI, varied errors (net/long/wide), human serve faults, dink UI cue, removed kitchen button (DONE).
 
 **Earlier issues found/mentioned but not fixed**:
-Issue 1:
-- Debug checklist: Testing agent noted minor React Native web style warnings in  (using web-only  instead of React Native , and deprecated  props instead of ).
-- Why to solve this issue and what will be achieved with this?: Cleans up console warnings during web preview testing.
-- Should Test frontend/backend/both after fix: Frontend (Screenshot)
-- Is recurring issue?: N
+None
 
 **Known issue recurrence from previous fork**:
 - Issue recurrence in previous fork: NA
@@ -67,44 +61,46 @@ Issue 1:
 **Code Architecture**:
 
 
-**Key Technical Concepts**: 
-React Native, Expo Router, , Headless Fixed-Timestep Simulation, Deterministic Seeded RNG, 2D Perspective Projection (Homography Matrix).
+**Key Technical Concepts**:
+React Native, Expo Router, , , Headless Fixed-Timestep Simulation, Deterministic Seeded RNG, 2D Perspective Projection (Homography Matrix).
 
 **key DB schema**:
 - NA (No backend/database required currently; all data is local).
 
 **changes in tech stack**:
-- Added  for high-performance 60fps 2D rendering on mobile.
+- Updated the court rendering method: the static court background is now rendered using standard  behind a transparent  canvas. This ensures it displays properly in Expo Go on physical devices while maintaining perspective math.
 
 **All files of reference**:
-1. : The core orchestrator. Runs fixed 60Hz ticks independent of rendering.
-2.  & : Handles the visual translation of the 2D logical engine into the pseudo-3D visual view.
-3. : Critical test file ensuring AI doesn't break and rules are respected. Run this via  if any simulation logic is altered.
+1. : The core orchestrator. Contains fixed 60Hz ticks, AI decision logic, and human hit quality models.
+2. : Handles visual translation with the new  layered background. 
+3. : The primary game viewport. Includes the HUD, the responsive pause modal, and dink/shot-type cue overlays.
+4. : Critical test file ensuring AI doesn't break, 99 headless tests pass. Run via .
+5. : Simulates the real default config to check AI point balancing and rally length.
 
 **Areas that need refactoring**:
-- Architecture is currently very clean and explicitly separated between Input, Simulation, and Rendering as requested by the user.
+- None. Architecture remains clean.
 
 **key api endpoints**:
 - NA
 
 **Critical Info for New Agent**:
 - **Simulation Rule:** The game logic () MUST remain completely independent of the rendering and UI. It runs on logical court coordinates (280x560).
-- **Determinism:** NEVER use  in gameplay logic. Always use the seeded  class provided in . Matches must be 100% reproducible.
-- **Skia on Web:** React Native Skia on the web requires WASM loading. This is handled by  in . Do not break this wrapper.
-- **User Hand-off:** The agent just finished Milestone 1. The user explicitly requested in the prompt: *Wait for my sign-off before the next milestone.* Do not proceed to build Milestone 2 until the user reviews M1 and gives the go.
+- **Determinism:** NEVER use  in gameplay logic. Always use the seeded .
+- **Awaiting Hand-off:** The agent just finished Milestone 1.2 corrections. The user explicitly requested in the prompt: *STOP for my Milestone 1 approval.* Do not proceed to build Milestone 2 until the user reviews M1.2 and gives the definitive go.
+- **Headless Tests:** Any changes made to game simulation must be tested by running yarn run v1.22.22
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command. or  from the  folder to ensure no logic regressions.
 
 **documents and test reports created in this job**:
-- /app/CHANGELOG.md
-- /app/README.md
-- /app/memory/PRD.md
-- /app/memory/test_credentials.md
-- /app/test_reports/iteration_1.json
+- /app/CHANGELOG.md (Updated with M1.1 & M1.2 corrections)
+- /app/frontend/src/game/__tests__/report.ts
+- /app/test_reports/iteration_2.json
 
 **Last 10 User Messages and any pending HUMAN messages**:
-1. User: *Initial problem statement with rules, design guidelines, and Milestone 1/2/3 breakdown.*
-2. Agent: Provided 15-bullet understanding, proposed React Native Skia, identified rule differences, proposed perspective calibration. Asked 3 questions via .
-3. User (): Automatic [kitchen] but keep a small optional hold at kitchen line toggle, Swipe-controlled underhand serve, Yes, proceed [with Skia], Go - build Milestone 1.
-*(No pending human messages. Awaiting user feedback on Milestone 1 completion).*
+- User: Requested Milestone 1.1 corrections (Serve rotation, Human shot quality, court render fix).
+- Agent: Implemented and validated via headless sim + screenshot.
+- User: Requested Milestone 1.2 corrections (Bug fixes: Server behind baseline, AI serve-return tuning, Pause screen responsiveness. Control tweaks: Human serve faults, swipe direction, varied errors).
+- Agent: Implemented, thoroughly tested the balance via custom , verified Pause menu UI via testing agent, and stopped for user approval.
+*(No pending human messages. Awaiting user feedback/approval on Milestone 1 completion).*
 
 **Project Health Check**:
 - Broken: None
@@ -116,11 +112,11 @@ React Native, Expo Router, , Headless Fixed-Timestep Simulation, Deterministic S
 **Testing status**:
 - Testing agent used after significant changes: YES
 - Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: , 
+- Test files created: 
 - Known regressions: None
 
 **Credentials to test flow**:
 - NA
 
 **What agent forgot to execute**:
-- Nothing. The agent successfully fulfilled all Milestone 1 requirements.</analysis>
+- Nothing. The agent successfully fulfilled all Milestone 1.1 and 1.2 correction requirements.</analysis>

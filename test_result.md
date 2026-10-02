@@ -101,21 +101,43 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
-## user_problem_statement: "Picklewood 2v2 pickleball — Milestone 1.2 correction pass (server behind baseline, serve returns playable, Rookie 4-7 ppg, remove kitchen button, responsive pause, human serve faults, full-vector aim, varied errors, closest-approach timing, dink cue/label, Club/Pro variety). Client-only Expo + Skia game; no backend."
+## user_problem_statement: "Picklewood Milestone 2 Part A (Foundations): fix input bugs (lag/double-shot + Android back gesture), add hit sounds (expo-audio, one per contact, mute toggle in pause), and prepare engine architecture (roadmap §11: match-config-as-data, team-size config + SINGLES, parametric AI profiles, stat multipliers, match-result logging, layered character contract, service interfaces). Doubles must PLAY THE SAME as before (parity). Client-only Expo + Skia game; no backend."
 
 ## frontend:
-##   - task: "Match screen gameplay, serve behind baseline, dink cue + shot label, kitchen button removed"
+##   - task: "Single-gesture input + wind-up + one contact event (no double shot)"
 ##     implemented: true
 ##     working: "NA"
-##     file: "app/match.tsx, src/game/sim/*"
+##     file: "app/match.tsx, src/game/sim/GameSimulation.ts"
 ##     stuck_count: 0
 ##     priority: "high"
 ##     needs_retesting: true
 ##     status_history:
 ##         -working: "NA"
 ##         -agent: "main"
-##         -comment: "Engine suite 99/99 pass. Need UI verification: match playable, no kitchen button, dink cue appears, pause correctness."
-##   - task: "Pause screen = Resume/Restart/Quit to Menu, responsive, no Share, no result bleed-through"
+##         -comment: "Replaced pan+tap Exclusive with a single Pan; wind-up pose on valid swipe; sim emits one ContactEvent per strike. Headless probe: double-fired gesture yields ONE contact. Needs UI verify: a swipe during rally produces a shot and score advances; no visual double-hit."
+##   - task: "Pause menu = Resume / Sound(mute) / Restart / Quit; mute label toggles"
+##     implemented: true
+##     working: "NA"
+##     file: "app/match.tsx, src/game/services/sfx.ts"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Pause overlay now has Resume, Sound: On/Off (persisted), Restart, Quit to Menu. Verify mute button toggles its label and overlay is exclusive with result."
+##   - task: "Dev-only 1v1 singles launch + singles engine play"
+##     implemented: true
+##     working: "NA"
+##     file: "app/difficulty.tsx, src/game/config/matchConfig.ts, src/game/sim/*"
+##     stuck_count: 0
+##     priority: "medium"
+##     needs_retesting: true
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Dev 1v1 button on difficulty screen → match?singles=1. 119 headless tests pass incl. 20 singles. Verify the match loads (score shows 2 numbers, no server number) and plays."
+##   - task: "Quick match still plays the same (doubles parity) + result/rematch"
 ##     implemented: true
 ##     working: "NA"
 ##     file: "app/match.tsx"
@@ -125,13 +147,13 @@
 ##     status_history:
 ##         -working: "NA"
 ##         -agent: "main"
-##         -comment: "Verified via screenshot on 360x640: resume/restart/quit present, share absent. Needs agent confirmation on small + normal viewports."
+##         -comment: "Quick match now launches from quickMatchConfig. Parity fingerprint byte-for-byte identical before/after. Verify menu->difficulty->match->serve->rally->result->REMATCH works."
 
 ## metadata:
 ##   created_by: "main_agent"
-##   version: "1.2"
-##   test_sequence: 2
+##   version: "2.0"
+##   test_sequence: 3
 
 ## agent_communication:
 ##     -agent: "main"
-##     -message: "M1.2 correction pass. Engine (headless) 99/99 pass incl. serve rotation, server-behind-baseline, human serve faults, swipe-direction, timing, real-config sims. Please verify FRONTEND flows only (client-only game, NO backend): menu->difficulty->match; pause overlay has exactly Resume/Restart/Quit to Menu and NO Share and no result overlay showing through; kitchen toggle button is GONE; court renders; a swipe up serves; difficulty screen works. Test on a small phone viewport (360x640) and a normal one (390x844)."
+##     -message: "Milestone 2 Part A. Client-only Expo+Skia game, NO backend. Please verify FRONTEND flows on the web preview only: (1) main menu PLAY -> difficulty -> tap CLUB -> match loads and renders the court + players; (2) swipe UP to serve, then swipe to hit during a rally — a shot fires and the score/rally HUD updates; play until a point is scored; (3) Pause (top-right ⏸) overlay shows exactly Resume, 'Sound: On'/'Sound: Off' (tapping it toggles the label), Restart, Quit to Menu — and NO Share, no result overlay behind it; Resume returns to play; (4) Restart starts a fresh match; (5) from the difficulty screen the dev button 'DEV · 1v1 singles (CLUB)' loads a match whose score shows TWO numbers (no third server number) and plays; (6) let a match finish (or it's slow — just confirm the loop runs) to see the result overlay with REMATCH/Main Menu/Share. NOT VERIFIABLE on web (do not fail these): hit SOUNDS, HAPTICS, and the ANDROID BACK gesture — these require a real device. Just confirm nothing crashes and the above flows work. Credentials: none."

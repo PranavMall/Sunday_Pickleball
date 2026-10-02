@@ -6,6 +6,7 @@
  */
 import { COURT, serviceBoxFor } from "../config/court";
 import { INPUT, PLAYER } from "../config/tuning";
+import { buildMatchConfig, devSinglesConfig } from "../config/matchConfig";
 import { RuleManager } from "../sim/rules";
 import { ScoreManager } from "../sim/score";
 import { GameSimulation, humanShotQuality, humanServeQuality } from "../sim/GameSimulation";
@@ -364,7 +365,65 @@ function realConfigTests() {
   }
 }
 
-// ==================== SIMULATION SMOKE TESTS ====================
+// ==================== SINGLES (team-size config) TESTS ====================
+function singlesTests() {
+  console.log("\n[Singles]");
+  // --- scoring: two-number, only the server scores, lost rally = side-out ---
+  let s = ScoreManager.initial("near", "singles");
+  eq(s.serverNumber, 1, "singles opening has no 2nd server (serverNumber 1)");
+  eq(s.isFirstServiceTurn, false, "singles has no 0-0-2 first-turn rule");
+  let o = ScoreManager.resolve(s, "near", "singles"); // server wins
+  eq(o.event, "point", "singles: serving team winning scores a point");
+  eq(o.score.nearScore, 1, "singles near score increments");
+  ok(o.serverSwitchSides, "singles: server switches sides after scoring");
+  s = o.score;
+  o = ScoreManager.resolve(s, "far", "singles"); // server loses → side-out
+  eq(o.event, "side_out", "singles: a lost rally side-outs immediately (no 2nd server)");
+  eq(o.score.servingTeam, "far", "singles: serve passes straight to the opponent");
+
+  // --- serve side: RIGHT on even score, LEFT on odd ---
+  eq(ScoreManager.serveSide({ nearScore: 0, farScore: 0, servingTeam: "near", serverNumber: 1, isFirstServiceTurn: false }), "R", "singles even score serves from the right");
+  eq(ScoreManager.serveSide({ nearScore: 1, farScore: 0, servingTeam: "near", serverNumber: 1, isFirstServiceTurn: false }), "L", "singles odd score serves from the left");
+
+  // --- service boxes: diagonal, past the kitchen (same geometry as doubles) ---
+  const boxEven = serviceBoxFor("near", "R"); // near, even score → right court → far-left box
+  eq(boxEven.xLo, 0, "singles even-score serve targets the left (global) box");
+  eq(boxEven.xHi, COURT.CENTER_X, "singles serve box is one service court wide");
+  ok(boxEven.yLo >= COURT.BASELINE_FAR_Y && boxEven.yHi <= COURT.FAR_KITCHEN_Y, "singles serve box lies past the kitchen");
+
+  // --- a real 1v1 engine match: 2 players, server behind baseline, completes ---
+  const sim = new GameSimulation(devSinglesConfig("CLUB", 123));
+  eq(sim.players.length, 2, "singles builds exactly two players");
+  eq(sim.players[0].team, "near", "singles slot 0 is the near player");
+  eq(sim.players[1].team, "far", "singles slot 1 is the far player");
+  // make it AI-vs-AI so it plays itself out
+  const auto = new GameSimulation(
+    buildMatchConfig({
+      seed: 321,
+      format: "singles",
+      near: { controllers: ["AI"], difficulties: ["CLUB"], personalities: ["TACTICAL"] },
+      far: { controllers: ["AI"], difficulties: ["CLUB"], personalities: ["AGGRESSIVE"] },
+    }),
+  );
+  let ticks = 0;
+  const max = 60 * 60 * 20;
+  while (auto.phase !== "game_over" && ticks < max) { auto.step(); ticks++; }
+  ok(auto.phase === "game_over", "singles AI-vs-AI match reaches game over");
+  ok(auto.winner !== null, "singles match produces a winner");
+  const hi = Math.max(auto.score.nearScore, auto.score.farScore);
+  ok(hi >= 11 && Math.abs(auto.score.nearScore - auto.score.farScore) >= 2, `singles won 11+ by 2 (final ${auto.score.nearScore}-${auto.score.farScore})`);
+
+  // --- near AI singles server stands BEHIND the near baseline while waiting ---
+  const near = new GameSimulation(
+    buildMatchConfig({ seed: 55, format: "singles", near: { controllers: ["AI"], difficulties: ["CLUB"] }, far: { controllers: ["AI"], difficulties: ["CLUB"] } }),
+  );
+  for (let i = 0; i < 30; i++) near.step(); // < SERVE_DELAY, still settling/waiting
+  const srv = near.players[near.serverSlot!];
+  ok(srv.team === "near", "singles near player is the server at 0-0");
+  ok(srv.y > COURT.LENGTH, `singles server stands behind the baseline (y=${srv.y.toFixed(1)})`);
+}
+
+
 const MATCHES_PER_DIFF = 50; // 50+ seeded AI-vs-AI matches per difficulty
 
 function playHeadless(seed: number, diffs: [any, any]): {
@@ -455,6 +514,7 @@ inputTests();
 controlsTests();
 partnerTests();
 realConfigTests();
+singlesTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

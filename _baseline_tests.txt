@@ -1,0 +1,28 @@
+=== Picklewood M1 test suite ===
+
+[Rules]
+
+[Serve rotation]
+
+[Server position]
+
+[Input buffering]
+
+[Controls & shot quality]
+
+[AI partner]
+
+[Real default-config matches]
+  ROOKIE: avgRally=7.3 returnRate=97% avgFarScore=6.2
+  CLUB: avgRally=10.7 returnRate=100% avgFarScore=9.4
+  PRO: avgRally=12.6 returnRate=100% avgFarScore=10.3
+
+[Simulation smoke matches]
+  ROOKIE: completed=50 stuck=0 avgLongestRally=12.6 points=1889
+  CLUB: completed=50 stuck=0 avgLongestRally=27.8 points=1833
+  PRO: completed=50 stuck=0 avgLongestRally=34.0 points=1883
+  CLUB vs ROOKIE win rate: 83%
+  PRO vs CLUB win rate:   100%
+
+=== RESULT: 99 passed, 0 failed ===
+EXIT:0

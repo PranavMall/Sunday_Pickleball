@@ -91,3 +91,84 @@ Format: **[area]** change — reason.
 - **[test]** Added `src/game/__tests__/report.ts` (run: `yarn tsx src/game/__tests__/report.ts`) that prints return-of-serve rates, Rookie points/game, avg rally length and input-latency — all on the real default config.
 - **[engine]** Single shared reach constant `PLAYER.REACH_MULT` used by both `computeReach` and the human quality model.
 - **[changelog]** Tidied the outdated M1 serving line (above).
+
+## Milestone 2 — Part A: Foundations (2026-06)
+
+Goal: fix remaining input bugs, add hit sounds, and prepare the engine
+architecture (roadmap §11) WITHOUT changing how doubles plays. Only roadmap
+Phase 0 is in scope. Behaviour parity verified: a fixed battery of seeded
+AI-vs-AI doubles matches is byte-for-byte identical before vs after the refactor
+(`src/game/__tests__/parity.ts`), scoring/rules/forgiveness/rally-pace/AI tuning
+all unchanged. Engine suite 99 → **119** passing (20 new singles tests).
+
+### Input fixes & responsiveness
+- **[input/gesture]** Match input is now a SINGLE `Gesture.Pan` (tap vs swipe is
+  derived from the translation). The old `Gesture.Exclusive(pan, tap)` is gone —
+  one gesture can no longer resolve as two inputs.
+- **[input/windup]** A valid swipe is acknowledged INSTANTLY by starting the
+  player's wind-up pose (`windUpCue`). This does not fake contact: the real
+  contact frame fires once, later, when the sim records the strike.
+  SWIPE → wind-up → CONTACT → follow-through. Never two perceived impacts.
+- **[feedback/contact]** The sim emits ONE `ContactEvent` per real strike; the
+  renderer drains them each frame to fire sound + haptic exactly once on the
+  contact frame (contact flash / ball squash are the Part B game-feel additions,
+  wired to the same single event).
+- **[input/edge]** A ~24 px left/right edge margin is reserved from game swipe
+  input (the focused Android back handler is the real back-gesture protection,
+  not this margin).
+- **[input/trace]** Added a dev-only circular trace (last 20 input/contact
+  events: time, dx/dy/power, buffered/consumed/expired, striker slot, lastHitBy);
+  shown on the match screen under `__DEV__` only, hidden in production.
+- Investigation (`src/game/__tests__/inputProbe.ts`): a double-fired gesture
+  still yields exactly ONE contact; consecutive near-team contacts with no far
+  hit between are effectively absent in normal rallies (min gap ~2.9 s); engine
+  swipe→contact is avg ~129 ms (min 0 ms pure-pipeline) — the rest is the
+  intentional wait for the ball to arrive, now masked by the instant wind-up.
+
+### Android back gesture
+- **[nav/back]** While the match screen is focused, hardware/gesture back is
+  intercepted: playing → opens Pause; paused → resumes; game over → to Menu. The
+  match screen sets `gestureEnabled:false` so no app-level swipe-back fires
+  during gameplay. (NOT verifiable in Expo Go / web — needs a real Android device
+  with gesture navigation.)
+
+### Hit sounds
+- **[audio]** Added `expo-audio` SFX service (`src/game/services/sfx.ts`): all
+  eight supplied WAVs are preloaded at match start into small per-variant POOLS
+  (round-robin) so overlapping hits never cut each other off. Exactly one sound
+  per real contact, variants alternate. Mapping: pop = normal, drive = hard,
+  kitchen_soft = dinks, kitchen_bright = soft drops (owner to confirm by ear).
+- **[audio/mute]** Mute toggle added to the Pause menu (persisted via
+  AsyncStorage). Supplied WAVs are NOT re-encoded. `ASSET_LICENCES.md` added.
+
+### Architecture (roadmap §11)
+- **[config]** MATCH-CONFIG-AS-DATA: every match launches from a `MatchConfig`
+  (court, format, teams, AI profiles, match type, starting score, rule modifiers,
+  objectives, stat-normalization flag). The engine is mode-agnostic — it never
+  inspects `matchType`. Today's quick match is `quickMatchConfig()`.
+- **[engine/teamsize]** Team size is DATA. The four-player assumption is removed
+  from construction, serving, scoring, movement and rendering. SINGLES is
+  supported in the engine: centre-court coverage and the singles serve rule
+  (serve from the right on an even server score, left on odd; no server number;
+  two-number score, immediate side-out). Dev-only 1v1 launch button on the
+  difficulty screen (no singles menu yet). 20 new singles tests.
+- **[ai/profiles]** Parametric `AIProfile`s (aggression, dinkPreference,
+  poachRate, lobTendency, reactionSpeed, courtCoverage, errorRate) wrap the
+  authoritative engine params; ROOKIE/CLUB/PRO presets reproduce today's
+  behaviour EXACTLY. Personalities are presets too. Neutral `chemistry` hook
+  (identity at 1.0 — never makes a partner worse). Partner stays CLUB and can
+  make great plays.
+- **[engine/stats]** Per-player stat multipliers (power, control, spin, reach),
+  neutral 1.0 by default and forced neutral under stat normalization (ranked).
+  `reach` and `control` are wired now (identity at 1.0); power/spin are hooks.
+- **[meta/log]** Match result logging (`services/matchLog.ts`) stores a compact
+  local record (config summary, teams/profiles, final score, rally stats, match
+  type, timestamp) in AsyncStorage at match end. No backend.
+- **[render/character]** Layered character contract
+  (`render/character.tsx`): body, hair, top, bottom, shoes, head accessory,
+  wrist accessory, paddle as separate layers on a shared rig, composited in
+  Skia. Placeholder players now render THROUGH this system. See `SPRITE_BRIEF.md`.
+- **[services]** Interface-only contracts (`services/interfaces.ts`):
+  ProfileService (guest id, player/team names, SaveModel with CUMULATIVE fans +
+  separate hot/normal/cold form, ratings per PLAYER and per PAIRING),
+  AnalyticsService, AdService (named placements), PurchaseService. No SDKs.

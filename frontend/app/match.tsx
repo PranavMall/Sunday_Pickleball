@@ -1,26 +1,37 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Share, Text, useWindowDimensions, View } from "react-native";
+import { BackHandler, Platform, Pressable, Share, Text, useWindowDimensions, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { GameSimulation, MATCH, type Difficulty } from "@/src/game";
+import { GameSimulation, MATCH, quickMatchConfig, devSinglesConfig, type Difficulty, type MatchConfig } from "@/src/game";
 import { INPUT } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { analytics } from "@/src/game/services/analytics";
+import { sfx, SFX_AVAILABLE } from "@/src/game/services/sfx";
+import { logMatchResult } from "@/src/game/services/matchLog";
 import { makeStyles, useTheme } from "@/src/theme";
 
-function newSim(difficulty: Difficulty) {
-  const sim = new GameSimulation({ seed: (Math.random() * 1e9) | 0, difficulty });
-  analytics.track("match_started", { difficulty });
-  return sim;
+// Reserve a small margin at each screen edge from game swipe input. NOTE: this
+// does NOT stop Android's system back gesture — the focused back handler below
+// is the real protection; this margin just avoids accidental edge flicks.
+const EDGE_MARGIN = 24;
+
+function buildMatch(difficulty: Difficulty, singles: boolean): { sim: GameSimulation; config: MatchConfig } {
+  const seed = (Math.random() * 1e9) | 0;
+  const config = singles ? devSinglesConfig(difficulty, seed) : quickMatchConfig(difficulty, seed);
+  const sim = new GameSimulation(config);
+  analytics.track("match_started", { difficulty, format: config.format });
+  return { sim, config };
 }
 
 export default function Match() {
-  const params = useLocalSearchParams<{ difficulty?: string }>();
+  const params = useLocalSearchParams<{ difficulty?: string; singles?: string }>();
   const difficulty = (params.difficulty as Difficulty) || "CLUB";
+  const singles = params.singles === "1";
   const router = useRouter();
   const styles = useStyles();
   const { colors } = useTheme();
@@ -28,14 +39,50 @@ export default function Match() {
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
 
-  const [sim, setSim] = useState(() => newSim(difficulty));
+  const [match, setMatch] = useState(() => buildMatch(difficulty, singles));
+  const sim = match.sim;
+  const config = match.config;
   const [frame, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(false);
   const [fps, setFps] = useState(60);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const gameOverRef = useRef(false);
+  const loggedRef = useRef(false);
 
+  const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
   const projector = useMemo(() => makeProjector(width, height), [width, height]);
+
+  // Preload hit sounds once; keep them across rematches, free on unmount.
+  useEffect(() => {
+    let alive = true;
+    if (SFX_AVAILABLE) sfx.preload().then(() => alive && setMuted(sfx.muted));
+    return () => {
+      alive = false;
+      sfx.teardown();
+    };
+  }, []);
+
+  // Android back (button OR edge gesture) while the match is focused:
+  //  • game over → go to menu
+  //  • playing   → open pause menu
+  //  • paused    → resume
+  // Always intercepted so an edge swipe can never drop out of the match.
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = () => {
+        if (gameOverRef.current) {
+          router.replace("/");
+          return true;
+        }
+        setPaused((p) => !p);
+        return true;
+      };
+      const sub = BackHandler.addEventListener("hardwareBackPress", onBack);
+      return () => sub.remove();
+    }, [router]),
+  );
 
   // Fixed-timestep game loop driven by requestAnimationFrame.
   useEffect(() => {
@@ -62,70 +109,95 @@ export default function Match() {
           sim.step();
           acc -= MATCH.FIXED_DT;
         }
+        // Fire feedback ONCE per real contact (never faked, never doubled).
+        const events = sim.consumeContactEvents();
+        for (const ev of events) {
+          if (ev.miss) continue;
+          sfx.playForContact(ev);
+          if (ev.slot === humanSlot && Platform.OS !== "web") {
+            Haptics.impactAsync(
+              ev.power > 0.55 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
+            ).catch(() => {});
+          }
+        }
+        if (sim.phase === "game_over" && !loggedRef.current) {
+          loggedRef.current = true;
+          logMatchResult(config, sim);
+          analytics.track("match_ended", {
+            difficulty,
+            format: config.format,
+            near: sim.score.nearScore,
+            far: sim.score.farScore,
+          });
+        }
       }
       setFrame((f) => (f + 1) % 1000000);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim]);
+  }, [sim, config, difficulty, humanSlot]);
 
-  const handleSwipe = (tx: number, ty: number) => {
-    const len = Math.hypot(tx, ty);
-    sim.submitSwipe({
-      dx: tx,
-      dy: ty,
-      power: Math.min(1, len / INPUT.POWER_MAX_PX),
-      tap: len < INPUT.MIN_SWIPE,
-    });
-  };
+  const handleSwipe = useCallback(
+    (tx: number, ty: number, startX: number) => {
+      // Ignore swipes that START in the reserved edge margin.
+      if (startX < EDGE_MARGIN || startX > width - EDGE_MARGIN) return;
+      const len = Math.hypot(tx, ty);
+      sim.submitSwipe({
+        dx: tx,
+        dy: ty,
+        power: Math.min(1, len / INPUT.POWER_MAX_PX),
+        tap: len < INPUT.MIN_SWIPE,
+      });
+    },
+    [sim, width],
+  );
 
+  // ONE gesture only — a single Pan. Deriving tap-vs-swipe from the translation
+  // (not a separate Tap recogniser) guarantees one gesture = one input, so a
+  // single flick can never register as two shots.
   const pan = useMemo(
     () =>
       Gesture.Pan()
         .minDistance(0)
         .onEnd((e) => {
-          runOnJS(handleSwipe)(e.translationX, e.translationY);
+          runOnJS(handleSwipe)(e.translationX, e.translationY, e.x - e.translationX);
         }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sim],
+    [handleSwipe],
   );
-  const tap = useMemo(
-    () =>
-      Gesture.Tap().onEnd(() => {
-        runOnJS(handleSwipe)(0, 0);
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sim],
-  );
-  const gesture = Gesture.Exclusive(pan, tap);
 
   const rematch = () => {
     analytics.track("rematch_selected", { difficulty });
-    setSim(newSim(difficulty));
+    loggedRef.current = false;
+    setMatch(buildMatch(difficulty, singles));
     setPaused(false);
   };
 
   const goMenu = () => router.replace("/");
+  const toggleMute = () => sfx.toggleMuted().then(setMuted);
 
   const gameOver = sim.phase === "game_over";
+  gameOverRef.current = gameOver;
   const nearWon = sim.winner === "near";
   const dinkCue = sim.humanInDinkRange();
   const shotLabel =
-    sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
-      ? sim.lastHumanShot.type.toUpperCase()
-      : null;
+    sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1 ? sim.lastHumanShot.type.toUpperCase() : null;
   const servingScore = sim.score.servingTeam === "near" ? sim.score.nearScore : sim.score.farScore;
   const recvScore = sim.score.servingTeam === "near" ? sim.score.farScore : sim.score.nearScore;
+  const doubles = config.format === "doubles";
 
-  const serveHint =
-    sim.humanIsServer() ? "Your serve — swipe up to serve" :
-    sim.phase === "waiting_serve" ? "Get ready…" :
-    sim.humanCanHit() ? "Swipe to hit!" : "";
+  const serveHint = sim.humanIsServer()
+    ? "Your serve — swipe up to serve"
+    : sim.phase === "waiting_serve"
+      ? "Get ready…"
+      : sim.humanCanHit()
+        ? "Swipe to hit!"
+        : "";
 
   if (landscape) {
     return (
       <View style={styles.rotate} testID="rotate-overlay">
+        <Stack.Screen options={{ gestureEnabled: false }} />
         <Text style={styles.rotateEmoji}>📱↻</Text>
         <Text style={styles.rotateText}>Please rotate your phone to portrait</Text>
       </View>
@@ -134,7 +206,8 @@ export default function Match() {
 
   return (
     <View style={styles.root} testID="match-screen">
-      <GestureDetector gesture={gesture}>
+      <Stack.Screen options={{ gestureEnabled: false }} />
+      <GestureDetector gesture={pan}>
         <View style={styles.canvasWrap}>
           <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={frame} />
         </View>
@@ -144,10 +217,20 @@ export default function Match() {
       <View style={[styles.hud, { top: insets.top + 8 }]} pointerEvents="box-none">
         <View style={styles.scorePanel}>
           <Text style={styles.scoreText} testID="score-display">
-            {servingScore}<Text style={styles.scoreDim}> – </Text>{recvScore}<Text style={styles.scoreDim}> – </Text>{sim.score.serverNumber}
+            {servingScore}
+            <Text style={styles.scoreDim}> – </Text>
+            {recvScore}
+            {doubles ? (
+              <>
+                <Text style={styles.scoreDim}> – </Text>
+                {sim.score.serverNumber}
+              </>
+            ) : null}
           </Text>
           <Text style={styles.serveLabel}>
-            {sim.score.servingTeam === "near" ? "You serve" : "Rival serves"} · You {sim.score.nearScore} · Rival {sim.score.farScore}
+            {sim.score.servingTeam === "near" ? "You serve" : "Rival serves"} · You {sim.score.nearScore} · Rival{" "}
+            {sim.score.farScore}
+            {doubles ? "" : "  · Singles"}
           </Text>
         </View>
         <View style={styles.hudRight}>
@@ -177,22 +260,41 @@ export default function Match() {
         </View>
       ) : null}
 
-      {/* Debug overlay (dev only) */}
+      {/* Debug overlay + dev input trace (dev only, hidden in production) */}
       {__DEV__ && (
-        <View style={[styles.debug, { top: insets.top + 70 }]} pointerEvents="none">
-          <Text style={styles.debugText}>
-            {fps} fps · seed {sim.rng.seed} · {sim.phase} · z{sim.ball.z.toFixed(1)} · b{sim.ball.bouncesSinceHit}
-          </Text>
-        </View>
+        <>
+          <View style={[styles.debug, { top: insets.top + 70 }]} pointerEvents="none">
+            <Text style={styles.debugText}>
+              {fps} fps · seed {sim.rng.seed} · {sim.phase} · z{sim.ball.z.toFixed(1)} · sfx{sfx.lastLatencyMs.toFixed(1)}ms
+            </Text>
+          </View>
+          <View style={[styles.trace, { bottom: insets.bottom + 140 }]} pointerEvents="none">
+            {sim
+              .getInputTrace()
+              .slice(-4)
+              .map((e, i) => (
+                <Text key={i} style={styles.traceText}>
+                  {e.time.toFixed(2)} {e.kind} dx{e.dx.toFixed(0)} dy{e.dy.toFixed(0)} p{e.power.toFixed(2)} s
+                  {e.strikerSlot ?? "-"} lh{e.lastHitBy ?? "-"}
+                </Text>
+              ))}
+          </View>
+        </>
       )}
 
       {/* Pause overlay */}
       {paused && !gameOver && (
-        <View style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} testID="pause-overlay">
+        <View
+          style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}
+          testID="pause-overlay"
+        >
           <View style={styles.pauseModal}>
             <Text style={styles.modalTitle}>Paused</Text>
             <Pressable testID="resume-button" style={styles.primaryBtn} onPress={() => setPaused(false)}>
               <Text style={styles.primaryText}>Resume</Text>
+            </Pressable>
+            <Pressable testID="mute-button" style={styles.pauseSecondaryBtn} onPress={toggleMute}>
+              <Text style={styles.secondaryText}>Sound: {muted ? "Off" : "On"}</Text>
             </Pressable>
             <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
               <Text style={styles.secondaryText}>Restart</Text>
@@ -276,6 +378,8 @@ const useStyles = makeStyles((c) => ({
   hintText: { color: c.onSurfaceInverse, fontSize: 14, fontWeight: "600" },
   debug: { position: "absolute", right: 12, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   debugText: { color: "#fff", fontSize: 10, fontFamily: "monospace" as any },
+  trace: { position: "absolute", left: 12, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  traceText: { color: "#9fe", fontSize: 9, fontFamily: "monospace" as any },
   modalWrap: { ...StyleSheetAbsolute(), backgroundColor: "rgba(20,26,18,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
   modal: { backgroundColor: c.surface, borderRadius: 24, padding: 24, width: "100%", maxWidth: 380, alignItems: "center" },
   pauseModal: { backgroundColor: c.surface, borderRadius: 24, paddingVertical: 20, paddingHorizontal: 20, width: "100%", maxWidth: 360, alignItems: "center", gap: 10 },

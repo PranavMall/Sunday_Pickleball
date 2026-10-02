@@ -1,10 +1,13 @@
 import { MATCH } from "../config/tuning";
+import type { MatchFormat } from "../config/matchConfig";
 import type { ScoreState, Team } from "./types";
 
-// Doubles side-out scoring. Score is called serving–receiving–server (e.g.
-// "4-2-1"). Game opens 0-0-2: the first service turn of the game gets only ONE
-// server before side-out. Points are scored only by the serving team; after
-// scoring, the server switches sides and serves again. Game to 11, win by 2.
+// Scoring. DOUBLES uses side-out scoring called serving–receiving–server (e.g.
+// "4-2-1"): game opens 0-0-2 (first service turn gets ONE server), only the
+// serving team scores, server switches sides after scoring, side-out after the
+// second server loses. SINGLES is a two-number score: only the server scores,
+// a lost rally side-outs immediately (no server number), and the server stands
+// RIGHT on an even score, LEFT on odd. Game to 11, win by 2 (configurable).
 
 export interface PointOutcome {
   score: ScoreState;
@@ -16,27 +19,26 @@ export interface PointOutcome {
 }
 
 export const ScoreManager = {
-  initial(firstServer: Team): ScoreState {
+  initial(firstServer: Team, format: MatchFormat = "doubles"): ScoreState {
     return {
       nearScore: 0,
       farScore: 0,
       servingTeam: firstServer,
-      serverNumber: 2, // 0-0-2 opening convention
-      isFirstServiceTurn: true,
+      // Doubles opens 0-0-2; singles has no server number (fixed 1).
+      serverNumber: format === "doubles" ? 2 : 1,
+      isFirstServiceTurn: format === "doubles",
     };
   },
 
-  // Reference helper: the TEAM-RELATIVE side the FIRST server of a service turn
-  // stands on for a given team score — RIGHT when the score is EVEN, LEFT when
-  // ODD (this is why the game opens 0-0-2 serving from the right). The live sim
-  // drives the actual serving side from player POSITIONS (players swap sides on
-  // a point win), so this is used for reference/tests, not to place the server.
+  // The TEAM-RELATIVE side the server stands on: RIGHT when the serving team's
+  // score is EVEN, LEFT when ODD. Used for the singles serve rule, and as a
+  // reference for doubles (whose live side is position-driven).
   serveSide(score: ScoreState): "L" | "R" {
     const teamScore = score.servingTeam === "near" ? score.nearScore : score.farScore;
     return teamScore % 2 === 0 ? "R" : "L";
   },
 
-  resolve(prev: ScoreState, rallyWinner: Team): PointOutcome {
+  resolve(prev: ScoreState, rallyWinner: Team, format: MatchFormat = "doubles"): PointOutcome {
     const score: ScoreState = { ...prev };
     const servingWon = rallyWinner === score.servingTeam;
 
@@ -54,6 +56,11 @@ export const ScoreManager = {
     }
 
     // Serving team lost the rally.
+    if (format === "singles") {
+      // No server number: a lost rally passes serve straight to the opponent.
+      score.servingTeam = other(score.servingTeam);
+      return { score, event: "side_out", gameOver: false, winner: null, serverSwitchSides: false };
+    }
     if (score.isFirstServiceTurn) {
       score.isFirstServiceTurn = false;
       score.servingTeam = other(score.servingTeam);
@@ -70,10 +77,10 @@ export const ScoreManager = {
     return { score, event: "side_out", gameOver: false, winner: null, serverSwitchSides: false };
   },
 
-  isGameOver(score: ScoreState): boolean {
+  isGameOver(score: ScoreState, pointsToWin = MATCH.POINTS_TO_WIN, winBy = MATCH.WIN_BY): boolean {
     const hi = Math.max(score.nearScore, score.farScore);
     const diff = Math.abs(score.nearScore - score.farScore);
-    return hi >= MATCH.POINTS_TO_WIN && diff >= MATCH.WIN_BY;
+    return hi >= pointsToWin && diff >= winBy;
   },
 };
 

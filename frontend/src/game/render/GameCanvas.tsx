@@ -6,6 +6,7 @@ import { Canvas, Path, Circle, Oval, Group, Skia } from "@shopify/react-native-s
 import { COURT, netHeightAt } from "../config/court";
 import type { GameSimulation } from "../sim/GameSimulation";
 import { IMAGE_H, IMAGE_W, type Projector } from "../render/perspective";
+import { Character, type CharacterColors, type CharacterView } from "./character";
 import { useTheme } from "@/src/theme";
 
 const courtImg = require("@/assets/images/court_background.webp");
@@ -112,28 +113,44 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
     const g = projector.ground(p.x, p.y);
     const ppf = projector.pxPerFootAt(p.y);
     const scale = ppf * 0.9;
-    const bodyH = scale * 2.6;
     const bodyW = scale * 1.05;
-    const headR = scale * 0.62;
-    const color = p.colorKey === "teamYou" ? colors.teamYou : p.colorKey === "teamPartner" ? colors.teamPartner : colors.teamRival;
+    const teamColor =
+      p.colorKey === "teamYou" ? colors.teamYou : p.colorKey === "teamPartner" ? colors.teamPartner : colors.teamRival;
     const feetY = g.y;
-    const bodyTop = feetY - bodyH;
-    const capsule = Skia.Path.Make();
-    capsule.addRRect(Skia.RRectXY(Skia.XYWHRect(g.x - bodyW / 2, bodyTop + headR, bodyW, bodyH - headR), bodyW / 2, bodyW / 2));
-    // swing offset for paddle
-    const swinging = sim.time - p.swingCue < 0.25;
-    const paddleR = scale * 0.5;
-    const side = p.team === "near" ? -1 : 1;
-    const isGlobalRight = (p.team === "near") === (p.courtSide === "R");
-    const px = g.x + (isGlobalRight ? 1 : -1) * bodyW * 0.7;
-    const py = bodyTop + headR + (swinging ? -scale * 0.6 : scale * 0.2);
+    const globalRight = (p.team === "near") === (p.courtSide === "R");
+    const view: CharacterView = p.team === "near" ? "back" : "front";
+
+    // Wind-up (anticipation) starts the instant a valid swipe is accepted;
+    // follow-through plays just after the REAL contact. These are cosmetic
+    // poses only — they never imply a second contact.
+    const windUp =
+      sim.time - p.windUpCue < 0.25 && p.windUpCue > p.swingCue
+        ? 1 - (sim.time - p.windUpCue) / 0.25
+        : 0;
+    const swing = sim.time - p.swingCue < 0.25 ? 1 - (sim.time - p.swingCue) / 0.25 : 0;
+
+    const charColors: CharacterColors = {
+      primary: teamColor,
+      bottom: colors.surfaceInverse,
+      skin: "#E7C9A9",
+      hair: "#3A2E26",
+      shoes: colors.onSurface,
+      paddle: colors.accentGold,
+    };
+
     return (
       <Group key={slot}>
-        <Oval rect={Skia.XYWHRect(g.x - bodyW * 0.7, feetY - scale * 0.25, bodyW * 1.4, scale * 0.5)} color={colors.ballShadow} opacity={0.28} />
-        <Path path={capsule} color={color} />
-        <Circle cx={g.x} cy={bodyTop + headR * 0.6} r={headR} color={color} />
-        <Circle cx={g.x} cy={bodyTop + headR * 0.6} r={headR} style="stroke" strokeWidth={scale * 0.12} color={colors.onSurface} opacity={0.25} />
-        <Circle cx={px} cy={py + side * scale * 0.4} r={paddleR} color={colors.accentGold} />
+        <Oval
+          rect={Skia.XYWHRect(g.x - bodyW * 0.7, feetY - scale * 0.25, bodyW * 1.4, scale * 0.5)}
+          color={colors.ballShadow}
+          opacity={0.28}
+        />
+        <Character
+          geom={{ x: g.x, feetY, scale, globalRight }}
+          colors={charColors}
+          view={view}
+          anim={{ windUp, swing }}
+        />
       </Group>
     );
   };

@@ -88,10 +88,16 @@ export function updateMovement(
           info.rallyStrikeCount >= 2 &&
           info.affinityFor(p.slot) > 0.3;
         const atKitchen = advance;
-        p.targetX = sideCenterX(p.team, p.courtSide);
+        // Singles (one player per team) covers the MIDDLE of the half; doubles
+        // each cover their own service-court lane (unchanged behaviour).
+        const singles = mates.length === 1;
+        const coverX = singles ? COURT.CENTER_X : sideCenterX(p.team, p.courtSide);
+        p.targetX = coverX;
         p.targetY = readyDepth(team, atKitchen);
         if (isServer && info.serving) {
-          // Server walks BEHIND their baseline to serve (exempt from the clamp).
+          // Server walks BEHIND their baseline to serve (exempt from the clamp),
+          // standing on their current service-court side.
+          p.targetX = sideCenterX(p.team, p.courtSide);
           p.targetY =
             team === "near"
               ? COURT.LENGTH + PLAYER.SERVE_STANDOFF
@@ -99,6 +105,7 @@ export function updateMovement(
         } else if (info.serving && servingTeam && team !== servingTeam) {
           // Receiving the serve: stand DEEP near the baseline to field a deep
           // serve and move forward into the bounce (reachable returns).
+          p.targetX = coverX;
           p.targetY =
             team === "near" ? COURT.LENGTH - PLAYER.RECEIVE_DEPTH : PLAYER.RECEIVE_DEPTH;
         }

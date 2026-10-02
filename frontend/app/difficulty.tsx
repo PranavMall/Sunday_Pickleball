@@ -43,6 +43,16 @@ export default function DifficultySelect() {
             </Pressable>
           ))}
         </View>
+
+        {__DEV__ && (
+          <Pressable
+            testID="dev-singles-button"
+            style={({ pressed }) => [styles.devBtn, pressed && styles.pressed]}
+            onPress={() => router.push({ pathname: "/match", params: { difficulty: "CLUB", singles: "1" } })}
+          >
+            <Text style={styles.devText}>DEV · 1v1 singles (CLUB)</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </View>
   );
@@ -65,4 +75,6 @@ const useStyles = makeStyles((c) => ({
   cardTitle: { color: c.onSurfaceSecondary, fontSize: 22, fontWeight: "800" },
   chevron: { color: c.brandPrimary, fontSize: 26, fontWeight: "700" },
   cardBlurb: { color: c.onSurfaceTertiary, fontSize: 14, marginTop: 6, lineHeight: 20 },
+  devBtn: { marginTop: 22, borderRadius: 14, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: c.border, borderStyle: "dashed" },
+  devText: { color: c.muted, fontSize: 13, fontWeight: "700", letterSpacing: 1 },
 }));

@@ -1,6 +1,12 @@
 import { COURT, serviceBoxFor, teamOfY } from "../config/court";
 import { DIFFICULTY_TABLE, PARTNER_DIFFICULTY, PERSONALITY_BIAS, type AIParams } from "../config/ai";
 import { HUMAN, KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT } from "../config/tuning";
+import {
+  type MatchConfig,
+  type MatchFormat,
+  buildMatchConfig,
+} from "../config/matchConfig";
+import { NEUTRAL_STATS, applyChemistry, normaliseStats, type StatMultipliers } from "../config/profiles";
 import { RNG } from "../core/rng";
 import { decideServe, decideShot } from "./aiController";
 import { updateMovement, type MovementInfo } from "./movement";
@@ -9,10 +15,12 @@ import { ScoreManager } from "./score";
 import { solveShot } from "./shots";
 import type {
   BallState,
+  ContactEvent,
   ControllerType,
   CourtSide,
   Difficulty,
   FaultEvent,
+  InputTraceEntry,
   MatchPhase,
   MatchStats,
   Personality,
@@ -67,6 +75,20 @@ export class GameSimulation {
   controllers: ControllerType[];
   personalities: (Personality | undefined)[];
 
+  // §11 architecture: the match is launched from DATA. The engine never
+  // inspects matchType — it is mode-agnostic.
+  config: MatchConfig;
+  format: MatchFormat;
+  statNormalization: boolean;
+  pointsToWin: number;
+  winBy: number;
+
+  // Contact events (one per real strike) + dev-only input/contact trace.
+  private contactEvents: ContactEvent[] = [];
+  private contactCursor = 0;
+  private contactId = 0;
+  private trace: InputTraceEntry[] = [];
+
   serveCtx: ServeContext = { active: false, servingTeam: "near", box: { xLo: 0, xHi: 0, yLo: 0, yHi: 0 } };
   rallyStrikeCount = 0;
   crossedNetSinceHit = false;
@@ -87,56 +109,56 @@ export class GameSimulation {
   holdKitchen = false; // optional player toggle: hold near team at the kitchen
   lastHumanShot: { type: ShotType; time: number } | null = null; // for the HUD label
 
-  constructor(opts: SimOptions) {
-    this.rng = new RNG(opts.seed);
-    this.difficulty = opts.difficulty;
-    this.controllers = opts.controllers ?? ["LOCAL_HUMAN", "AI", "AI", "AI"];
-    this.personalities =
-      opts.personalities ?? [undefined, "DEFENSIVE", "AGGRESSIVE", "TACTICAL"];
-    const names = opts.names ?? ["You", "Partner", "Rival", "Rival"];
-    const partnerDiff = opts.partnerDifficulty ?? PARTNER_DIFFICULTY;
+  constructor(cfg: MatchConfig | SimOptions) {
+    const config = isMatchConfig(cfg) ? cfg : optionsToConfig(cfg);
+    this.config = config;
+    this.format = config.format;
+    this.statNormalization = config.statNormalization;
+    this.pointsToWin = config.ruleModifiers?.pointsToWin ?? MATCH.POINTS_TO_WIN;
+    this.winBy = config.ruleModifiers?.winBy ?? MATCH.WIN_BY;
+    this.rng = new RNG(config.seed);
 
-    // AI difficulty per slot: explicit per-slot override wins; otherwise the two
-    // OPPONENTS (far team) use the chosen match difficulty while the near-team
-    // AI partner stays fixed at partnerDiff.
-    const diffForSlot = (slot: number, team: Team): Difficulty | undefined => {
-      if (this.controllers[slot] !== "AI") return undefined;
-      if (opts.difficulties?.[slot]) return opts.difficulties[slot];
-      return team === "near" ? partnerDiff : this.difficulty;
-    };
+    // Build players from DATA. Near team first (slots 0..n-1), then far team.
+    // Within a team the first player takes the RIGHT service court, the second
+    // the LEFT. Team size comes from the config (1 = singles, 2 = doubles) —
+    // nothing assumes exactly four players.
+    const sides: CourtSide[] = ["R", "L"];
+    let slot = 0;
+    const makePlayers = (players: { controller: ControllerType; name: string; profileId?: Difficulty; personality?: Personality; stats?: StatMultipliers; chemistry?: number }[], team: Team): PlayerState[] =>
+      players.map((pc, i) => ({
+        slot: slot++,
+        team,
+        controller: pc.controller,
+        name: pc.name,
+        colorKey: team === "near" ? (i === 0 ? "teamYou" : "teamPartner") : "teamRival",
+        x: 0,
+        y: 0,
+        targetX: 0,
+        targetY: 0,
+        courtSide: sides[i] ?? "R",
+        isServing: false,
+        inKitchen: false,
+        touchingKitchenLine: false,
+        feetEstablished: true,
+        wasInKitchen: false,
+        momentumTimer: 0,
+        reestablishTimer: 0,
+        lastHitTime: -10,
+        reactionUntil: 0,
+        committedToBall: false,
+        difficulty: pc.controller === "AI" ? pc.profileId : undefined,
+        personality: pc.personality,
+        stats: normaliseStats(pc.stats, this.statNormalization),
+        chemistry: pc.chemistry ?? 1,
+        swingCue: -10,
+        windUpCue: -10,
+      }));
 
-    const mk = (slot: number, team: Team, side: CourtSide): PlayerState => ({
-      slot,
-      team,
-      controller: this.controllers[slot],
-      name: names[slot],
-      colorKey: team === "near" ? (slot === 0 ? "teamYou" : "teamPartner") : "teamRival",
-      x: 0,
-      y: 0,
-      targetX: 0,
-      targetY: 0,
-      courtSide: side,
-      isServing: false,
-      inKitchen: false,
-      touchingKitchenLine: false,
-      feetEstablished: true,
-      wasInKitchen: false,
-      momentumTimer: 0,
-      reestablishTimer: 0,
-      lastHitTime: -10,
-      reactionUntil: 0,
-      committedToBall: false,
-      difficulty: diffForSlot(slot, team),
-      personality: this.personalities[slot],
-      swingCue: -10,
-    });
-    // courtSide is TEAM-RELATIVE ("R" = that player's own right service court).
-    this.players = [
-      mk(0, "near", "R"),
-      mk(1, "near", "L"),
-      mk(2, "far", "R"),
-      mk(3, "far", "L"),
-    ];
+    this.players = [...makePlayers(config.near.players, "near"), ...makePlayers(config.far.players, "far")];
+    this.controllers = this.players.map((p) => p.controller);
+    this.personalities = this.players.map((p) => p.personality);
+    // Nominal match difficulty (the opponents') for the overlay / analytics.
+    this.difficulty = config.far.players.find((p) => p.profileId)?.profileId ?? "CLUB";
 
     // Sensible ready positions so the very first frame doesn't snap from (0,0).
     for (const p of this.players) {
@@ -165,22 +187,31 @@ export class GameSimulation {
       trail: [],
     };
 
-    this.score = ScoreManager.initial("near");
+    const firstServer = config.startingScore?.servingTeam ?? "near";
+    this.score = ScoreManager.initial(firstServer, this.format);
+    if (config.startingScore) {
+      this.score.nearScore = config.startingScore.near;
+      this.score.farScore = config.startingScore.far;
+      this.score.servingTeam = config.startingScore.servingTeam;
+      if (config.startingScore.serverNumber) this.score.serverNumber = config.startingScore.serverNumber;
+    }
     this.setupServe();
   }
 
   private paramsFor(slot: number): AIParams {
-    return DIFFICULTY_TABLE[this.players[slot].difficulty ?? this.difficulty];
+    const p = this.players[slot];
+    return applyChemistry(DIFFICULTY_TABLE[p.difficulty ?? this.difficulty], p.chemistry);
   }
 
-  // The slot of a team's partner (the other player on the same team).
+  // The slot of a team's partner (the other player on the same team). In
+  // singles there is none, so it returns the player's own slot.
   private partnerSlot(slot: number): number {
     const team = this.players[slot].team;
-    return this.players.find((p) => p.team === team && p.slot !== slot)!.slot;
+    return this.players.find((p) => p.team === team && p.slot !== slot)?.slot ?? slot;
   }
 
-  // On a side-out, the incoming serving team's player currently standing in
-  // their TEAM-RELATIVE right court becomes Server 1.
+  // On a side-out, the incoming serving team's player currently in their
+  // TEAM-RELATIVE right court becomes the server (singles: the single player).
   private pickServerSlot(team: Team): number {
     const right = this.players.find((p) => p.team === team && p.courtSide === "R");
     return (right ?? this.players.find((p) => p.team === team)!).slot;
@@ -210,6 +241,11 @@ export class GameSimulation {
     const server = this.players[this.serverSlot];
     server.isServing = true;
 
+    // Singles serve rule: serve from the RIGHT when the server's score is even,
+    // LEFT when odd (there is no server number / partner swap). One player, so
+    // set their service court directly from the score each serve.
+    if (this.format === "singles") server.courtSide = ScoreManager.serveSide(this.score);
+
     // Aim the server at their serve spot BEHIND the baseline, but let them WALK
     // there (don't snap). The partner and BOTH receivers keep their positions
     // (not reset each point); automatic movement flows everyone to ready spots.
@@ -237,6 +273,44 @@ export class GameSimulation {
   submitSwipe(input: SwipeInput) {
     this.pendingInput = input;
     this.pendingInputTime = this.time;
+    this.pushTrace("received", input, this.strikerSlot);
+    // RESPONSIVENESS: acknowledge a valid swipe IMMEDIATELY by starting the
+    // human's wind-up animation. This does NOT fake contact — the real contact
+    // frame / flash / sound / haptic / squash still happen exactly ONCE, later,
+    // when the simulation records the actual strike. SWIPE → wind-up → CONTACT.
+    if (!input.tap && (this.humanCanHit() || this.humanIsServer())) {
+      const humanSlot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
+      if (humanSlot >= 0) this.players[humanSlot].windUpCue = this.time;
+      this.pushTrace("buffered", input, this.strikerSlot);
+    }
+  }
+
+  // Dev-only circular trace (last 20 input/contact events). Cheap to record;
+  // the match screen only RENDERS it under __DEV__, so it is hidden in prod.
+  private pushTrace(kind: InputTraceEntry["kind"], input: SwipeInput | null, strikerSlot: number | null) {
+    this.trace.push({
+      time: this.time,
+      kind,
+      dx: input?.dx ?? 0,
+      dy: input?.dy ?? 0,
+      power: input?.power ?? 0,
+      strikerSlot,
+      contactTime: kind === "consumed" ? this.time : undefined,
+      lastHitBy: this.ball.lastHitBy,
+    });
+    if (this.trace.length > 20) this.trace.shift();
+  }
+
+  getInputTrace(): InputTraceEntry[] {
+    return this.trace.slice();
+  }
+
+  // Contact events recorded since the last call (one per real strike). The
+  // renderer/UI drains these to fire feedback once, on the contact frame.
+  consumeContactEvents(): ContactEvent[] {
+    const out = this.contactEvents.slice(this.contactCursor);
+    this.contactCursor = this.contactEvents.length;
+    return out;
   }
 
   // For tests: is a swipe currently buffered (not yet consumed or expired)?
@@ -283,6 +357,7 @@ export class GameSimulation {
     // Expire a stale swipe: an input only stays valid for a short deterministic
     // window, so an early swipe can never fire seconds later.
     if (this.pendingInput && this.time - this.pendingInputTime > INPUT.SWIPE_BUFFER_TIME) {
+      this.pushTrace("expired", this.pendingInput, this.strikerSlot);
       this.pendingInput = null;
     }
 
@@ -291,7 +366,7 @@ export class GameSimulation {
     if (this.phase === "point_over") {
       this.pointResetTimer -= dt;
       if (this.pointResetTimer <= 0) {
-        if (ScoreManager.isGameOver(this.score)) {
+        if (ScoreManager.isGameOver(this.score, this.pointsToWin, this.winBy)) {
           this.phase = "game_over";
         } else {
           this.setupServe();
@@ -341,8 +416,10 @@ export class GameSimulation {
       const inPosition = Math.hypot(server.targetX - server.x, server.targetY - server.y) < 0.6;
       if (server.controller === "LOCAL_HUMAN") {
         if (this.pendingInput && inPosition) {
-          this.executeServe(this.pendingInput);
+          const consumed = this.pendingInput;
+          this.executeServe(consumed);
           this.pendingInput = null;
+          this.pushTrace("consumed", consumed, server.slot);
         }
       } else {
         this.serveTimer += dt;
@@ -399,7 +476,7 @@ export class GameSimulation {
       const cooldownOk = this.time - p.lastHitTime > PLAYER.HIT_COOLDOWN;
       const bounceOk = !requireBounce || this.ball.bouncesSinceHit >= 1;
       const d = Math.hypot(this.ball.x - p.x, this.ball.y - p.y);
-      const reachOk = d <= PLAYER.REACH * PLAYER.REACH_MULT && this.ball.z <= 4.6;
+      const reachOk = d <= PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach && this.ball.z <= 4.6;
       if (cooldownOk && bounceOk && reachOk) {
         this.canHit[p.slot] = true;
         if (!best || d < best.d) best = { slot: p.slot, d };
@@ -427,12 +504,14 @@ export class GameSimulation {
       this.humanLastDist = d;
       if (this.pendingInput && !this.pendingInput.tap) {
         const windowClosing =
-          this.ball.z > 4.0 || d > PLAYER.REACH * PLAYER.REACH_MULT * 0.98;
+          this.ball.z > 4.0 || d > PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach * 0.98;
         if (receding || windowClosing) {
           const lateness = Math.max(0, d - this.humanMinDist);
-          this.executeHumanHit(p, this.pendingInput, lateness);
+          const consumed = this.pendingInput;
+          this.executeHumanHit(p, consumed, lateness);
           this.pendingInput = null;
           this.humanMinDist = this.humanLastDist = Infinity;
+          this.pushTrace("consumed", consumed, p.slot);
         }
         // else: the ball is still approaching and comfortably reachable — wait a
         // tick for a cleaner contact. (The 0.28 s buffer still bounds the wait.)
@@ -717,6 +796,7 @@ export class GameSimulation {
     const shot = solveShot(p.x, p.y, targetX, targetY, shotType, {
       accuracy: opts.accuracy,
       unforcedError: 0,
+      control: p.stats.control,
       rng: opts.accuracy < 1 ? this.rng : undefined,
       clampInBounds: !opts.isServe, // serves may spray out/wrong-box; rallies stay in
     });
@@ -763,6 +843,25 @@ export class GameSimulation {
     if (this.rallyStrikeCount > this.stats.longestRally) this.stats.longestRally = this.rallyStrikeCount;
     if (shotType === "dink" && !miss) this.stats.dinks++;
 
+    // Emit the single authoritative contact event for this strike.
+    this.contactEvents.push({
+      id: ++this.contactId,
+      time: this.time,
+      slot: p.slot,
+      team: p.team,
+      shotType,
+      isServe,
+      isVolley: wasVolley,
+      miss,
+      power: Math.min(1, Math.hypot(b.vx, b.vy, b.vz) / 60),
+      x: b.x,
+      y: b.y,
+    });
+    if (this.contactEvents.length > 60) {
+      this.contactEvents.shift();
+      this.contactCursor = Math.max(0, this.contactCursor - 1);
+    }
+
     if (!isServe && !miss) {
       this.pushMessage(cap(shotType), p.x, p.y, shotType === "dink" ? "info" : "success");
     }
@@ -780,7 +879,7 @@ export class GameSimulation {
     this.pushMessage(fault.message, fault.x, fault.y, "error");
 
     const rallyWinner: Team = fault.faultingTeam === "near" ? "far" : "near";
-    const outcome = ScoreManager.resolve(this.score, rallyWinner);
+    const outcome = ScoreManager.resolve(this.score, rallyWinner, this.format);
     this.score = outcome.score;
 
     // Advance the SERVER (tracked as a real player), per doubles rules:
@@ -812,12 +911,53 @@ export class GameSimulation {
 
   // Serving team keeps the serve after a point; the two teammates swap courts so
   // the same server moves to the other service box (keeps score-parity valid).
+  // Singles: there is one server, so flip their court side instead.
   private swapServingSides() {
     const serving = this.players.filter((p) => p.team === this.score.servingTeam);
-    const tmp = serving[0].courtSide;
-    serving[0].courtSide = serving[1].courtSide;
-    serving[1].courtSide = tmp;
+    if (serving.length >= 2) {
+      const tmp = serving[0].courtSide;
+      serving[0].courtSide = serving[1].courtSide;
+      serving[1].courtSide = tmp;
+    } else if (serving.length === 1) {
+      serving[0].courtSide = serving[0].courtSide === "R" ? "L" : "R";
+    }
   }
+}
+
+// Detect a MatchConfig vs a legacy SimOptions object.
+function isMatchConfig(cfg: MatchConfig | SimOptions): cfg is MatchConfig {
+  return "format" in cfg && "near" in cfg;
+}
+
+// Convert the legacy SimOptions (used by the headless tests) into the exact
+// same four-player doubles MatchConfig the engine built before — preserving the
+// slot order, difficulties, personalities and names so behaviour is identical.
+function optionsToConfig(opts: SimOptions): MatchConfig {
+  const controllers = opts.controllers ?? ["LOCAL_HUMAN", "AI", "AI", "AI"];
+  const personalities = opts.personalities ?? [undefined, "DEFENSIVE", "AGGRESSIVE", "TACTICAL"];
+  const names = opts.names ?? ["You", "Partner", "Rival", "Rival"];
+  const partnerDiff = opts.partnerDifficulty ?? PARTNER_DIFFICULTY;
+  const diffForSlot = (slot: number, team: Team): Difficulty | undefined => {
+    if (controllers[slot] !== "AI") return undefined;
+    if (opts.difficulties?.[slot]) return opts.difficulties[slot];
+    return team === "near" ? partnerDiff : opts.difficulty;
+  };
+  return buildMatchConfig({
+    seed: opts.seed,
+    format: "doubles",
+    near: {
+      controllers: [controllers[0], controllers[1]],
+      difficulties: [diffForSlot(0, "near"), diffForSlot(1, "near")],
+      personalities: [personalities[0], personalities[1]],
+      names: [names[0], names[1]],
+    },
+    far: {
+      controllers: [controllers[2], controllers[3]],
+      difficulties: [diffForSlot(2, "far"), diffForSlot(3, "far")],
+      personalities: [personalities[2], personalities[3]],
+      names: [names[2], names[3]],
+    },
+  });
 }
 
 function clamp01(v: number): number {

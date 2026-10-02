@@ -1,0 +1,113 @@
+=== Picklewood doubles parity fingerprint ===
+
+[ROOKIE vs ROOKIE]
+  s7000 3-11 w:far lr:17 ral:28 dk:14 kf:0 pts:28 t:14761
+  s7001 2-11 w:far lr:16 ral:26 dk:5 kf:0 pts:26 t:12499
+  s7002 6-11 w:far lr:17 ral:55 dk:8 kf:0 pts:55 t:25165
+  s7003 10-12 w:far lr:16 ral:39 dk:20 kf:0 pts:39 t:19888
+  s7004 8-11 w:far lr:16 ral:41 dk:16 kf:0 pts:41 t:21854
+  s7005 11-5 w:near lr:11 ral:36 dk:7 kf:0 pts:36 t:16268
+  s7006 3-11 w:far lr:12 ral:27 dk:5 kf:0 pts:27 t:12989
+  s7007 11-1 w:near lr:11 ral:44 dk:7 kf:0 pts:44 t:20008
+  s7008 1-11 w:far lr:11 ral:25 dk:8 kf:0 pts:25 t:12570
+  s7009 4-11 w:far lr:16 ral:33 dk:12 kf:0 pts:33 t:16717
+  s7010 3-11 w:far lr:18 ral:28 dk:8 kf:0 pts:28 t:14019
+  s7011 9-11 w:far lr:11 ral:34 dk:13 kf:0 pts:34 t:17179
+  s7012 12-10 w:near lr:11 ral:42 dk:12 kf:0 pts:42 t:21853
+  s7013 11-6 w:near lr:13 ral:32 dk:1 kf:0 pts:32 t:12923
+  s7014 11-8 w:near lr:9 ral:31 dk:8 kf:0 pts:31 t:14934
+  s7015 11-7 w:near lr:17 ral:42 dk:14 kf:0 pts:42 t:23309
+  s7016 6-11 w:far lr:12 ral:51 dk:14 kf:0 pts:51 t:22980
+  s7017 10-12 w:far lr:15 ral:52 dk:10 kf:0 pts:52 t:22714
+  s7018 9-11 w:far lr:12 ral:45 dk:9 kf:0 pts:45 t:21648
+  s7019 7-11 w:far lr:12 ral:39 dk:10 kf:0 pts:39 t:19517
+
+[CLUB vs CLUB]
+  s7000 9-11 w:far lr:26 ral:37 dk:94 kf:0 pts:37 t:33575
+  s7001 11-5 w:near lr:27 ral:36 dk:110 kf:0 pts:36 t:32749
+  s7002 11-8 w:near lr:24 ral:38 dk:61 kf:0 pts:38 t:25971
+  s7003 10-12 w:far lr:27 ral:36 dk:89 kf:0 pts:36 t:30480
+  s7004 8-11 w:far lr:27 ral:32 dk:67 kf:0 pts:32 t:25266
+  s7005 11-8 w:near lr:27 ral:34 dk:68 kf:0 pts:34 t:25608
+  s7006 11-9 w:near lr:23 ral:40 dk:78 kf:0 pts:40 t:28974
+  s7007 3-11 w:far lr:24 ral:24 dk:57 kf:0 pts:24 t:18965
+  s7008 11-6 w:near lr:27 ral:37 dk:80 kf:0 pts:37 t:27906
+  s7009 11-6 w:near lr:24 ral:25 dk:56 kf:0 pts:25 t:20910
+  s7010 11-5 w:near lr:23 ral:28 dk:57 kf:0 pts:28 t:21995
+  s7011 11-9 w:near lr:30 ral:31 dk:95 kf:0 pts:31 t:26427
+  s7012 7-11 w:far lr:34 ral:32 dk:68 kf:0 pts:32 t:25624
+  s7013 7-11 w:far lr:23 ral:35 dk:79 kf:0 pts:35 t:26174
+  s7014 4-11 w:far lr:29 ral:33 dk:95 kf:0 pts:33 t:29912
+  s7015 11-4 w:near lr:28 ral:30 dk:63 kf:0 pts:30 t:22624
+  s7016 11-3 w:near lr:25 ral:25 dk:42 kf:0 pts:25 t:16505
+  s7017 9-11 w:far lr:27 ral:41 dk:89 kf:0 pts:41 t:34617
+  s7018 4-11 w:far lr:30 ral:32 dk:80 kf:0 pts:32 t:27894
+  s7019 11-9 w:near lr:29 ral:36 dk:78 kf:0 pts:36 t:29508
+
+[PRO vs PRO]
+  s7000 11-4 w:near lr:29 ral:31 dk:80 kf:0 pts:31 t:28865
+  s7001 12-14 w:far lr:42 ral:59 dk:133 kf:0 pts:59 t:53786
+  s7002 10-12 w:far lr:28 ral:39 dk:70 kf:0 pts:39 t:31091
+  s7003 6-11 w:far lr:38 ral:35 dk:71 kf:0 pts:35 t:29968
+  s7004 11-9 w:near lr:27 ral:36 dk:120 kf:0 pts:36 t:34773
+  s7005 6-11 w:far lr:28 ral:27 dk:56 kf:0 pts:27 t:22442
+  s7006 11-9 w:near lr:28 ral:36 dk:81 kf:0 pts:36 t:30659
+  s7007 11-6 w:near lr:30 ral:36 dk:100 kf:0 pts:36 t:32268
+  s7008 11-7 w:near lr:37 ral:30 dk:82 kf:0 pts:30 t:27821
+  s7009 11-9 w:near lr:44 ral:43 dk:87 kf:0 pts:43 t:35938
+  s7010 10-12 w:far lr:29 ral:52 dk:114 kf:0 pts:52 t:45859
+  s7011 11-9 w:near lr:41 ral:55 dk:140 kf:0 pts:55 t:48638
+  s7012 11-9 w:near lr:35 ral:44 dk:101 kf:0 pts:44 t:38560
+  s7013 3-11 w:far lr:27 ral:28 dk:69 kf:0 pts:28 t:24077
+  s7014 4-11 w:far lr:38 ral:33 dk:88 kf:0 pts:33 t:29360
+  s7015 2-11 w:far lr:27 ral:30 dk:60 kf:0 pts:30 t:24486
+  s7016 5-11 w:far lr:43 ral:26 dk:69 kf:0 pts:26 t:25733
+  s7017 11-7 w:near lr:28 ral:29 dk:67 kf:0 pts:29 t:25326
+  s7018 11-7 w:near lr:32 ral:34 dk:67 kf:0 pts:34 t:27926
+  s7019 4-11 w:far lr:37 ral:25 dk:71 kf:0 pts:25 t:20791
+
+[CLUB vs ROOKIE]
+  s7000 12-10 w:near lr:20 ral:42 dk:43 kf:0 pts:42 t:26223
+  s7001 11-3 w:near lr:16 ral:25 dk:17 kf:0 pts:25 t:15502
+  s7002 11-4 w:near lr:18 ral:26 dk:21 kf:0 pts:26 t:16716
+  s7003 11-2 w:near lr:26 ral:29 dk:36 kf:0 pts:29 t:18748
+  s7004 11-5 w:near lr:22 ral:35 dk:25 kf:0 pts:35 t:20398
+  s7005 11-5 w:near lr:18 ral:39 dk:31 kf:0 pts:39 t:22738
+  s7006 11-5 w:near lr:28 ral:44 dk:43 kf:0 pts:44 t:27006
+  s7007 11-6 w:near lr:24 ral:41 dk:46 kf:0 pts:41 t:27026
+  s7008 11-9 w:near lr:25 ral:52 dk:47 kf:0 pts:52 t:31821
+  s7009 11-9 w:near lr:17 ral:40 dk:48 kf:0 pts:40 t:25448
+  s7010 11-6 w:near lr:18 ral:45 dk:34 kf:0 pts:45 t:26401
+  s7011 11-4 w:near lr:20 ral:22 dk:15 kf:0 pts:22 t:13088
+  s7012 11-4 w:near lr:22 ral:34 dk:43 kf:0 pts:34 t:22028
+  s7013 11-2 w:near lr:18 ral:28 dk:25 kf:0 pts:28 t:15860
+  s7014 11-6 w:near lr:17 ral:44 dk:59 kf:0 pts:44 t:29128
+  s7015 11-1 w:near lr:21 ral:24 dk:19 kf:0 pts:24 t:14259
+  s7016 7-11 w:far lr:19 ral:35 dk:43 kf:0 pts:35 t:22616
+  s7017 11-9 w:near lr:18 ral:40 dk:33 kf:0 pts:40 t:22974
+  s7018 12-10 w:near lr:19 ral:62 dk:71 kf:0 pts:62 t:40469
+  s7019 11-6 w:near lr:17 ral:28 dk:20 kf:0 pts:28 t:15678
+
+[PRO vs CLUB]
+  s7000 11-6 w:near lr:34 ral:36 dk:99 kf:0 pts:36 t:30816
+  s7001 6-11 w:far lr:42 ral:27 dk:68 kf:0 pts:27 t:23955
+  s7002 5-11 w:far lr:20 ral:29 dk:49 kf:0 pts:29 t:21111
+  s7003 11-0 w:near lr:32 ral:19 dk:43 kf:0 pts:19 t:16173
+  s7004 12-10 w:near lr:31 ral:45 dk:117 kf:0 pts:45 t:37186
+  s7005 11-0 w:near lr:29 ral:19 dk:47 kf:0 pts:19 t:16026
+  s7006 11-0 w:near lr:35 ral:23 dk:47 kf:0 pts:23 t:17466
+  s7007 11-1 w:near lr:32 ral:24 dk:56 kf:0 pts:24 t:20948
+  s7008 11-1 w:near lr:31 ral:23 dk:61 kf:0 pts:23 t:18341
+  s7009 11-3 w:near lr:33 ral:26 dk:66 kf:0 pts:26 t:24331
+  s7010 11-6 w:near lr:32 ral:28 dk:52 kf:0 pts:28 t:21817
+  s7011 11-7 w:near lr:29 ral:41 dk:122 kf:0 pts:41 t:35873
+  s7012 11-5 w:near lr:33 ral:40 dk:93 kf:0 pts:40 t:34164
+  s7013 11-1 w:near lr:30 ral:24 dk:35 kf:0 pts:24 t:16981
+  s7014 11-7 w:near lr:28 ral:41 dk:85 kf:0 pts:41 t:33604
+  s7015 11-8 w:near lr:29 ral:39 dk:87 kf:0 pts:39 t:32654
+  s7016 11-7 w:near lr:34 ral:37 dk:94 kf:0 pts:37 t:30148
+  s7017 12-10 w:near lr:26 ral:37 dk:77 kf:0 pts:37 t:29875
+  s7018 11-2 w:near lr:28 ral:25 dk:58 kf:0 pts:25 t:22200
+  s7019 11-3 w:near lr:27 ral:26 dk:76 kf:0 pts:26 t:24033
+
+done

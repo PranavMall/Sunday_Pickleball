@@ -55,4 +55,29 @@ ROOKIE/CLUB/PRO (M1) with personalities; result + rematch; rules unit tests.
 - 71/71 tests pass; 150 seeded AI-vs-AI matches (50/tier) complete, 0 stuck states.
 
 ## Next tasks
-Await user sign-off on Milestone 1 (post-1.1 corrections). Do NOT start M2 until approved.
+Milestone 2 Part A (Foundations) complete — awaiting user verification on a real
+device (hit sounds, haptics, wind-up responsiveness, Android back). Then:
+- **Part B** (not started): game feel (swing/follow-through, squash/stretch,
+  reactions, smooth walking), serve aim helper, AI returns tuned by difficulty,
+  dink rework.
+- **Part C** (not started): lob + smash shots, singles menu/UI, new AI profiles.
+- **Asset step**: real sprites (per `SPRITE_BRIEF.md`), music, line-free court.
+Do NOT start Part B until the user approves Part A.
+
+## Milestone 2 — Part A: Foundations (2026-06)
+- Input: single-gesture input (no pan+tap double-fire), instant wind-up pose on
+  a valid swipe, one ContactEvent per real strike driving sound + haptic once,
+  reserved edge margin, dev-only input trace. Android back intercepts to Pause.
+- Audio: expo-audio SFX service (pooled, overlap-safe, alternating variants,
+  one sound per contact) + persisted mute toggle in the Pause menu.
+- Architecture (roadmap §11): match-config-as-data (engine is mode-agnostic),
+  team size is config (SINGLES supported in engine + singles serve rule, dev 1v1
+  launch), parametric AI profiles + chemistry hook (presets reproduce M1 exactly),
+  per-player stat multipliers (neutral default, forced neutral when normalized),
+  local match-result logging, layered character contract (placeholders render
+  through it), interface-only ProfileService/AnalyticsService/AdService/
+  PurchaseService with a SaveModel (cumulative fans, separate form, ratings per
+  player AND per pairing).
+- Verified: doubles parity byte-for-byte identical (parity.ts) before/after;
+  engine suite 99 → 119 passing.
+

@@ -21,7 +21,7 @@ export function solveShot(
   targetX: number,
   targetY: number,
   shotType: ShotType,
-  opts?: { accuracy?: number; rng?: RNG; unforcedError?: number; clampInBounds?: boolean },
+  opts?: { accuracy?: number; rng?: RNG; unforcedError?: number; clampInBounds?: boolean; control?: number },
 ): ShotResult {
   const tune = SHOTS[shotType];
   const g = PHYS.GRAVITY;
@@ -34,7 +34,10 @@ export function solveShot(
   // Apply AI/human error: jitter the target and occasionally a bad mishit.
   if (opts?.rng) {
     const acc = opts.accuracy ?? 1;
-    const spread = (1 - acc) * 3.5; // ft
+    // `control` (stat multiplier, neutral 1.0) tightens placement: higher
+    // control = less spread. At the default it leaves the spread unchanged.
+    const control = opts.control ?? 1;
+    const spread = ((1 - acc) * 3.5) / control; // ft
     tx += opts.rng.noise(spread);
     ty += opts.rng.noise(spread);
     if (clampInBounds) {

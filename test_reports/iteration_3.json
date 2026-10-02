@@ -1,0 +1,40 @@
+{
+  "summary": "Milestone 2 Part A frontend flows VERIFIED on the public preview (390x844 portrait). Main menu -> PLAY -> difficulty-screen (rookie/club/pro cards + dev-singles-button visible). Doubles via difficulty-club: match-screen loads, Skia court renders, score-display reads exactly '0 – 0 – 2' (three numbers for doubles). Single Pan gesture: one upward swipe (mouse-based 15-step translation) transitions phase waiting_serve -> rally and increments Rally 0 -> 1. A second swipe fired immediately during the same rally resulted in Rally STILL 1 (no double shot — one gesture = one shot, as designed). Input trace in dev overlay shows buffered/consumed/received/expired entries (one consumed per swipe). Pause overlay contains EXACTLY the required four buttons: resume-button, mute-button, restart-button, quit-button. NO share-button in pause. NO result-overlay underneath. mute-button label toggles 'Sound: On' <-> 'Sound: Off' on tap. Resume closes the overlay and resumes gameplay. Restart from pause starts a fresh match (score reset to '0 – 0 – 2'). Quit returns to the main menu. Dev 1v1 singles (via dev-singles-button): match loads with score-display showing EXACTLY two numbers ('0 – 0', no third server number), serve-swipe advances Rally 0 -> 1, and the serveLabel ends with '· Singles'. Landscape rotation / Android back / hit sounds / haptics were NOT tested on web per request context (not verifiable). No red-screen errors, no runtime JS errors, no backend calls (client-only). All testIDs resolve correctly. Deprecated-API console warnings carried over from previous iteration (same list) and are non-blocking: react-native-skia SkPath.* deprecations, props.pointerEvents deprecation, shadow* style-props deprecation.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-skia paths", "issue": "SkPath.moveTo/lineTo/addPath/close/quadTo/addRRect/addArc are deprecated; migrate to Skia.PathBuilder.Make(). Non-blocking. Reference: /app/frontend/src/game/render/CourtRenderer.tsx and GameCanvas.tsx path building."},
+      {"component": "pointerEvents prop", "issue": "'props.pointerEvents is deprecated. Use style.pointerEvents.' Reference: /app/frontend/app/match.tsx lines 217, 246, 251, 258, 266, 271 (<View pointerEvents=\"box-none\"/\"none\">)."},
+      {"component": "shadow* style props", "issue": "'shadow*' style props are deprecated. Use 'boxShadow'. Reference: /app/frontend/app/index.tsx playBtn style lines 64-67 (shadowColor/shadowOpacity/shadowRadius/shadowOffset)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_1.json",
+    "/app/test_reports/iteration_2.json",
+    "/app/test_reports/iteration_3.json"
+  ],
+  "action_items": [
+    "No functional fixes required for Milestone 2 Part A — single-gesture input, pause menu (incl. mute toggle), dev 1v1 singles launcher, and the edge-margin guard all verified on web.",
+    "Optional carryover: migrate Skia path building to Skia.PathBuilder.Make() in CourtRenderer.tsx / GameCanvas.tsx.",
+    "Optional carryover: move pointerEvents from prop to style in match.tsx.",
+    "Optional carryover: replace shadow* props with boxShadow in index.tsx playBtn style."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx uses a single Gesture.Pan().minDistance(0).onEnd(...) (lines 159-167). Tap vs swipe is derived from translation length (INPUT.MIN_SWIPE) rather than a parallel Tap recogniser, which is exactly the invariant required to make 'one gesture = one input' — the no-double-shot fix is correctly implemented.",
+    "handleSwipe guards against edge-origin swipes via `if (startX < EDGE_MARGIN || startX > width - EDGE_MARGIN) return;` (lines 143-144). Combined with the focused BackHandler (lines 72-85) that always returns true during the match, Android edge-swipe can never drop the user out of the match.",
+    "Hit SFX + haptics fire exactly once per real contact via `sim.consumeContactEvents()` and `ev.miss` filtering (lines 113-122). Haptics are correctly gated to Platform.OS !== 'web', so web preview silence is expected and correct.",
+    "Pause overlay (lines 286-307) renders exactly Resume/Sound-toggle/Restart/Quit; share-button is scoped to result-overlay (lines 331-342) and is mutually exclusive with the pause overlay (pause is gated on `paused && !gameOver`, result on `gameOver`).",
+    "Score HUD (lines 219-229) correctly renders the serverNumber segment only when `config.format === 'doubles'`, so singles via devSinglesConfig shows exactly two numbers.",
+    "dev-singles-button is correctly dev-only (`{__DEV__ && ...}` in difficulty.tsx lines 47-55) and routes to /match with `singles: '1'`, which match.tsx parses into the singles flag feeding devSinglesConfig."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100% (all Milestone 2 Part A acceptance checks pass)"},
+  "seed_data_creation": "None (client-only offline game).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Portrait 390x844 (also smoke at 360x640). Public URL: https://pickle-match-9.preview.emergentagent.com. Allow 8-12s on /match for CanvasKit WASM. Serve-swipe pattern that reliably triggers phase waiting_serve -> rally: mouse.move(195,650) -> mouse.down() -> 15 upward move steps to (195,300) with ~12ms wait each -> mouse.up(). Confirm via the dev debug overlay (top-right: 'fps · seed · phase · z · sfx latency') and Rally counter. To verify no-double-shot: fire a second identical swipe within ~1s of the first; Rally counter must NOT advance a second time. The result overlay is reachable only after a full game (score to 11 win-by-2) — do not wait indefinitely; confirming the game loop by Rally increments is sufficient. Expo Router keeps the previous route mounted on back-navigation, so there may be TWO [data-testid=main-menu-screen] nodes in the DOM after Quit → Menu; use .first or navigate via a fresh page.goto if you need to re-enter the menu reliably.",
+  "rca_of_issue": "N/A — Milestone 2 Part A frontend acceptance checks all verified passing. The reported input-lag/double-shot bug is addressed by the single-Pan gesture architecture (one gesture end = one submitSwipe call), and the Android edge-swipe-exit bug is addressed by (1) the edge-margin guard in handleSwipe and (2) the focused BackHandler that unconditionally intercepts hardwareBackPress during the match."
+}
