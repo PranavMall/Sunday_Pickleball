@@ -1,0 +1,37 @@
+{
+  "summary": "Regression PASS after Skia RoundedRect -> Path.addRRect(Skia.RRectXY(...)) change in src/game/render/character.tsx. Portrait 390x844 on public preview. (1) Menu -> PLAY -> difficulty-club loads match-screen with the court AND 4 layered player figures (two near, two far, each with shoes/bottom/top/body/hair/paddle visible) — no blank canvas, no red error screen, no runtime JS errors. Initial score-display reads exactly '0 – 0 – 2' (doubles). (2) Serve hint 'Your serve — swipe up to serve' visible; a 15-step upward swipe transitions phase from waiting_serve to rally and increments Rally 0 -> 1 (dev debug overlay confirms seed+phase+fps). (3) pause-button opens pause-overlay with EXACTLY resume-button, mute-button, restart-button, quit-button; mute-button label toggles 'Sound: On' <-> 'Sound: Off' on tap; resume-button closes the overlay (count = 0) and returns to play. (4) Dev 1v1: dev-singles-button loads a match whose score-display shows EXACTLY two numbers ('0 – 0'), serveLabel ends with '· Singles', 2 player figures render (one near, one far), and a serve-swipe increments Rally 0 -> 1. Verified character layered renderer uses Skia.Path.Make().addRRect(Skia.RRectXY(...)) for 'bottom' (line 97-99) and 'top' (line 101-106) with corner radius bounded strictly < half the shorter side (r = min(bodyW,h)*0.49) — matches the proven pattern that native Skia accepts. No new deprecation warnings or regressions introduced; carryover deprecation warnings (SkPath.*, props.pointerEvents, shadow*) unchanged from iteration_3. Backend testing skipped per request (client-only app, no backend).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-skia paths", "issue": "SkPath.moveTo/lineTo/addPath/close/quadTo/addRRect/addArc deprecated; migrate to Skia.PathBuilder.Make(). Non-blocking carryover. Reference: /app/frontend/src/game/render/character.tsx:97,102,116,136 and CourtRenderer.tsx / GameCanvas.tsx path builders."},
+      {"component": "pointerEvents prop", "issue": "'props.pointerEvents is deprecated. Use style.pointerEvents.' Non-blocking carryover. Reference: /app/frontend/app/match.tsx:217,246,251,258,266,271."},
+      {"component": "shadow* style props", "issue": "'shadow*' style props deprecated. Use 'boxShadow'. Non-blocking carryover. Reference: /app/frontend/app/index.tsx playBtn style."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_1.json",
+    "/app/test_reports/iteration_2.json",
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/iteration_4.json"
+  ],
+  "action_items": [
+    "No regression — Skia RoundedRect replacement is working on web. Original crash is native-only (Expo Go/CanvasKit-strict) and cannot be reproduced on the web preview per the context note; a device/native smoke on Expo Go is recommended before closing.",
+    "Optional carryover: migrate all Skia.Path.Make() + addRRect/moveTo/etc. in character.tsx/CourtRenderer.tsx/GameCanvas.tsx to Skia.PathBuilder.Make() to clear deprecation noise and future-proof against upcoming removal."
+  ],
+  "critical_code_review_comments": [
+    "character.tsx 'bottom' (lines 96-100) uses Skia.Path.Make().addRRect(Skia.RRectXY(rect, bodyW*0.3, bodyW*0.3)). With bodyW=1.05*scale and height=bodyH*0.42≈1.09*scale, corner radius 0.315*scale is well below half the shorter side (~0.525*scale) — safe for strict native Skia validation.",
+    "character.tsx 'top' (lines 101-107) explicitly clamps r = min(bodyW,h)*0.49 (strictly < half) before passing to RRectXY — this is exactly the invariant native Skia enforces, so the regression fix is defensively correct.",
+    "No <RoundedRect> JSX remains in character.tsx; the previously-crashing path is fully replaced. Other render files (CourtRenderer.tsx, GameCanvas.tsx) already used the Path+addRRect pattern.",
+    "match.tsx:212 (CourtRenderer) sits inside a single GestureDetector/Pan — the one-gesture-one-shot invariant from iteration_3 is preserved; the render change did not touch input."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100% (all 4 regression flows pass on web preview)"},
+  "seed_data_creation": "None (client-only offline game).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Portrait 390x844. Public URL: https://pickle-match-9.preview.emergentagent.com. Allow ~10s on /match for CanvasKit WASM. Serve-swipe recipe: mouse.move(195,650) -> down -> 15 steps up to y≈300 with ~12ms waits -> up. Verify players rendered by screenshot (expect 4 figures for CLUB doubles, 2 for dev singles). To reproduce the original native crash you MUST use Expo Go on a real device — the web preview (CanvasKit) is lenient and will NOT surface the 'Invalid properties for rounded rect' error. Expo Router keeps the previous route mounted after replace(), so if asserting a single testID across navigations use .first.",
+  "rca_of_issue": "Native Skia validates RRectXY corner radii: radius must be strictly less than half the shorter side of the enclosing rect, and <RoundedRect> native binding is stricter than the web CanvasKit build. The fix replaces the JSX <RoundedRect> component with the imperative Skia.Path.Make().addRRect(Skia.RRectXY(rect, rx, ry)) pattern, with the 'top' case explicitly clamping r = min(bodyW,h)*0.49 (strictly < half). Regression check on web confirms the renderer still draws all character layers for both doubles (4 figures) and dev singles (2 figures). A device smoke on Expo Go remains advisable to confirm the native-only crash is gone, but the code pattern now matches other render files that are known to work natively."
+}

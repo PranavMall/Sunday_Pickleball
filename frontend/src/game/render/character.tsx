@@ -1,5 +1,5 @@
 import React from "react";
-import { Circle, Group, Oval, Path, RoundedRect, Skia } from "@shopify/react-native-skia";
+import { Circle, Group, Oval, Path, Skia } from "@shopify/react-native-skia";
 
 // LAYERED CHARACTER CONTRACT (roadmap §11, structure only — no art yet).
 //
@@ -93,13 +93,16 @@ export function Character({ geom, colors, view, anim }: Props) {
             <Oval rect={Skia.XYWHRect(x + bodyW * 0.05, feetY - scale * 0.18, bodyW * 0.5, scale * 0.3)} color={colors.shoes} />
           </Group>
         );
-      case "bottom":
-        return (
-          <RoundedRect key={id} rect={Skia.XYWHRect(x - bodyW / 2, legsTop, bodyW, bodyH * 0.42)} r={bodyW * 0.3} color={colors.bottom} />
-        );
+      case "bottom": {
+        const p = Skia.Path.Make();
+        p.addRRect(Skia.RRectXY(Skia.XYWHRect(x - bodyW / 2, legsTop, bodyW, bodyH * 0.42), bodyW * 0.3, bodyW * 0.3));
+        return <Path key={id} path={p} color={colors.bottom} />;
+      }
       case "top": {
         const p = Skia.Path.Make();
-        p.addRRect(Skia.RRectXY(Skia.XYWHRect(x - bodyW / 2, torsoTop, bodyW, legsTop - torsoTop + scale * 0.2), bodyW / 2, bodyW / 2));
+        const h = legsTop - torsoTop + scale * 0.2;
+        const r = Math.min(bodyW, h) * 0.49; // strictly < half of the smaller side
+        p.addRRect(Skia.RRectXY(Skia.XYWHRect(x - bodyW / 2, torsoTop, bodyW, h), r, r));
         return <Path key={id} path={p} color={colors.primary} />;
       }
       case "wristAccessory":
