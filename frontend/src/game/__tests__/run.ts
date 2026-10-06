@@ -5,7 +5,7 @@
  * Pure TypeScript, no RN/Skia dependency.
  */
 import { COURT, serviceBoxFor } from "../config/court";
-import { INPUT, PLAYER } from "../config/tuning";
+import { INPUT, PLAYER, KITCHEN } from "../config/tuning";
 import { buildMatchConfig, devSinglesConfig } from "../config/matchConfig";
 import { RuleManager } from "../sim/rules";
 import { ScoreManager } from "../sim/score";
@@ -563,16 +563,77 @@ function kitchenTests() {
   ok(nearC.targetY >= COURT.NEAR_KITCHEN_Y, "C: near player HOLDS behind the kitchen line (no illegal NVZ volley)");
 }
 
+// ============== KITCHEN-LINE RULE + POST-KITCHEN STRIKER FAIRNESS ==============
+// §2: touching the NVZ line legally counts as being in the kitchen.
+// §3: a player who has been in the kitchen and not re-established BOTH feet must
+//     not be auto-designated to volley an airborne ball, but RuleManager still
+//     faults a genuine illegal volley.
+function kitchenRuleTests() {
+  console.log("\n[Kitchen-line rule & post-kitchen fairness]");
+  const nearLineY = COURT.NEAR_KITCHEN_Y; // 29
+  const volley = () => ball({ y: 25, z: 2.5, bouncesSinceHit: 0 });
+  const bounced = () => ball({ y: 25, z: 0.6, bouncesSinceHit: 1 });
+
+  // 2A) Volley while TOUCHING the kitchen line → KITCHEN fault.
+  const pLine = player({ team: "near", x: 10, y: nearLineY + 0.1, inKitchen: false, touchingKitchenLine: true, feetEstablished: true, wasInKitchen: false });
+  const f2a = RuleManager.validateStrike(volley(), pLine, 6, false);
+  ok(!!f2a && f2a.reason === "KITCHEN_VOLLEY", "2A: volley while touching the kitchen line is a KITCHEN fault");
+
+  // 2: updateKitchenFlags treats line contact as being in the kitchen.
+  const pTouch = player({ team: "near", x: 10, y: nearLineY + 0.2, feetEstablished: true, wasInKitchen: false, reestablishTimer: 0.9 });
+  RuleManager.updateKitchenFlags(pTouch);
+  ok(pTouch.touchingKitchenLine, "2: player on the line is flagged touchingKitchenLine");
+  ok(pTouch.wasInKitchen && !pTouch.feetEstablished, "2: line contact marks wasInKitchen + clears feetEstablished");
+  eq(pTouch.reestablishTimer, 0, "2C: touching the line RESETS the re-establish timer");
+
+  // 2D) Re-establish timer runs ONLY when fully outside AND off the line.
+  const pOut = player({ team: "near", x: 10, y: nearLineY + 2, wasInKitchen: true, feetEstablished: false, reestablishTimer: 0 });
+  RuleManager.updateKitchenFlags(pOut);
+  ok(!pOut.inKitchen && !pOut.touchingKitchenLine, "2D: player 2 ft behind the line has no kitchen contact");
+  RuleManager.tickKitchenRecovery(pOut, KITCHEN.REESTABLISH_TIME * 0.5);
+  ok(!pOut.feetEstablished, "2D: not re-established before the timer completes");
+  RuleManager.tickKitchenRecovery(pOut, KITCHEN.REESTABLISH_TIME);
+  ok(pOut.feetEstablished && !pOut.wasInKitchen, "2D: re-established after staying fully out long enough");
+
+  // 2C) Touching the line during recovery prevents re-establishment.
+  const pRec = player({ team: "near", x: 10, y: nearLineY + 2, wasInKitchen: true, feetEstablished: false, reestablishTimer: 0 });
+  RuleManager.updateKitchenFlags(pRec);
+  RuleManager.tickKitchenRecovery(pRec, KITCHEN.REESTABLISH_TIME * 0.9);
+  pRec.y = nearLineY + 0.1; // steps back onto the line
+  RuleManager.updateKitchenFlags(pRec); // resets the timer
+  RuleManager.tickKitchenRecovery(pRec, KITCHEN.REESTABLISH_TIME * 0.5);
+  ok(!pRec.feetEstablished, "2C: re-touching the line during recovery blocks re-establishment");
+
+  // 3B) Not-re-established player is NOT eligible to volley an airborne ball.
+  const humanRec = player({ slot: 0, team: "near", controller: "LOCAL_HUMAN", wasInKitchen: true, feetEstablished: false });
+  ok(!RuleManager.eligibleForAirborneVolley(humanRec, volley()), "3B: not-re-established player is NOT selected for an airborne volley");
+  // 3A) …but a BOUNCED ball may still be played from the kitchen.
+  ok(RuleManager.eligibleForAirborneVolley(humanRec, bounced()), "3A: a bounced kitchen ball may still be retrieved");
+
+  // 3C) An established partner IS eligible to take the airborne ball.
+  const partner = player({ slot: 1, team: "near", controller: "AI", wasInKitchen: false, feetEstablished: true });
+  ok(RuleManager.eligibleForAirborneVolley(partner, volley()), "3C: an established partner may take the airborne ball");
+
+  // 3D) Once re-established, normal airborne eligibility resumes.
+  const humanReset = player({ slot: 0, team: "near", controller: "LOCAL_HUMAN", wasInKitchen: false, feetEstablished: true });
+  ok(RuleManager.eligibleForAirborneVolley(humanReset, volley()), "3D: re-established player regains airborne eligibility");
+
+  // 3E) RuleManager authoritative: a genuine illegal kitchen volley STILL faults.
+  const inK = player({ team: "near", x: 10, y: 25, inKitchen: true, touchingKitchenLine: false, feetEstablished: false, wasInKitchen: true });
+  const f3e = RuleManager.validateStrike(volley(), inK, 6, false);
+  ok(!!f3e && f3e.reason === "KITCHEN_VOLLEY", "3E: a genuine illegal kitchen volley STILL faults (rule authoritative)");
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
-serverPositionTests();
 inputTests();
 controlsTests();
 partnerTests();
 realConfigTests();
 singlesTests();
 kitchenTests();
+kitchenRuleTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

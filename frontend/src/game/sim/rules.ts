@@ -167,11 +167,46 @@ export const RuleManager = {
     const ownLineY = p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
     p.inKitchen = inZone;
     p.touchingKitchenLine = Math.abs(p.y - ownLineY) <= KITCHEN.LINE_TOLERANCE;
-    if (inZone) {
+    // Touching the kitchen LINE legally counts as being in the kitchen: mark the
+    // player as having been in and drop the re-established flag + reset the timer,
+    // exactly as a full NVZ entry would.
+    if (inZone || p.touchingKitchenLine) {
       p.wasInKitchen = true;
       p.feetEstablished = false;
       p.reestablishTimer = 0;
     }
+  },
+
+  // True when the player is inside the NVZ OR touching its line — line contact
+  // counts as kitchen contact for every rule that cares (volley, momentum,
+  // re-establishment, striker eligibility).
+  isKitchenContact(p: PlayerState): boolean {
+    return p.inKitchen || p.touchingKitchenLine;
+  },
+
+  // Advance a player's kitchen recovery one frame. The re-establish timer ONLY
+  // runs when BOTH feet are completely outside the NVZ AND not touching the
+  // line; once the player has stayed fully out long enough they re-establish.
+  tickKitchenRecovery(p: PlayerState, dt: number) {
+    if (!p.inKitchen && !p.touchingKitchenLine && p.wasInKitchen) {
+      p.reestablishTimer += dt;
+      if (p.reestablishTimer >= KITCHEN.REESTABLISH_TIME) {
+        p.feetEstablished = true;
+        p.wasInKitchen = false;
+      }
+    }
+  },
+
+  // A player who has been in the kitchen and NOT yet re-established BOTH feet may
+  // not be auto-designated to VOLLEY an airborne ball. This stops automatic
+  // movement / striker selection from manufacturing an unavoidable kitchen fault
+  // after a legal bounced-ball retrieval. A BOUNCED ball is always allowed (it
+  // is legal to play from inside the kitchen). RuleManager.validateStrike remains
+  // authoritative for any volley actually executed.
+  eligibleForAirborneVolley(p: PlayerState, ball: BallState): boolean {
+    const airborne = ball.bouncesSinceHit === 0 && ball.z > 0.05;
+    if (!airborne) return true;
+    return !(p.wasInKitchen && !p.feetEstablished);
   },
 };
 

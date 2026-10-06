@@ -421,20 +421,16 @@ export class GameSimulation {
 
     // Update kitchen flags + timers for everyone.
     for (const p of this.players) {
-      const wasInK = p.inKitchen;
+      const wasContact = RuleManager.isKitchenContact(p);
       RuleManager.updateKitchenFlags(p);
-      // Re-establishment: both feet OUT of the kitchen for REESTABLISH_TIME.
-      if (!p.inKitchen && !p.touchingKitchenLine && p.wasInKitchen) {
-        p.reestablishTimer += dt;
-        if (p.reestablishTimer >= KITCHEN.REESTABLISH_TIME) {
-          p.feetEstablished = true;
-          p.wasInKitchen = false;
-        }
-      }
-      // Momentum: a fault if a just-volleyed player enters the NVZ.
+      // Re-establishment (line contact counts as being in the kitchen; the timer
+      // only runs when fully outside AND off the line).
+      RuleManager.tickKitchenRecovery(p, dt);
+      // Momentum: a fault if a just-volleyed player's momentum carries them into
+      // the NVZ OR onto its line.
       if (p.momentumTimer > 0) {
         p.momentumTimer -= dt;
-        if (!wasInK && p.inKitchen) {
+        if (!wasContact && RuleManager.isKitchenContact(p)) {
           this.registerFault({
             reason: "KITCHEN_MOMENTUM",
             faultingTeam: p.team,
@@ -522,7 +518,12 @@ export class GameSimulation {
       const bounceOk = !requireBounce || this.ball.bouncesSinceHit >= 1;
       const d = Math.hypot(this.ball.x - p.x, this.ball.y - p.y);
       const reachOk = d <= PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach && this.ball.z <= 4.6;
-      if (cooldownOk && bounceOk && reachOk) {
+      // Post-kitchen fairness: don't auto-designate a not-yet-re-established
+      // player to VOLLEY an airborne ball (automatic movement must not
+      // manufacture an unavoidable kitchen fault). A genuine illegal volley is
+      // still faulted by RuleManager if one is executed.
+      const airborneOk = RuleManager.eligibleForAirborneVolley(p, this.ball);
+      if (cooldownOk && bounceOk && reachOk && airborneOk) {
         this.canHit[p.slot] = true;
         if (!best || d < best.d) best = { slot: p.slot, d };
       }

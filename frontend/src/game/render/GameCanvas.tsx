@@ -9,7 +9,7 @@ import { IMAGE_H, IMAGE_W, type Projector } from "../render/perspective";
 import { Character, type CharacterColors, type CharacterView } from "./character";
 import { useTheme } from "@/src/theme";
 
-const courtImg = require("@/assets/images/court_background.webp");
+const courtImg = require("@/assets/images/court_gameplay.webp");
 
 interface Props {
   sim: GameSimulation;

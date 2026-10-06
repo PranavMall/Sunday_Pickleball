@@ -4,29 +4,28 @@ import { COURT } from "../config/court";
 //
 // The painted court image is a plane seen in perspective, so a projective
 // homography maps the logical court rectangle EXACTLY onto the painting. We fit
-// the homography from the four painted baseline corners (measured from the
+// the homography from the four painted court corners (measured from the
 // 1024x1536 artwork), then apply a cover-fit image->screen transform.
 //
-// Measured painted court lines (pixel rows, verified from the artwork):
-//   far baseline   y=527   far kitchen y=691   net y=755
-//   near kitchen   y=906   near baseline y=1183
-// Corners (px): FL(303,528) FR(731,528) NL(139,1186) NR(887,1186)
+// GAMEPLAY court = court_gameplay.webp (LINE-FREE painted blue surface). The
+// code-drawn geometry (sidelines, baselines, kitchen/NVZ lines, centre lines,
+// net, posts) is authoritative and drawn on top at the projected OFFICIAL
+// positions. court_background.webp remains the MAIN-MENU background only.
 //
 // IMPORTANT: in/out and kitchen decisions NEVER use these pixels. This file is
-// visual-only. Where painted inner lines disagree with official proportions we
-// draw thin code lines at the projected official positions (see GameCanvas).
+// visual-only. The logical 20x44 ft court is authoritative.
 
 export const IMAGE_W = 1024;
 export const IMAGE_H = 1536;
 
-// Painted outer court corners in image pixels.
+// Painted blue-court corners in image pixels (court_gameplay.webp).
 // Logical unit-square corners map as: (u,v) with u=x/WIDTH, v=y/LENGTH.
 //   (0,0) far-left, (1,0) far-right, (1,1) near-right, (0,1) near-left
 const DST = [
-  { x: 303, y: 528 }, // (0,0) FL far-left
-  { x: 731, y: 528 }, // (1,0) FR far-right
-  { x: 887, y: 1186 }, // (1,1) NR near-right
-  { x: 139, y: 1186 }, // (0,1) NL near-left
+  { x: 304, y: 521 }, // (0,0) FL far-left
+  { x: 729, y: 525 }, // (1,0) FR far-right
+  { x: 888, y: 1197 }, // (1,1) NR near-right
+  { x: 133, y: 1191 }, // (0,1) NL near-left
 ];
 const SRC = [
   { x: 0, y: 0 },
