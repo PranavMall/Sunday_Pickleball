@@ -1,26 +1,23 @@
-// Low-latency hit-sound service.
+// Low-latency hit/bounce sound service.
 //
-// Placeholder SFX supplied by the user (mono WAVs, trimmed to start within
-// ~4 ms — we never re-encode them). Requirements implemented here:
-//   • Preload every sound at match start (createAudioPlayer holds a decoded,
-//     ready-to-play native player — the low-latency path for very short clips).
-//   • Exactly ONE sound per real contact, fired on the contact frame by the
-//     renderer draining ContactEvents (see match.tsx). Variants alternate.
-//   • Overlap-safe: each variant has a small POOL of players used round-robin,
-//     so a new hit never cuts off the previous one or builds up delay.
-//   • Mute toggle (persisted), exposed in the pause menu.
-//   • Dev latency probe: wall-clock from draining a contact event to the
-//     native play() call (the JS contribution). True audio-output latency after
-//     play() is OS/device dependent and must be confirmed on a real device.
+// Placeholder SFX supplied by the user (mono WAVs, trimmed — never re-encoded).
+//   • Preload at match start; report readiness.
+//   • Exactly ONE sound per real CONTACT (incl. net/long/wide mishits — a paddle
+//     sound is tied to physical paddle-ball contact, not whether the shot is in).
+//   • Exactly ONE sound per real BOUNCE (separate event type; quieter; volume
+//     scales with impact speed).
+//   • Overlap-safe with the MINIMUM pool: 2 players per file (16 total). Each
+//     player re-arms (seekTo 0) the instant it finishes, so it is already
+//     rewound before it is needed — no seek/play race on Android, no cut-offs.
+//   • Variants alternate. Mute toggle (persisted).
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 
-import type { ContactEvent } from "../sim/types";
+import type { BounceEvent, ContactEvent } from "../sim/types";
 
 type SetKey = "pop" | "drive" | "kitchen_soft" | "kitchen_bright";
 
-// [variant0, variant1] per set.
 const FILES: Record<SetKey, number[]> = {
   pop: [require("@/assets/audio/sfx_pop_1.wav"), require("@/assets/audio/sfx_pop_2.wav")],
   drive: [require("@/assets/audio/sfx_drive_1.wav"), require("@/assets/audio/sfx_drive_2.wav")],
@@ -35,39 +32,49 @@ const FILES: Record<SetKey, number[]> = {
 };
 
 const SET_KEYS: SetKey[] = ["pop", "drive", "kitchen_soft", "kitchen_bright"];
-const POOL = 3; // players per variant (overlap headroom)
+const POOL = 2; // players per file → clean overlap with minimum instances (16)
 const MUTE_KEY = "pw.sfx.muted";
 
-// Contact → sound mapping. Normal paddle = pop; strong drive/smash = drive;
-// dinks = kitchen_soft (soft paddle); soft drops = kitchen_bright. The user will
-// confirm soft/bright (paddle vs bounce) by ear — easy to swap here.
-function pickSet(shotType: ContactEvent["shotType"], power: number): SetKey {
+// Easy-to-swap mapping (owner will confirm paddle vs bounce by ear).
+const CONTACT_SOFT_SET: SetKey = "kitchen_bright"; // soft paddle (dink/drop) contact
+const BOUNCE_SET: SetKey = "kitchen_soft"; // ball bounce on the court
+
+// CONTACT → set. Normal paddle = pop; strong drive/smash = drive; soft shots use
+// the "soft" kitchen set.
+function contactSet(shotType: ContactEvent["shotType"], power: number): SetKey {
   switch (shotType) {
     case "dink":
-      return "kitchen_soft";
     case "drop":
-      return "kitchen_bright";
+      return CONTACT_SOFT_SET;
     case "smash":
       return "drive";
     case "drive":
       return power > 0.55 ? "drive" : "pop";
-    case "serve":
-    case "lob":
     default:
       return "pop";
   }
 }
 
+interface Voice {
+  player: AudioPlayer;
+  busy: boolean;
+}
+
 class Sfx {
-  private players: Record<SetKey, AudioPlayer[][]> = {} as any; // [variant][poolIdx]
-  private rr: Record<SetKey, number[]> = {} as any; // round-robin per variant
-  private variant: Record<SetKey, number> = {} as any; // alternates 0/1
-  private ready = false;
+  private voices: Record<SetKey, Voice[][]> = {} as any; // [variant][poolIdx]
+  private rr: Record<SetKey, number[]> = {} as any;
+  private variant: Record<SetKey, number> = {} as any;
+  private _ready = false;
   private _muted = false;
-  lastLatencyMs = 0; // dev: contact-drain → play() call
+  lastLatencyMs = 0;
+  playedCount = 0; // dev: total sounds actually triggered
+
+  get ready() {
+    return this._ready;
+  }
 
   async preload() {
-    if (this.ready) return;
+    if (this._ready) return;
     try {
       const saved = await AsyncStorage.getItem(MUTE_KEY);
       this._muted = saved === "1";
@@ -77,13 +84,28 @@ class Sfx {
         shouldRouteThroughEarpiece: false,
       });
       for (const key of SET_KEYS) {
-        this.players[key] = FILES[key].map((src) =>
-          Array.from({ length: POOL }, () => createAudioPlayer(src)),
+        this.voices[key] = FILES[key].map((src) =>
+          Array.from({ length: POOL }, () => {
+            const player = createAudioPlayer(src);
+            const voice: Voice = { player, busy: false };
+            // Re-arm as soon as playback finishes: rewind now so the next play()
+            // can fire immediately (no seek/play race, especially on Android).
+            player.addListener("playbackStatusUpdate", (s: any) => {
+              if (s?.didJustFinish) {
+                voice.busy = false;
+                try {
+                  player.seekTo(0);
+                } catch {}
+              }
+            });
+            return voice;
+          }),
         );
         this.rr[key] = FILES[key].map(() => 0);
         this.variant[key] = 0;
       }
-      this.ready = true;
+      this._ready = true;
+      console.log("[sfx] ready — 16 players preloaded");
     } catch (e) {
       console.warn("[sfx] preload failed", e);
     }
@@ -92,49 +114,67 @@ class Sfx {
   get muted() {
     return this._muted;
   }
-
   async setMuted(m: boolean) {
     this._muted = m;
     try {
       await AsyncStorage.setItem(MUTE_KEY, m ? "1" : "0");
     } catch {}
   }
-
   async toggleMuted() {
     await this.setMuted(!this._muted);
     return this._muted;
   }
 
-  // Fire a single contact sound (alternating variant, round-robin pool player).
-  playForContact(ev: ContactEvent) {
-    if (!this.ready || this._muted || ev.miss) return;
-    const start = now();
-    const set = pickSet(ev.shotType, ev.power);
+  // Pick an idle (already-rewound) voice for the set's current variant; fall
+  // back to round-robin with an explicit rewind if all are busy.
+  private fire(set: SetKey, volume: number) {
+    if (!this._ready || this._muted) return;
     const v = this.variant[set];
     this.variant[set] = 1 - v; // alternate variants each hit
-    const pool = this.players[set][v];
-    const idx = this.rr[set][v];
-    this.rr[set][v] = (idx + 1) % pool.length;
-    const p = pool[idx];
+    const pool = this.voices[set][v];
+    let voice = pool.find((x) => !x.busy);
+    if (!voice) {
+      const idx = this.rr[set][v];
+      this.rr[set][v] = (idx + 1) % pool.length;
+      voice = pool[idx];
+      try {
+        voice.player.seekTo(0);
+      } catch {}
+    }
+    voice.busy = true;
     try {
-      p.seekTo(0);
-      p.volume = 1;
-      p.play();
-    } catch {}
+      voice.player.volume = volume;
+      voice.player.play();
+      this.playedCount++;
+    } catch {
+      voice.busy = false;
+    }
+  }
+
+  // One sound per real contact — mishits included (do NOT suppress on miss).
+  playForContact(ev: ContactEvent) {
+    const start = now();
+    this.fire(contactSet(ev.shotType, ev.power), 1);
     if (__DEV__) this.lastLatencyMs = now() - start;
   }
 
+  // One sound per real bounce — quieter, scaled by impact speed.
+  playForBounce(ev: BounceEvent) {
+    const vol = Math.max(0.15, Math.min(0.6, 0.15 + ev.speed / 40));
+    this.fire(BOUNCE_SET, vol);
+  }
+
   teardown() {
-    if (!this.ready) return;
-    for (const key of SET_KEYS) {
-      for (const pool of this.players[key]) for (const p of pool) {
-        try {
-          p.remove();
-        } catch {}
-      }
-    }
-    this.ready = false;
-    this.players = {} as any;
+    if (!this._ready) return;
+    for (const key of SET_KEYS)
+      for (const pool of this.voices[key])
+        for (const v of pool) {
+          try {
+            v.player.remove();
+          } catch {}
+        }
+    this._ready = false;
+    this.voices = {} as any;
   }
 }
 
@@ -144,4 +184,4 @@ function now(): number {
 }
 
 export const sfx = new Sfx();
-export const SFX_AVAILABLE = Platform.OS !== "web"; // decodes on native reliably
+export const SFX_AVAILABLE = Platform.OS !== "web";

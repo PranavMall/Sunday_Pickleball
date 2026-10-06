@@ -67,6 +67,18 @@ export interface ContactEvent {
   y: number;
 }
 
+// A real ball BOUNCE on the court, emitted EXACTLY ONCE when the live ball
+// contacts the ground. Kept separate from ContactEvent (never inferred from
+// shot type). `speed` is the downward impact speed, for volume scaling.
+export interface BounceEvent {
+  id: number;
+  time: number;
+  x: number;
+  y: number;
+  speed: number;
+  serve: boolean;
+}
+
 // Dev-only circular input/contact trace entry (hidden in production).
 export interface InputTraceEntry {
   time: number;

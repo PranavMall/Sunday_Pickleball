@@ -15,6 +15,7 @@ import { ScoreManager } from "./score";
 import { solveShot } from "./shots";
 import type {
   BallState,
+  BounceEvent,
   ContactEvent,
   ControllerType,
   CourtSide,
@@ -87,6 +88,10 @@ export class GameSimulation {
   private contactEvents: ContactEvent[] = [];
   private contactCursor = 0;
   private contactId = 0;
+  private bounceEvents: BounceEvent[] = [];
+  private bounceCursor = 0;
+  private bounceId = 0;
+  private armHeld = false; // a swipe is armed and the finger is still down
   private trace: InputTraceEntry[] = [];
 
   serveCtx: ServeContext = { active: false, servingTeam: "near", box: { xLo: 0, xHi: 0, yLo: 0, yHi: 0 } };
@@ -270,23 +275,55 @@ export class GameSimulation {
   }
 
   // ---- Input ---------------------------------------------------------------
+  // Finger-up / tap path: a single swipe that lives for the short deterministic
+  // buffer window (used by headless tests and quick taps/serves).
   submitSwipe(input: SwipeInput) {
     this.pendingInput = input;
     this.pendingInputTime = this.time;
+    this.armHeld = false;
     this.pushTrace("received", input, this.strikerSlot);
-    // RESPONSIVENESS: acknowledge a valid swipe IMMEDIATELY by starting the
-    // human's wind-up animation. This does NOT fake contact — the real contact
-    // frame / flash / sound / haptic / squash still happen exactly ONCE, later,
-    // when the simulation records the actual strike. SWIPE → wind-up → CONTACT.
+    this.maybeWindUp(input);
+  }
+
+  // Finger-DOWN path (low latency): arm ONE swipe for the gesture as soon as it
+  // clearly passes the threshold. The snapshot is refreshed via updateArmedSwipe
+  // while the finger stays down (so a long swipe still builds full power), and
+  // it will not expire until release. Only one armed input per gesture.
+  armSwipe(input: SwipeInput) {
+    this.pendingInput = input;
+    this.pendingInputTime = this.time;
+    this.armHeld = true;
+    this.pushTrace("received", input, this.strikerSlot);
+    this.pushTrace("buffered", input, this.strikerSlot);
+    this.maybeWindUp(input);
+  }
+
+  // Refresh the armed swipe's dx/dy/power from the latest finger position.
+  updateArmedSwipe(input: SwipeInput) {
+    if (!this.armHeld || !this.pendingInput) return;
+    this.pendingInput.dx = input.dx;
+    this.pendingInput.dy = input.dy;
+    this.pendingInput.power = input.power;
+  }
+
+  // Finger-up: finalise the armed snapshot and start the deterministic buffer
+  // from NOW. If the armed swipe was already consumed mid-gesture, do nothing.
+  releaseSwipe(input: SwipeInput) {
+    if (!this.armHeld) return; // already consumed, or never armed
+    this.pendingInput = input;
+    this.pendingInputTime = this.time;
+    this.armHeld = false;
+  }
+
+  private maybeWindUp(input: SwipeInput) {
     if (!input.tap && (this.humanCanHit() || this.humanIsServer())) {
       const humanSlot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
       if (humanSlot >= 0) this.players[humanSlot].windUpCue = this.time;
-      this.pushTrace("buffered", input, this.strikerSlot);
     }
   }
 
   // Dev-only circular trace (last 20 input/contact events). Cheap to record;
-  // the match screen only RENDERS it under __DEV__, so it is hidden in prod.
+  // the match screen only RENDERS it behind a dev toggle, so prod is unaffected.
   private pushTrace(kind: InputTraceEntry["kind"], input: SwipeInput | null, strikerSlot: number | null) {
     this.trace.push({
       time: this.time,
@@ -310,6 +347,13 @@ export class GameSimulation {
   consumeContactEvents(): ContactEvent[] {
     const out = this.contactEvents.slice(this.contactCursor);
     this.contactCursor = this.contactEvents.length;
+    return out;
+  }
+
+  // Bounce events recorded since the last call (one per real court bounce).
+  consumeBounceEvents(): BounceEvent[] {
+    const out = this.bounceEvents.slice(this.bounceCursor);
+    this.bounceCursor = this.bounceEvents.length;
     return out;
   }
 
@@ -356,7 +400,7 @@ export class GameSimulation {
 
     // Expire a stale swipe: an input only stays valid for a short deterministic
     // window, so an early swipe can never fire seconds later.
-    if (this.pendingInput && this.time - this.pendingInputTime > INPUT.SWIPE_BUFFER_TIME) {
+    if (this.pendingInput && !this.armHeld && this.time - this.pendingInputTime > INPUT.SWIPE_BUFFER_TIME) {
       this.pushTrace("expired", this.pendingInput, this.strikerSlot);
       this.pendingInput = null;
     }
@@ -415,7 +459,8 @@ export class GameSimulation {
       // The server must have walked into position behind the baseline.
       const inPosition = Math.hypot(server.targetX - server.x, server.targetY - server.y) < 0.6;
       if (server.controller === "LOCAL_HUMAN") {
-        if (this.pendingInput && inPosition) {
+        // Serve on RELEASE (full swipe) — a still-held armed swipe waits.
+        if (this.pendingInput && !this.armHeld && inPosition) {
           const consumed = this.pendingInput;
           this.executeServe(consumed);
           this.pendingInput = null;
@@ -510,6 +555,7 @@ export class GameSimulation {
           const consumed = this.pendingInput;
           this.executeHumanHit(p, consumed, lateness);
           this.pendingInput = null;
+          this.armHeld = false;
           this.humanMinDist = this.humanLastDist = Infinity;
           this.pushTrace("consumed", consumed, p.slot);
         }
@@ -585,6 +631,7 @@ export class GameSimulation {
 
     // Bounce.
     if (b.z <= 0 && b.vz < 0) {
+      const impactSpeed = -b.vz; // downward speed at contact (before restitution)
       b.z = 0;
       b.vz = -b.vz * PHYS.BOUNCE_RESTITUTION;
       b.vx *= PHYS.BOUNCE_FRICTION;
@@ -593,6 +640,21 @@ export class GameSimulation {
       b.totalBounces++;
       b.bounceSideCount++;
       b.lastBounce = { x: b.x, y: b.y, side: teamOfY(b.y) };
+
+      // Authoritative BOUNCE event (one per court contact), separate from
+      // CONTACT. Never inferred from shot type.
+      this.bounceEvents.push({
+        id: ++this.bounceId,
+        time: this.time,
+        x: b.x,
+        y: b.y,
+        speed: impactSpeed,
+        serve: this.serveCtx.active,
+      });
+      if (this.bounceEvents.length > 60) {
+        this.bounceEvents.shift();
+        this.bounceCursor = Math.max(0, this.bounceCursor - 1);
+      }
 
       const res = RuleManager.classifyBounce(
         b,

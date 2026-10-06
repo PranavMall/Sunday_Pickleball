@@ -1,0 +1,41 @@
+{
+  "summary": "Milestone 2 Part A regression + behaviour PASS on web preview (portrait 390x844). All 6 requested flows verified. (1) Menu play-button -> difficulty-screen -> difficulty-club loads match-screen with painted court AND 4 layered player figures (2 near, 2 far) rendering; no red screen / no runtime pageerror. (2) A single upward swipe (mouse down -> 15 steps up -> up) fires exactly one shot: Rally advances 0 -> 1 and score-display shows initial '0 - 0 - 2' (doubles). (3) pause-button opens pause-overlay with EXACTLY {resume-button, mute-button, restart-button, quit-button}; share-button is NOT present inside pause overlay; result-overlay is NOT behind it; mute-button text toggles 'Sound: On' <-> 'Sound: Off' per tap; Resume closes the overlay and returns to gameplay. (4) Dev chip (testID dev-toggle) is present top-left, dev stats panel is OFF by default ('DEV'), toggles to 'DEV X' with the panel visible, and the pause-button REMAINS tappable while the dev chip is ON (pause-overlay opens successfully) -- the previously reported overlap/intercept bug is NOT reproducible. (5) Dev 1v1 singles via dev-singles-button loads a match whose score-display shows EXACTLY TWO numbers '0 - 0' (no third server number), serveLabel ends with '. Singles', 2 player figures render (one near, one far), and a serve-swipe advances Rally 0 -> 1. (6) Restart from pause resets score to '0 - 0 - 2'; Quit returns to main-menu-screen. Device-only features (hit SFX, bounce SFX, HAPTICS, Android BACK gesture, native FPS) were intentionally NOT evaluated on web per the context note. Non-blocking carryover deprecation warnings observed (SkPath.*, props.pointerEvents, shadow*) unchanged from prior iterations. No backend (client-only game, skipped per request).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-skia paths", "issue": "SkPath.moveTo/lineTo/addPath/close/quadTo deprecated; migrate to Skia.PathBuilder.Make(). Non-blocking carryover. Reference: /app/frontend/src/game/render/GameCanvas.tsx lines 32-39, 47-61, 67-83, 89-104; /app/frontend/src/game/render/CourtRenderer.tsx; /app/frontend/src/game/render/character.tsx."},
+      {"component": "pointerEvents prop", "issue": "'props.pointerEvents is deprecated. Use style.pointerEvents.' Non-blocking carryover. Reference: /app/frontend/app/match.tsx lines 46, 291, 296, 301, 313 (pointerEvents=\"box-none\" / pointerEvents=\"none\")."},
+      {"component": "shadow* style props", "issue": "'shadow*' style props deprecated. Use 'boxShadow'. Non-blocking carryover. Reference: /app/frontend/app/index.tsx playBtn shadow* style."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_1.json",
+    "/app/test_reports/iteration_2.json",
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/iteration_4.json",
+    "/app/test_reports/iteration_5.json"
+  ],
+  "action_items": [
+    "No code changes required. All 6 Milestone 2 Part A regression + behaviour checks pass on the web preview.",
+    "Optional carryover: migrate all Skia.Path.Make() + moveTo/lineTo/addPath/close/quadTo usages in GameCanvas.tsx / CourtRenderer.tsx / character.tsx to Skia.PathBuilder.Make() to clear the deprecation console noise and future-proof against upcoming removal (same guidance as iterations 3 and 4).",
+    "Device/native smoke on Expo Go is still advisable to confirm the SFX / haptics / native-fps paths that cannot be exercised on web."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx:84-96 - state is clean: showDev defaults to false (OFF by default) and armedRef guards one-shot-per-gesture. Matches the request spec.",
+    "match.tsx:307-311 - dev-toggle Pressable is only mounted under __DEV__; in production the top-left chip disappears entirely, so there is no risk of it blocking pause in a shipped build. Live-tested on web: with dev ON, pause-button still opens the overlay cleanly.",
+    "match.tsx:328-346 - pause-overlay contains EXACTLY resume/mute/restart/quit; share-button lives only inside result-overlay (lines 369-381). Matches spec: no share in pause, no result-overlay behind pause.",
+    "match.tsx:48-57 - score-display conditionally renders the third server number only when props.doubles is true; dev singles correctly shows two numbers only, as verified live.",
+    "match.tsx:195-206 - onGestureEnd invokes releaseSwipe only when armedRef is set, and resetArmed in onFinalize guarantees one-armed-swipe-per-physical-gesture. Rally advanced exactly 0 -> 1 per swipe in both doubles and singles runs.",
+    "character.tsx renders ONLY Circle/Oval primitives (no RRectXY / RoundedRect / path building per frame) -- allocation-free fast path confirmed; no deprecation output from character.tsx on the web run."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (client-only, no backend)", "frontend": "100% (6/6 flows pass on web preview)"},
+  "seed_data_creation": "None (client-only offline game).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Portrait 390x844. Public URL: https://pickle-match-9.preview.emergentagent.com. Allow ~2.5s wait after match-screen appears for Skia/CanvasKit WASM to settle. Serve-swipe recipe (reliable): mouse.move(195,650) -> down -> 15 linear steps to y=300 with 12ms waits -> up. Expo Router keeps the previous route mounted briefly after replace() so main-menu-screen locator can resolve to 2 elements right after Quit -- always use `.first` or scope the locator. Dev stats are hidden behind the top-left 'DEV' chip (testID dev-toggle); the chip ONLY mounts when __DEV__ is true. Device-only features (SFX, haptics, native FPS, Android back gesture) must be verified on Expo Go, NOT on web.",
+  "rca_of_issue": "N/A - no regression found. The reported overlap bug ('dev chip was intercepting pause-button taps') is NOT reproducible on this iteration: in live testing with the DEV chip toggled ON, tapping pause-button still successfully opens pause-overlay. The dev chip is positioned at { top: insets.top + 60, left: 12 } while pause-button sits in the top-right HUD (right: 12), so their hit regions do not overlap on a 390-wide viewport. Fix is behaving as expected."
+}

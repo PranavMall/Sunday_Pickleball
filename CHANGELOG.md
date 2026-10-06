@@ -172,3 +172,43 @@ all unchanged. Engine suite 99 → **119** passing (20 new singles tests).
   ProfileService (guest id, player/team names, SaveModel with CUMULATIVE fans +
   separate hot/normal/cold form, ratings per PLAYER and per PAIRING),
   AnalyticsService, AdService (named placements), PurchaseService. No SDKs.
+
+## Milestone 2 — Part A: performance / latency / audio pass (2026-06)
+
+Rejected build felt ~4.5/10 (doubles ~41 fps, dev singles ~25 fps in Expo Go).
+This pass restores native feel WITHOUT adding features and WITHOUT touching
+scoring/rules/AI tuning/rally pace/forgiveness (parity re-proven byte-identical;
+119/119 tests pass).
+
+### Rendering performance
+- **[render/character]** The layered placeholder now draws ONLY cheap Skia
+  primitives (Circle/Oval) and allocates ZERO Skia Paths per frame (was ~4
+  Path.Make() per player per frame). The layer contract is unchanged.
+- **[ui/hud]** The HUD is a React.memo component fed primitives, so its text
+  subtree no longer reconciles every frame — only the Skia canvas redraws.
+- **[ui/dev]** The dev FPS/debug readout and input trace are no longer rendered
+  continuously — behind an explicit dev toggle (top-left DEV chip, dev only).
+- Sim cost measured negligible: 8.2 µs/step (doubles), 3.1 µs/step (singles) —
+  singles is LIGHTER than doubles, so its Expo-Go slowness is the dev-runtime
+  render pipeline, not the sim. Native release build + on-screen fps stat are the
+  authoritative measure.
+
+### Input latency
+- **[input/arm]** A swipe is ARMED on finger-DOWN (onUpdate) once past the
+  threshold; the sim no longer waits for onEnd. The armed dx/dy/power snapshot is
+  refreshed while held (long swipe still builds full power). One armed input per
+  gesture; consumed once at ideal contact if the ball arrives before release (64
+  of 120 human contacts consumed mid-gesture). Serves still fire on RELEASE.
+  Direction→aim, length→power, timing→quality unchanged; forgiveness untouched.
+
+### Audio
+- **[audio/contact]** A paddle sound fires on EVERY real contact, mishits
+  included — tied to physical contact, not shot success.
+- **[audio/bounce]** New authoritative BounceEvent (once per real court bounce,
+  never inferred from shot type); one bounce sound, quieter, scaled by impact
+  speed. CONTACT and BOUNCE are separate event types.
+- **[audio/reliability]** Each player re-arms (seekTo 0) on finish so it is
+  pre-rewound before reuse — fixes the Android seek/play race and skipped sounds;
+  play() prefers an idle voice; readiness reported (sfx.ready, logged).
+- **[audio/pool]** Pool reduced 24 → 16 players (2/file), the minimum for clean
+  overlap. Supplied WAVs not re-encoded.

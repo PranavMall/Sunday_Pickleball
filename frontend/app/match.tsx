@@ -1,5 +1,5 @@
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, Platform, Pressable, Share, Text, useWindowDimensions, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -13,11 +13,10 @@ import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
-import { makeStyles, useTheme } from "@/src/theme";
+import { makeStyles } from "@/src/theme";
 
-// Reserve a small margin at each screen edge from game swipe input. NOTE: this
-// does NOT stop Android's system back gesture — the focused back handler below
-// is the real protection; this margin just avoids accidental edge flicks.
+// Reserve a small edge margin from game swipe input. (The focused back handler
+// is the real Android-back protection — not this margin.)
 const EDGE_MARGIN = 24;
 
 function buildMatch(difficulty: Difficulty, singles: boolean): { sim: GameSimulation; config: MatchConfig } {
@@ -28,13 +27,56 @@ function buildMatch(difficulty: Difficulty, singles: boolean): { sim: GameSimula
   return { sim, config };
 }
 
+// Memoised HUD — only re-renders when these primitives change (not every frame).
+const Hud = memo(function Hud(props: {
+  serving: number;
+  recv: number;
+  serverNumber: number;
+  doubles: boolean;
+  near: number;
+  far: number;
+  rally: number;
+  servingNear: boolean;
+  paused: boolean;
+  top: number;
+  onPause: () => void;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={[styles.hud, { top: props.top + 8 }]} pointerEvents="box-none">
+      <View style={styles.scorePanel}>
+        <Text style={styles.scoreText} testID="score-display">
+          {props.serving}
+          <Text style={styles.scoreDim}> – </Text>
+          {props.recv}
+          {props.doubles ? (
+            <>
+              <Text style={styles.scoreDim}> – </Text>
+              {props.serverNumber}
+            </>
+          ) : null}
+        </Text>
+        <Text style={styles.serveLabel}>
+          {props.servingNear ? "You serve" : "Rival serves"} · You {props.near} · Rival {props.far}
+          {props.doubles ? "" : "  · Singles"}
+        </Text>
+      </View>
+      <View style={styles.hudRight}>
+        <Text style={styles.rally}>Rally {props.rally}</Text>
+        <Pressable testID="pause-button" style={styles.iconBtn} onPress={props.onPause}>
+          <Text style={styles.iconText}>{props.paused ? "▶" : "⏸"}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
 export default function Match() {
   const params = useLocalSearchParams<{ difficulty?: string; singles?: string }>();
   const difficulty = (params.difficulty as Difficulty) || "CLUB";
   const singles = params.singles === "1";
   const router = useRouter();
   const styles = useStyles();
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
@@ -42,19 +84,20 @@ export default function Match() {
   const [match, setMatch] = useState(() => buildMatch(difficulty, singles));
   const sim = match.sim;
   const config = match.config;
-  const [frame, setFrame] = useState(0);
+  const [, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [showDev, setShowDev] = useState(false);
   const [fps, setFps] = useState(60);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const gameOverRef = useRef(false);
   const loggedRef = useRef(false);
+  const armedRef = useRef(false); // one armed swipe per physical gesture
 
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
   const projector = useMemo(() => makeProjector(width, height), [width, height]);
 
-  // Preload hit sounds once; keep them across rematches, free on unmount.
   useEffect(() => {
     let alive = true;
     if (SFX_AVAILABLE) sfx.preload().then(() => alive && setMuted(sfx.muted));
@@ -64,11 +107,6 @@ export default function Match() {
     };
   }, []);
 
-  // Android back (button OR edge gesture) while the match is focused:
-  //  • game over → go to menu
-  //  • playing   → open pause menu
-  //  • paused    → resume
-  // Always intercepted so an edge swipe can never drop out of the match.
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
@@ -84,7 +122,7 @@ export default function Match() {
     }, [router]),
   );
 
-  // Fixed-timestep game loop driven by requestAnimationFrame.
+  // Fixed-timestep loop.
   useEffect(() => {
     let raf = 0;
     let last = 0;
@@ -109,10 +147,8 @@ export default function Match() {
           sim.step();
           acc -= MATCH.FIXED_DT;
         }
-        // Fire feedback ONCE per real contact (never faked, never doubled).
-        const events = sim.consumeContactEvents();
-        for (const ev of events) {
-          if (ev.miss) continue;
+        // One sound per real contact (mishits included) + one per real bounce.
+        for (const ev of sim.consumeContactEvents()) {
           sfx.playForContact(ev);
           if (ev.slot === humanSlot && Platform.OS !== "web") {
             Haptics.impactAsync(
@@ -120,15 +156,12 @@ export default function Match() {
             ).catch(() => {});
           }
         }
+        for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
+
         if (sim.phase === "game_over" && !loggedRef.current) {
           loggedRef.current = true;
           logMatchResult(config, sim);
-          analytics.track("match_ended", {
-            difficulty,
-            format: config.format,
-            near: sim.score.nearScore,
-            far: sim.score.farScore,
-          });
+          analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
         }
       }
       setFrame((f) => (f + 1) % 1000000);
@@ -138,54 +171,81 @@ export default function Match() {
     return () => cancelAnimationFrame(raf);
   }, [sim, config, difficulty, humanSlot]);
 
-  const handleSwipe = useCallback(
+  // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
+  const toInput = useCallback((tx: number, ty: number) => {
+    const len = Math.hypot(tx, ty);
+    return { dx: tx, dy: ty, power: Math.min(1, len / INPUT.POWER_MAX_PX), tap: len < INPUT.MIN_SWIPE, len };
+  }, []);
+
+  const onGestureUpdate = useCallback(
     (tx: number, ty: number, startX: number) => {
-      // Ignore swipes that START in the reserved edge margin.
       if (startX < EDGE_MARGIN || startX > width - EDGE_MARGIN) return;
-      const len = Math.hypot(tx, ty);
-      sim.submitSwipe({
-        dx: tx,
-        dy: ty,
-        power: Math.min(1, len / INPUT.POWER_MAX_PX),
-        tap: len < INPUT.MIN_SWIPE,
-      });
+      const i = toInput(tx, ty);
+      if (i.len < INPUT.MIN_SWIPE) return; // not yet a clear swipe
+      if (!armedRef.current) {
+        armedRef.current = true;
+        sim.armSwipe(i);
+      } else {
+        sim.updateArmedSwipe(i);
+      }
     },
-    [sim, width],
+    [sim, width, toInput],
   );
 
-  // ONE gesture only — a single Pan. Deriving tap-vs-swipe from the translation
-  // (not a separate Tap recogniser) guarantees one gesture = one input, so a
-  // single flick can never register as two shots.
+  const onGestureEnd = useCallback(
+    (tx: number, ty: number, startX: number) => {
+      const i = toInput(tx, ty);
+      if (armedRef.current) {
+        sim.releaseSwipe(i); // finalise the armed snapshot (or no-op if consumed)
+      } else if (startX >= EDGE_MARGIN && startX <= width - EDGE_MARGIN) {
+        sim.submitSwipe(i); // a tap / short swipe (serve release / no-op)
+      }
+      armedRef.current = false;
+    },
+    [sim, width, toInput],
+  );
+
+  const resetArmed = useCallback(() => {
+    armedRef.current = false;
+  }, []);
+
   const pan = useMemo(
     () =>
       Gesture.Pan()
         .minDistance(0)
+        .onUpdate((e) => {
+          runOnJS(onGestureUpdate)(e.translationX, e.translationY, e.x - e.translationX);
+        })
         .onEnd((e) => {
-          runOnJS(handleSwipe)(e.translationX, e.translationY, e.x - e.translationX);
+          runOnJS(onGestureEnd)(e.translationX, e.translationY, e.x - e.translationX);
+        })
+        .onFinalize(() => {
+          runOnJS(resetArmed)();
         }),
-    [handleSwipe],
+    [onGestureUpdate, onGestureEnd, resetArmed],
   );
 
   const rematch = () => {
     analytics.track("rematch_selected", { difficulty });
     loggedRef.current = false;
+    armedRef.current = false;
     setMatch(buildMatch(difficulty, singles));
     setPaused(false);
   };
-
   const goMenu = () => router.replace("/");
   const toggleMute = () => sfx.toggleMuted().then(setMuted);
 
   const gameOver = sim.phase === "game_over";
   gameOverRef.current = gameOver;
   const nearWon = sim.winner === "near";
-  const dinkCue = sim.humanInDinkRange();
+  const dinkCue = !paused && !gameOver && sim.humanInDinkRange();
   const shotLabel =
-    sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1 ? sim.lastHumanShot.type.toUpperCase() : null;
+    !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
+      ? sim.lastHumanShot.type.toUpperCase()
+      : null;
   const servingScore = sim.score.servingTeam === "near" ? sim.score.nearScore : sim.score.farScore;
   const recvScore = sim.score.servingTeam === "near" ? sim.score.farScore : sim.score.nearScore;
   const doubles = config.format === "doubles";
-
   const serveHint = sim.humanIsServer()
     ? "Your serve — swipe up to serve"
     : sim.phase === "waiting_serve"
@@ -209,85 +269,64 @@ export default function Match() {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <GestureDetector gesture={pan}>
         <View style={styles.canvasWrap}>
-          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={frame} />
+          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} />
         </View>
       </GestureDetector>
 
-      {/* Top HUD */}
-      <View style={[styles.hud, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <View style={styles.scorePanel}>
-          <Text style={styles.scoreText} testID="score-display">
-            {servingScore}
-            <Text style={styles.scoreDim}> – </Text>
-            {recvScore}
-            {doubles ? (
-              <>
-                <Text style={styles.scoreDim}> – </Text>
-                {sim.score.serverNumber}
-              </>
-            ) : null}
-          </Text>
-          <Text style={styles.serveLabel}>
-            {sim.score.servingTeam === "near" ? "You serve" : "Rival serves"} · You {sim.score.nearScore} · Rival{" "}
-            {sim.score.farScore}
-            {doubles ? "" : "  · Singles"}
-          </Text>
-        </View>
-        <View style={styles.hudRight}>
-          <Text style={styles.rally}>Rally {sim.stats.rallyCount}</Text>
-          <Pressable testID="pause-button" style={styles.iconBtn} onPress={() => setPaused((p) => !p)}>
-            <Text style={styles.iconText}>{paused ? "▶" : "⏸"}</Text>
-          </Pressable>
-        </View>
-      </View>
+      <Hud
+        serving={servingScore}
+        recv={recvScore}
+        serverNumber={sim.score.serverNumber}
+        doubles={doubles}
+        near={sim.score.nearScore}
+        far={sim.score.farScore}
+        rally={sim.stats.rallyCount}
+        servingNear={sim.score.servingTeam === "near"}
+        paused={paused}
+        top={insets.top}
+        onPause={() => setPaused((p) => !p)}
+      />
 
-      {/* Dink-range cue + last-shot-type label */}
-      {!paused && !gameOver && dinkCue && (
+      {dinkCue && (
         <View style={[styles.dinkCue, { bottom: insets.bottom + 74 }]} pointerEvents="none">
           <Text style={styles.dinkCueText}>Dink range — short swipe</Text>
         </View>
       )}
-      {!paused && !gameOver && shotLabel && (
+      {shotLabel && (
         <View style={[styles.shotLabel, { bottom: insets.bottom + 108 }]} pointerEvents="none">
           <Text style={styles.shotLabelText}>{shotLabel}</Text>
         </View>
       )}
-
-      {/* Serve / hit hint */}
       {serveHint ? (
         <View style={[styles.hint, { bottom: insets.bottom + 24 }]} pointerEvents="none">
           <Text style={styles.hintText}>{serveHint}</Text>
         </View>
       ) : null}
 
-      {/* Debug overlay + dev input trace (dev only, hidden in production) */}
+      {/* Dev stats + input trace — only behind an explicit toggle. */}
       {__DEV__ && (
-        <>
-          <View style={[styles.debug, { top: insets.top + 70 }]} pointerEvents="none">
-            <Text style={styles.debugText}>
-              {fps} fps · seed {sim.rng.seed} · {sim.phase} · z{sim.ball.z.toFixed(1)} · sfx{sfx.lastLatencyMs.toFixed(1)}ms
-            </Text>
-          </View>
-          <View style={[styles.trace, { bottom: insets.bottom + 140 }]} pointerEvents="none">
-            {sim
-              .getInputTrace()
-              .slice(-4)
-              .map((e, i) => (
-                <Text key={i} style={styles.traceText}>
-                  {e.time.toFixed(2)} {e.kind} dx{e.dx.toFixed(0)} dy{e.dy.toFixed(0)} p{e.power.toFixed(2)} s
-                  {e.strikerSlot ?? "-"} lh{e.lastHitBy ?? "-"}
-                </Text>
-              ))}
-          </View>
-        </>
+        <Pressable testID="dev-toggle" onPress={() => setShowDev((s) => !s)} style={[styles.devToggle, { top: insets.top + 60 }]}>
+          <Text style={styles.devToggleText}>{showDev ? "DEV ✕" : "DEV"}</Text>
+        </Pressable>
+      )}
+      {__DEV__ && showDev && (
+        <View style={[styles.debug, { top: insets.top + 90 }]} pointerEvents="none">
+          <Text style={styles.debugText}>
+            {fps} fps · {sim.phase} · z{sim.ball.z.toFixed(1)} · sfx {sfx.ready ? "rdy" : "…"} {sfx.lastLatencyMs.toFixed(1)}ms · snd{sfx.playedCount}
+          </Text>
+          {sim
+            .getInputTrace()
+            .slice(-4)
+            .map((e, i) => (
+              <Text key={i} style={styles.traceText}>
+                {e.time.toFixed(2)} {e.kind} dx{e.dx.toFixed(0)} dy{e.dy.toFixed(0)} p{e.power.toFixed(2)} lh{e.lastHitBy ?? "-"}
+              </Text>
+            ))}
+        </View>
       )}
 
-      {/* Pause overlay */}
       {paused && !gameOver && (
-        <View
-          style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}
-          testID="pause-overlay"
-        >
+        <View style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} testID="pause-overlay">
           <View style={styles.pauseModal}>
             <Text style={styles.modalTitle}>Paused</Text>
             <Pressable testID="resume-button" style={styles.primaryBtn} onPress={() => setPaused(false)}>
@@ -306,7 +345,6 @@ export default function Match() {
         </View>
       )}
 
-      {/* Result overlay */}
       {gameOver && (
         <View style={styles.modalWrap} testID="result-overlay">
           <View style={styles.modal}>
@@ -360,7 +398,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surfaceInverse },
-  canvasWrap: { ...StyleSheetAbsolute() },
+  canvasWrap: { ...abs() },
   hud: { position: "absolute", left: 12, right: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   scorePanel: { backgroundColor: "rgba(46,61,42,0.72)", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
   scoreText: { color: c.accentGold, fontSize: 22, fontWeight: "800" },
@@ -376,11 +414,12 @@ const useStyles = makeStyles((c) => ({
   shotLabelText: { color: c.accentGold, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
   hint: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(46,61,42,0.78)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 9 },
   hintText: { color: c.onSurfaceInverse, fontSize: 14, fontWeight: "600" },
-  debug: { position: "absolute", right: 12, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  devToggle: { position: "absolute", left: 12, backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  devToggleText: { color: "#9fe", fontSize: 10, fontWeight: "700" },
+  debug: { position: "absolute", left: 12, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, maxWidth: 260 },
   debugText: { color: "#fff", fontSize: 10, fontFamily: "monospace" as any },
-  trace: { position: "absolute", left: 12, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   traceText: { color: "#9fe", fontSize: 9, fontFamily: "monospace" as any },
-  modalWrap: { ...StyleSheetAbsolute(), backgroundColor: "rgba(20,26,18,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
+  modalWrap: { ...abs(), backgroundColor: "rgba(20,26,18,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
   modal: { backgroundColor: c.surface, borderRadius: 24, padding: 24, width: "100%", maxWidth: 380, alignItems: "center" },
   pauseModal: { backgroundColor: c.surface, borderRadius: 24, paddingVertical: 20, paddingHorizontal: 20, width: "100%", maxWidth: 360, alignItems: "center", gap: 10 },
   pauseSecondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, width: "100%", alignItems: "center", borderWidth: 1, borderColor: c.border },
@@ -401,6 +440,6 @@ const useStyles = makeStyles((c) => ({
   rotateText: { color: c.onSurfaceInverse, fontSize: 18, fontWeight: "600", textAlign: "center" },
 }));
 
-function StyleSheetAbsolute() {
+function abs() {
   return { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0 };
 }

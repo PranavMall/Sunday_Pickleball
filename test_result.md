@@ -151,9 +151,9 @@
 
 ## metadata:
 ##   created_by: "main_agent"
-##   version: "2.0"
-##   test_sequence: 3
+##   version: "2.1"
+##   test_sequence: 5
 
 ## agent_communication:
 ##     -agent: "main"
-##     -message: "Milestone 2 Part A. Client-only Expo+Skia game, NO backend. Please verify FRONTEND flows on the web preview only: (1) main menu PLAY -> difficulty -> tap CLUB -> match loads and renders the court + players; (2) swipe UP to serve, then swipe to hit during a rally — a shot fires and the score/rally HUD updates; play until a point is scored; (3) Pause (top-right ⏸) overlay shows exactly Resume, 'Sound: On'/'Sound: Off' (tapping it toggles the label), Restart, Quit to Menu — and NO Share, no result overlay behind it; Resume returns to play; (4) Restart starts a fresh match; (5) from the difficulty screen the dev button 'DEV · 1v1 singles (CLUB)' loads a match whose score shows TWO numbers (no third server number) and plays; (6) let a match finish (or it's slow — just confirm the loop runs) to see the result overlay with REMATCH/Main Menu/Share. NOT VERIFIABLE on web (do not fail these): hit SOUNDS, HAPTICS, and the ANDROID BACK gesture — these require a real device. Just confirm nothing crashes and the above flows work. Credentials: none."
+##     -message: "Part A performance/latency/audio pass. Client-only Expo+Skia, NO backend. Verify FRONTEND on web preview only: (1) menu PLAY -> difficulty -> CLUB loads match-screen, court + players render (lighter placeholder figures), no red error screen; (2) a swipe fires a shot and score/Rally HUD (score-display) advances; one swipe = one shot; (3) Pause (pause-button) overlay = Resume, Sound toggle (mute-button toggles On/Off), Restart, Quit; NO Share, no result bleed; Resume returns; (4) dev-toggle chip (top-left, testID dev-toggle) toggles a dev stats panel on/off (default OFF) and does NOT block the pause-button; (5) dev-singles-button loads singles (score two numbers) and plays; (6) Restart resets, Quit to menu. NOT VERIFIABLE on web (do NOT fail): hit SOUNDS, BOUNCE sounds, HAPTICS, Android BACK, native FPS. Just confirm no crash/regression. Headless: 119/119 pass, doubles parity byte-identical."
