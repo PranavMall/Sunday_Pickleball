@@ -1,0 +1,43 @@
+{
+  "summary": "Stabilization pass PASS on web preview (portrait 390x844). All 7 requested checks verified. (1) Home renders 'Picklewood' title + PLAY button, no red screen. (2) PLAY -> difficulty-screen -> difficulty-club -> match-screen loads with court background + player figures + HUD score-display '0 – 0 – 2' (doubles). (3) Upward swipe triggers one shot (score advances 0-0-2 -> 0-0-1 after sideout) and does not double-fire; one armed swipe per gesture (armedRef). (4) CRITICAL: pause-overlay contains EXACTLY {resume-button, restart-button, quit-button}; mute-button count = 0; overlay inner text is literally 'Paused\\nResume\\nRestart\\nQuit to Menu' with NO 'Sound' row anywhere -- SFX_ENABLED=false gate on line 335 of match.tsx is working correctly. Resume closes overlay and resumes play. (5) dev-singles-button launches singles: score-display shows EXACTLY '0 – 0' (two numbers, no server number); pause overlay in singles also has NO mute-button (identical to doubles). (6) Restart via pause resets singles score to '0 – 0'. (7) Quit returns to home (main-menu-screen visually confirmed with Picklewood title + PLAY). No pageerror / red screen. Only non-blocking deprecation warnings observed, all carryover from prior iterations (SkPath.moveTo/lineTo/addPath/close/quadTo in Skia renderers; props.pointerEvents; shadow* styles) and one benign WebGL GL_CLOSE_PATH_NV perf note. No audio preload or AudioPlayer instantiation triggered (SFX_ENABLED=false short-circuits sfx.preload before any createAudioPlayer call). Backend intentionally skipped (client-only game, no backend).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-skia paths", "issue": "SkPath.moveTo/lineTo/addPath/close/quadTo deprecated; migrate to Skia.PathBuilder.Make(). Non-blocking carryover from iterations 3-5, same as before. Reference: /app/frontend/src/game/render/GameCanvas.tsx, /app/frontend/src/game/render/CourtRenderer.tsx, /app/frontend/src/game/render/character.tsx."},
+      {"component": "pointerEvents prop", "issue": "'props.pointerEvents is deprecated. Use style.pointerEvents.' Non-blocking carryover. Reference: /app/frontend/app/match.tsx lines 46, 291, 296, 301, 313."},
+      {"component": "shadow* style props", "issue": "'shadow*' style props deprecated. Use 'boxShadow'. Non-blocking carryover. Reference: /app/frontend/app/index.tsx playBtn style."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_1.json",
+    "/app/test_reports/iteration_2.json",
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/iteration_4.json",
+    "/app/test_reports/iteration_5.json",
+    "/app/test_reports/iteration_6.json"
+  ],
+  "action_items": [
+    "No code changes required for the stabilization pass -- SFX_ENABLED=false correctly removes the mute-button from pause-overlay, placeholder character rendering works (player figures visible on canvas, no crash), and the match plays end-to-end.",
+    "Optional carryover (unchanged from iterations 3-5): migrate Skia.Path.Make()+moveTo/lineTo/addPath/close/quadTo in GameCanvas.tsx/CourtRenderer.tsx/character.tsx to Skia.PathBuilder.Make() to clear deprecation console noise before the API is removed in a future react-native-skia release.",
+    "Native-only paths (SFX, haptics, Android back) remain unverifiable on web -- device smoke on Expo Go recommended before shipping, but outside this testing agent's scope per the agent-to-agent note."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx:335 - `{SFX_ENABLED && (<Pressable testID='mute-button' ...>)}` correctly gates the Sound toggle behind the master switch; verified live on web that no mute-button is rendered. Spec compliant.",
+    "sfx.ts:24 - SFX_ENABLED constant exported and consumed by match.tsx. sfx.ts:85 - preload() early-returns before createAudioPlayer when SFX_ENABLED=false, so ZERO AudioPlayer instances are allocated and no audio asset is loaded on match start. Correct short-circuit, matches the stabilization intent.",
+    "match.tsx:103 - preload is gated by `SFX_AVAILABLE && SFX_ENABLED`, so neither the preload nor the setMuted(sfx.muted) side-effect runs when sound is disabled. Clean.",
+    "match.tsx:195-206,222-224 - armedRef one-shot-per-gesture logic preserved; verified live that a single physical swipe triggers exactly one shot (observed score 0-0-2 -> 0-0-1, no double-fire).",
+    "match.tsx:48-57 - score-display conditionally renders the third serverNumber only for doubles; dev singles correctly shows exactly '0 – 0' as verified on canvas.",
+    "character.tsx is a placeholder renderer using only Skia Circle/Oval primitives per the agent-to-agent note; no runtime errors or red screens observed when 2 (singles) or 4 (doubles) player figures are drawn each frame.",
+    "sfx.ts remains fully in-tree (service, Voice, pool, variants) so a single flag flip (SFX_ENABLED=true) + no code change is needed to re-enable audio -- clean, revertible design."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (client-only, no backend)", "frontend": "100% (7/7 stabilization checks pass on web preview)"},
+  "seed_data_creation": "None (client-only offline game).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Portrait 390x844. Public URL: https://pickle-arcade.preview.emergentagent.com. Allow ~3s after match-screen appears for Skia/CanvasKit WASM to settle. Expo Router keeps the previous route mounted briefly after replace() / router.push, so ALWAYS use `.first` on top-level screen locators (play-button, main-menu-screen, score-display, pause-button) to avoid Playwright strict-mode violations. SFX_ENABLED is currently false (see /app/frontend/src/game/services/sfx.ts line 24) -- the pause overlay must NOT contain a mute-button or any 'Sound' text; this is the primary regression gate for this pass. Serve-swipe recipe: mouse.move(195,700) -> down -> 15 linear steps to y=300 with 12ms waits -> up. Score advances 0-0-2 -> 0-0-1 in doubles can occur on serve fault / sideout and is expected game behaviour, not a bug. Known non-blocking carryover warnings on web only: SkPath.*, props.pointerEvents, shadow*, GL_CLOSE_PATH_NV perf note -- ignore. Native paths (SFX/haptics/FPS/Android back) require Expo Go, cannot be tested here.",
+  "rca_of_issue": "N/A -- no regression. The stabilization intent is fully reflected in the shipping code and live UI: (a) SFX_ENABLED=false in sfx.ts preempts both AudioPlayer creation (sfx.ts:85) and mute-button rendering (match.tsx:335), confirmed live (mute_button_count=0, overlay text literally 'Paused\\nResume\\nRestart\\nQuit to Menu'). (b) Placeholder character renderer draws without crash in both doubles (4 figures) and singles (2 figures). (c) Match end-to-end flow (menu -> difficulty -> doubles/singles match -> swipe -> pause -> resume/restart/quit) all functional on web. Engine kitchen-retrieval fix in predictContact() was explicitly out of UI-test scope per agent-to-agent note (already proven by 129/129 headless deterministic tests)."
+}

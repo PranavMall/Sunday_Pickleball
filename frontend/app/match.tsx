@@ -11,7 +11,7 @@ import { INPUT } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { analytics } from "@/src/game/services/analytics";
-import { sfx, SFX_AVAILABLE } from "@/src/game/services/sfx";
+import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
 import { makeStyles } from "@/src/theme";
 
@@ -100,7 +100,7 @@ export default function Match() {
 
   useEffect(() => {
     let alive = true;
-    if (SFX_AVAILABLE) sfx.preload().then(() => alive && setMuted(sfx.muted));
+    if (SFX_AVAILABLE && SFX_ENABLED) sfx.preload().then(() => alive && setMuted(sfx.muted));
     return () => {
       alive = false;
       sfx.teardown();
@@ -332,9 +332,11 @@ export default function Match() {
             <Pressable testID="resume-button" style={styles.primaryBtn} onPress={() => setPaused(false)}>
               <Text style={styles.primaryText}>Resume</Text>
             </Pressable>
-            <Pressable testID="mute-button" style={styles.pauseSecondaryBtn} onPress={toggleMute}>
-              <Text style={styles.secondaryText}>Sound: {muted ? "Off" : "On"}</Text>
-            </Pressable>
+            {SFX_ENABLED && (
+              <Pressable testID="mute-button" style={styles.pauseSecondaryBtn} onPress={toggleMute}>
+                <Text style={styles.secondaryText}>Sound: {muted ? "Off" : "On"}</Text>
+              </Pressable>
+            )}
             <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
               <Text style={styles.secondaryText}>Restart</Text>
             </Pressable>

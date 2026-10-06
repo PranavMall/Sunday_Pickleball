@@ -151,9 +151,31 @@
 
 ## metadata:
 ##   created_by: "main_agent"
-##   version: "2.1"
-##   test_sequence: 5
+##   version: "2.2"
+##   test_sequence: 6
+
+## test_plan:
+##   current_focus:
+##     - "Audio disabled (SFX_ENABLED=false): no Sound toggle in Pause menu, game plays silently, no crash"
+##     - "Lightweight placeholder rendering (body + head + paddle + shadow), match renders and plays"
+##     - "Bounced kitchen-ball retrieval fix (engine): proven by 129/129 headless tests incl. 3 new kitchen/two-bounce scenarios"
+##   stuck_tasks: []
+##   test_all: false
+##   test_priority: "high_first"
 
 ## agent_communication:
 ##     -agent: "main"
-##     -message: "Part A performance/latency/audio pass. Client-only Expo+Skia, NO backend. Verify FRONTEND on web preview only: (1) menu PLAY -> difficulty -> CLUB loads match-screen, court + players render (lighter placeholder figures), no red error screen; (2) a swipe fires a shot and score/Rally HUD (score-display) advances; one swipe = one shot; (3) Pause (pause-button) overlay = Resume, Sound toggle (mute-button toggles On/Off), Restart, Quit; NO Share, no result bleed; Resume returns; (4) dev-toggle chip (top-left, testID dev-toggle) toggles a dev stats panel on/off (default OFF) and does NOT block the pause-button; (5) dev-singles-button loads singles (score two numbers) and plays; (6) Restart resets, Quit to menu. NOT VERIFIABLE on web (do NOT fail): hit SOUNDS, BOUNCE sounds, HAPTICS, Android BACK, native FPS. Just confirm no crash/regression. Headless: 119/119 pass, doubles parity byte-identical."
+##     -message: "STABILIZATION PASS (no M2 Part B). THREE changes only. Client-only Expo+Skia, NO backend; verify FRONTEND on web preview only. (1) AUDIO DISABLED: a central SFX_ENABLED=false in src/game/services/sfx.ts means preload() creates ZERO AudioPlayer instances and no sound plays; the Pause menu must NO LONGER show a 'Sound: On/Off' (mute-button) row — it should be exactly Resume, Restart, Quit to Menu. (2) RENDERING: placeholder players are now lightweight (one body capsule + one head + one paddle; court shadow drawn by GameCanvas) — match screen must render players and play with no red error screen. The layered-character CONTRACT/types remain in character.tsx. (3) KITCHEN FIX (engine): predictContact() now seeds its bounce count from the live ball.bouncesSinceHit so an already-bounced kitchen ball is pursued INTO the kitchen and the two-bounce phase doesn't wait for a second bounce; an unbounced ball still holds behind the NVZ line. Proven headlessly: 129/129 tests pass (10 new: kitchen retrieval A, two-bounce recognition B, unbounced-safety C). Doubles before/after (parity.ts): win-rate relationships preserved (CLUB>ROOKIE, PRO>CLUB), avgLongestRally 24.93->25.02, 0 kitchen faults, 0 stuck states; outcome changes are expected and attributable only to the movement-prediction correction. PLEASE VERIFY FRONTEND FLOWS: menu PLAY -> difficulty -> CLUB loads match-screen with players+court (no crash); a swipe fires a shot and score/Rally HUD advances; Pause overlay (pause-button) shows Resume/Restart/Quit with NO Sound toggle; Resume returns; dev-singles-button (testID) loads singles and plays; Restart resets; Quit to menu. NOT verifiable on web (do NOT fail): native FPS, haptics (audio is disabled by design)."
+
+## previous_frontend_tasks:
+##   - task: "Single-gesture input + wind-up + one contact event (no double shot)"
+##     implemented: true
+##     working: "NA"
+##     file: "app/match.tsx, src/game/sim/GameSimulation.ts"
+##     stuck_count: 0
+##     priority: "high"
+##     needs_retesting: false
+##     status_history:
+##         -working: "NA"
+##         -agent: "main"
+##         -comment: "Part A input pass; approved by user — FROZEN this pass (do not change swipe/arming/wind-up)."

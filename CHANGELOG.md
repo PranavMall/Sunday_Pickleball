@@ -212,3 +212,47 @@ scoring/rules/AI tuning/rally pace/forgiveness (parity re-proven byte-identical;
   play() prefers an idle voice; readiness reported (sfx.ready, logged).
 - **[audio/pool]** Pool reduced 24 → 16 players (2/file), the minimum for clean
   overlap. Supplied WAVs not re-encoded.
+
+## Milestone 2 — Part A: stabilization pass (2026-06)
+
+User-approved swipe controls + wind-up feel are FROZEN. Three targeted changes
+only; M2 Part B NOT started.
+
+### Audio disabled
+- **[audio/off]** Central `SFX_ENABLED = false` master switch in
+  `services/sfx.ts`. When off, `preload()` short-circuits BEFORE creating any
+  player, so ZERO `AudioPlayer` instances exist; no contact/bounce sound plays.
+  The Pause menu "Sound: On/Off" row is hidden (menu is Resume / Restart / Quit).
+  `ContactEvent`, `BounceEvent` and the whole SFX service remain in place for a
+  future dedicated sound-design pass — re-enable with the one flag. Supplied WAVs
+  untouched. (Verified: 0 AudioPlayer instances, no audio warnings; testing agent
+  confirmed the mute-button is absent.)
+
+### Lightweight placeholder rendering (A/B vs M1.2)
+- **[render/character]** The placeholder character now draws only a body
+  capsule + head + paddle (the depth-scaled court shadow is drawn by
+  `GameCanvas`), roughly M1.2 render complexity. The per-garment/accessory
+  layers are no longer each drawn as separate placeholder drawables. The layered
+  CONTRACT/types (`CHAR_LAYER_ORDER`, `CharacterColors`, etc.) are kept intact
+  for real sprites later. The approved wind-up / swing paddle motion is preserved.
+
+### Bounced kitchen-ball retrieval fix (engine)
+- **[sim/predict]** ROOT CAUSE: `predictContact()` started its forward-sim bounce
+  counter at 0, ignoring the LIVE ball's `bouncesSinceHit`. So (a) it reported
+  `bounced:false` for a ball that had already bounced in the kitchen — making
+  automatic movement HOLD the player behind the NVZ line instead of pursuing the
+  legal post-bounce ball; and (b) during the opening two-bounce phase it waited
+  for an UNNECESSARY second predicted bounce before treating a contact as legal.
+  FIX (one line): seed `let bounces = ball.bouncesSinceHit`. Now an
+  already-completed required bounce counts as done, `pred.bounced` reflects the
+  live ball, and automatic movement (human AND AI) pursues a legally-bounced
+  kitchen ball; an UNBOUNCED ball still holds behind the line (no illegal volley
+  introduced). Kitchen volley/momentum/re-establishment rules unchanged; works in
+  singles and doubles. Strike eligibility (`computeReach`) already respected the
+  live bounce state — only movement prediction needed the correction.
+- **[test]** +10 tests (suite 119 → **129**, 0 failed): kitchen retrieval (A),
+  two-bounce recognition + gating (B), unbounced-kitchen safety (C). Doubles
+  before/after battery (`parity.ts`, intentionally NOT byte-identical now):
+  win-rate relationships preserved (CLUB>ROOKIE, PRO>CLUB), avgLongestRally
+  24.93→25.02, avgRallies 34.8→32.7, 0 kitchen faults, 0 stuck states — all
+  differences attributable only to the movement-prediction correction.

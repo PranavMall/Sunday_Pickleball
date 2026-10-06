@@ -9,6 +9,8 @@ import { INPUT, PLAYER } from "../config/tuning";
 import { buildMatchConfig, devSinglesConfig } from "../config/matchConfig";
 import { RuleManager } from "../sim/rules";
 import { ScoreManager } from "../sim/score";
+import { predictContact } from "../sim/physics";
+import { updateMovement, type MovementInfo } from "../sim/movement";
 import { GameSimulation, humanShotQuality, humanServeQuality } from "../sim/GameSimulation";
 import type { BallState, Difficulty, PlayerState, Team } from "../sim/types";
 
@@ -506,6 +508,61 @@ function simTests() {
   ok(proVsClub > 0.55, "PRO beats CLUB more often than not");
 }
 
+// ===================== KITCHEN / TWO-BOUNCE PREDICTION =====================
+// Regression tests for the bounced-kitchen-ball retrieval fix. predictContact()
+// must seed its bounce count from the LIVE ball's bouncesSinceHit so that:
+//  A) a ball that has ALREADY bounced in the near kitchen is pursued INTO the
+//     kitchen (legal post-bounce play), not held behind the line;
+//  B) during the opening two-bounce phase an already-completed required bounce
+//     is recognised immediately (no waiting for an unnecessary second bounce);
+//  C) an UNBOUNCED ball floating into the kitchen is still HELD behind the NVZ
+//     line (no illegal kitchen volley is introduced by the fix).
+function moveInfo(rallyStrikeCount: number): MovementInfo {
+  return {
+    rallyStrikeCount,
+    serving: false,
+    serverSlot: null,
+    affinityFor: () => 0.6,
+    posErrorFor: () => 0,
+  };
+}
+
+function kitchenTests() {
+  console.log("\n[Kitchen retrieval & two-bounce prediction]");
+
+  // --- A) opponent dink has ALREADY bounced in the near kitchen ---
+  const bA = ball({ x: 10, y: 25, z: 1.4, vx: 0, vy: 0.2, vz: -2, bouncesSinceHit: 1, lastHitTeam: "far", lastHitBy: 2 });
+  const predA = predictContact(bA, "near", false);
+  ok(predA.reachable, "A: already-bounced kitchen ball is reachable");
+  ok(predA.bounced, "A: prediction respects live ball.bouncesSinceHit (bounced=true)");
+  ok(predA.y < COURT.NEAR_KITCHEN_Y, "A: predicted contact is INSIDE the kitchen");
+  const nearA = player({ slot: 0, team: "near", controller: "LOCAL_HUMAN", x: 10, y: 31, courtSide: "R" });
+  const farA = player({ slot: 2, team: "far", controller: "AI", x: 10, y: 10, courtSide: "L", difficulty: "CLUB" });
+  updateMovement([nearA, farA], bA, moveInfo(5), 1 / 60);
+  ok(nearA.targetY < COURT.NEAR_KITCHEN_Y, "A: near player moves INTO the kitchen to retrieve the bounced ball");
+
+  // --- B) two-bounce phase, the required bounce has already happened ---
+  const bB = ball({ x: 10, y: 8, z: 1.2, vx: 0, vy: -0.5, vz: -2, bouncesSinceHit: 1, lastHitTeam: "near", lastHitBy: 0 });
+  const predB = predictContact(bB, "far", true); // requireBounce = strike < 3
+  ok(predB.reachable, "B: already-bounced ball is reachable during the two-bounce phase");
+  ok(predB.bounced, "B: prediction recognises the already-completed required bounce");
+  ok(predB.t < 0.1, "B: contact is immediate — does NOT wait for a second bounce");
+  // Gating still works: an otherwise-identical UNBOUNCED ball must wait for its
+  // bounce before it is reachable in the two-bounce phase.
+  const bB0 = ball({ x: 10, y: 8, z: 1.2, vx: 0, vy: -0.5, vz: -2, bouncesSinceHit: 0, lastHitTeam: "near", lastHitBy: 0 });
+  const predB0 = predictContact(bB0, "far", true);
+  ok(predB0.t > predB.t, "B: unbounced two-bounce-phase ball still waits for its bounce (gating preserved)");
+
+  // --- C) UNBOUNCED ball floating into the near kitchen: hold behind the line ---
+  const bC = ball({ x: 10, y: 25, z: 2.5, vx: 0, vy: 0.1, vz: -2, bouncesSinceHit: 0, lastHitTeam: "far", lastHitBy: 2 });
+  const predC = predictContact(bC, "near", false);
+  ok(!predC.bounced, "C: unbounced kitchen ball is NOT flagged bounced");
+  const nearC = player({ slot: 0, team: "near", controller: "LOCAL_HUMAN", x: 10, y: 27, courtSide: "R" });
+  const farC = player({ slot: 2, team: "far", controller: "AI", x: 10, y: 10, courtSide: "L", difficulty: "CLUB" });
+  updateMovement([nearC, farC], bC, moveInfo(5), 1 / 60);
+  ok(nearC.targetY >= COURT.NEAR_KITCHEN_Y, "C: near player HOLDS behind the kitchen line (no illegal NVZ volley)");
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -515,6 +572,7 @@ controlsTests();
 partnerTests();
 realConfigTests();
 singlesTests();
+kitchenTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

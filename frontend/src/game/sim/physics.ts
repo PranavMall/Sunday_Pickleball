@@ -28,7 +28,15 @@ export function predictContact(
   let vy = ball.vy;
   let vz = ball.vz;
   const g = PHYS.GRAVITY;
-  let bounces = 0;
+  // SEED the local bounce count from the LIVE ball's current state. The ball may
+  // have ALREADY bounced since the last strike (e.g. a dink that landed in the
+  // kitchen, or the required serve/return bounce in the two-bounce phase). If we
+  // started from zero we would (a) report `bounced:false` for a ball that has in
+  // fact bounced — making movement hold the player behind the kitchen line and
+  // never pursue a legal post-bounce ball — and (b) wait for an UNNECESSARY
+  // second bounce before treating a two-bounce-phase contact as legal. Seeding
+  // from `ball.bouncesSinceHit` makes an already-completed bounce count as done.
+  let bounces = ball.bouncesSinceHit;
   let firstBounce: { x: number; y: number; t: number } | null = null;
 
   const steps = Math.floor(horizon / dt);

@@ -16,6 +16,13 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 
 import type { BounceEvent, ContactEvent } from "../sim/types";
 
+// MASTER SWITCH. Audio is intentionally DISABLED for this stabilization pass
+// (a dedicated sound-design pass will re-enable it). When false: NOTHING is
+// preloaded, ZERO AudioPlayer instances are created, and no contact/bounce
+// sound ever plays. ContactEvent / BounceEvent and this whole service stay in
+// place so audio can be switched back on later with a single flag.
+export const SFX_ENABLED = false;
+
 type SetKey = "pop" | "drive" | "kitchen_soft" | "kitchen_bright";
 
 const FILES: Record<SetKey, number[]> = {
@@ -75,6 +82,7 @@ class Sfx {
 
   async preload() {
     if (this._ready) return;
+    if (!SFX_ENABLED) return; // audio disabled: create ZERO AudioPlayer instances
     try {
       const saved = await AsyncStorage.getItem(MUTE_KEY);
       this._muted = saved === "1";

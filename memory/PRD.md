@@ -55,14 +55,20 @@ ROOKIE/CLUB/PRO (M1) with personalities; result + rematch; rules unit tests.
 - 71/71 tests pass; 150 seeded AI-vs-AI matches (50/tier) complete, 0 stuck states.
 
 ## Next tasks
-Milestone 2 Part A (Foundations) complete — awaiting user verification on a real
-device (hit sounds, haptics, wind-up responsiveness, Android back). Then:
+Milestone 2 Part A (Foundations) complete + a stabilization pass applied
+(2026-06): audio disabled behind `SFX_ENABLED=false`, placeholder render
+restored to ~M1.2 complexity (body+head+paddle+shadow) while keeping the
+layered-character contract, and the bounced kitchen-ball retrieval bug fixed in
+`predictContact` (seeds bounce count from the live ball). Swipe controls +
+wind-up are user-approved and FROZEN. Suite 129/129. Awaiting user APK feel
+check, then:
 - **Part B** (not started): game feel (swing/follow-through, squash/stretch,
   reactions, smooth walking), serve aim helper, AI returns tuned by difficulty,
   dink rework.
 - **Part C** (not started): lob + smash shots, singles menu/UI, new AI profiles.
-- **Asset step**: real sprites (per `SPRITE_BRIEF.md`), music, line-free court.
-Do NOT start Part B until the user approves Part A.
+- **Asset step**: real sprites (per `SPRITE_BRIEF.md`), music, line-free court,
+  and a dedicated sound-design pass (re-enable `SFX_ENABLED`).
+Do NOT start Part B until the user approves.
 
 ## Milestone 2 — Part A: Foundations (2026-06)
 - Input: single-gesture input (no pan+tap double-fire), instant wind-up pose on
