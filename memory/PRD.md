@@ -55,19 +55,22 @@ ROOKIE/CLUB/PRO (M1) with personalities; result + rematch; rules unit tests.
 - 71/71 tests pass; 150 seeded AI-vs-AI matches (50/tier) complete, 0 stuck states.
 
 ## Next tasks
-Milestone 2 Part A (Foundations) complete + a stabilization pass applied
-(2026-06): audio disabled behind `SFX_ENABLED=false`, placeholder render
-restored to ~M1.2 complexity (body+head+paddle+shadow) while keeping the
-layered-character contract, and the bounced kitchen-ball retrieval bug fixed in
-`predictContact` (seeds bounce count from the live ball). Swipe controls +
-wind-up are user-approved and FROZEN. Suite 129/129. Awaiting user APK feel
-check, then:
+Milestone 2 Part A (Foundations) + stabilization + a Phase 0 value pass done
+(2026-06). Phase 0 (two commits): line-free gameplay court (court_gameplay.webp,
+match-only; menu keeps court_background.webp), kitchen-line rule fix + post-
+kitchen striker fairness (138/138 tests, seeded doubles byte-identical), and the
+meta shell — local Player/Team identity (first-time prompt + Profile), Match
+History screen, and a main-menu shell (Quick Match / History / Profile active;
+Career / Training / Passport / Trophy Room = Coming Soon). Gameplay feel is
+user-approved (8.25/10) and FROZEN. Awaiting user feel re-check, then:
 - **Part B** (not started): game feel (swing/follow-through, squash/stretch,
   reactions, smooth walking), serve aim helper, AI returns tuned by difficulty,
   dink rework.
 - **Part C** (not started): lob + smash shots, singles menu/UI, new AI profiles.
-- **Asset step**: real sprites (per `SPRITE_BRIEF.md`), music, line-free court,
-  and a dedicated sound-design pass (re-enable `SFX_ENABLED`).
+- **Phase 1** (not started, define first): Career, Training, Passport, Trophy
+  Room, progression/economy.
+- **Asset step**: real sprites (per `SPRITE_BRIEF.md`), music, dedicated
+  sound-design pass (re-enable `SFX_ENABLED`).
 Do NOT start Part B until the user approves.
 
 ## Milestone 2 — Part A: Foundations (2026-06)

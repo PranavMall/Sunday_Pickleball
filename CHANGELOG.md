@@ -213,6 +213,50 @@ scoring/rules/AI tuning/rally pace/forgiveness (parity re-proven byte-identical;
 - **[audio/pool]** Pool reduced 24 → 16 players (2/file), the minimum for clean
   overlap. Supplied WAVs not re-encoded.
 
+## Milestone 2 — Part A: Phase 0 value pass (2026-06)
+
+Two independently-revertable commits. Gameplay feel (swipe/arming/wind-up,
+speed, reach, physics, AI tuning, rally pace, forgiveness, scoring) is FROZEN.
+
+### Commit A — court + kitchen fixes
+- **[render/court]** New LINE-FREE gameplay court `court_gameplay.webp`
+  (1024×1536, 371 KB) used ONLY on the match screen; `court_background.webp`
+  stays the main-menu background. The code-drawn geometry (sidelines, baselines,
+  kitchen/NVZ lines, centre lines, net, posts) remains authoritative and is drawn
+  over the painted blue surface. Homography corners recalibrated to the new art
+  (FL 304,521 · FR 729,525 · NR 888,1197 · NL 133,1191 — used as supplied, no
+  further adjustment needed; lines sit naturally).
+- **[rules/kitchen-line]** Touching the NVZ line now counts as being in the
+  kitchen wherever the rule cares: a volley while on the line faults
+  (KITCHEN_VOLLEY), momentum carrying a just-volleyed player ONTO the line faults
+  (KITCHEN_MOMENTUM), re-establishment is blocked while touching the line, and the
+  re-establish timer only runs when fully outside AND off the line
+  (`RuleManager.isKitchenContact` / `tickKitchenRecovery`).
+- **[sim/fairness]** Post-kitchen striker fairness: a player who has been in the
+  kitchen and not re-established BOTH feet is NOT auto-designated to VOLLEY an
+  airborne ball (`RuleManager.eligibleForAirborneVolley`), so automatic movement
+  can't manufacture an unavoidable kitchen fault after a legal bounced-ball
+  retrieval; in doubles the partner may take it; a BOUNCED ball is always
+  playable from the kitchen. RuleManager still faults a genuine illegal volley.
+- **[test]** +9 deterministic tests (129 → 138, 0 failed). Seeded doubles battery
+  byte-for-byte identical before/after (0/100 matches changed; avgLongestRally
+  25.02, Rookie<Club<Pro preserved, 0 stuck states) — the AI already avoids
+  illegal volleys, so these are correctness/safety fixes for edge + human cases.
+
+### Commit B — identity, history, menu (UI/data only, no sim change)
+- **[meta/identity]** Local guest identity (`services/profile.ts`): Player + Team
+  name, 2–16 chars, trimmed, basic profanity screen, Skip → defaults (Player /
+  Picklewood), persisted in AsyncStorage. First-time prompt on the main menu and
+  an editable Profile screen. HUD serve label uses the player name; the result
+  overlay shows the team name.
+- **[meta/history]** Match History screen: Played / Wins / Win % / Longest-rally
+  header, recent matches newest-first (date, Singles/Doubles, opponent
+  difficulty, score, Win/Loss, longest rally), empty state. `Array.isArray` guard
+  added to the match-log read/write so a corrupt store can't crash.
+- **[ui/menu]** Main-menu shell: Quick Match / Match History / Profile active;
+  Career / Training / Passport / Trophy Room shown as Coming Soon (no navigation,
+  transient toast on tap). Keeps the existing watercolour background.
+
 ## Milestone 2 — Part A: stabilization pass (2026-06)
 
 User-approved swipe controls + wind-up feel are FROZEN. Three targeted changes
