@@ -13,6 +13,7 @@ import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
+import { getIdentity } from "@/src/game/services/profile";
 import { makeStyles } from "@/src/theme";
 
 // Reserve a small edge margin from game swipe input. (The focused back handler
@@ -39,6 +40,7 @@ const Hud = memo(function Hud(props: {
   servingNear: boolean;
   paused: boolean;
   top: number;
+  playerName: string;
   onPause: () => void;
 }) {
   const styles = useStyles();
@@ -56,8 +58,8 @@ const Hud = memo(function Hud(props: {
             </>
           ) : null}
         </Text>
-        <Text style={styles.serveLabel}>
-          {props.servingNear ? "You serve" : "Rival serves"} · You {props.near} · Rival {props.far}
+        <Text style={styles.serveLabel} numberOfLines={1}>
+          {props.servingNear ? `${props.playerName} serves` : "Rival serves"} · {props.playerName} {props.near} · Rival {props.far}
           {props.doubles ? "" : "  · Singles"}
         </Text>
       </View>
@@ -89,6 +91,7 @@ export default function Match() {
   const [muted, setMuted] = useState(false);
   const [showDev, setShowDev] = useState(false);
   const [fps, setFps] = useState(60);
+  const [identity, setIdentity] = useState({ playerName: "You", teamName: "Picklewood" });
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const gameOverRef = useRef(false);
@@ -101,6 +104,7 @@ export default function Match() {
   useEffect(() => {
     let alive = true;
     if (SFX_AVAILABLE && SFX_ENABLED) sfx.preload().then(() => alive && setMuted(sfx.muted));
+    getIdentity().then((id) => alive && setIdentity(id));
     return () => {
       alive = false;
       sfx.teardown();
@@ -284,6 +288,7 @@ export default function Match() {
         servingNear={sim.score.servingTeam === "near"}
         paused={paused}
         top={insets.top}
+        playerName={identity.playerName}
         onPause={() => setPaused((p) => !p)}
       />
 
@@ -352,6 +357,7 @@ export default function Match() {
           <View style={styles.modal}>
             <Text style={styles.resultKicker}>{nearWon ? "VICTORY" : "DEFEAT"}</Text>
             <Text style={styles.modalTitle}>{nearWon ? "You win!" : "Rivals win"}</Text>
+            <Text style={styles.teamName} testID="result-team-name">Team {identity.teamName}</Text>
             <Text style={styles.finalScore} testID="final-score">
               {sim.score.nearScore} – {sim.score.farScore}
             </Text>
@@ -427,6 +433,7 @@ const useStyles = makeStyles((c) => ({
   pauseSecondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, width: "100%", alignItems: "center", borderWidth: 1, borderColor: c.border },
   resultKicker: { color: c.accentGold, fontSize: 13, fontWeight: "800", letterSpacing: 3 },
   modalTitle: { color: c.onSurface, fontSize: 28, fontWeight: "800", marginTop: 4 },
+  teamName: { color: c.muted, fontSize: 14, fontWeight: "700", marginTop: 2 },
   finalScore: { color: c.brandPrimary, fontSize: 44, fontWeight: "800", marginVertical: 8 },
   statsRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, marginVertical: 12 },
   stat: { alignItems: "center", minWidth: 70 },

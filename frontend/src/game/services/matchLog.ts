@@ -64,7 +64,9 @@ export async function logMatchResult(config: MatchConfig, sim: GameSimulation): 
   try {
     const rec = buildMatchResult(config, sim);
     const raw = await AsyncStorage.getItem(KEY);
-    const list: MatchResultRecord[] = raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    // Guard against a corrupt / non-array stored value so logging never throws.
+    const list: MatchResultRecord[] = Array.isArray(parsed) ? parsed : [];
     list.push(rec);
     while (list.length > MAX) list.shift();
     await AsyncStorage.setItem(KEY, JSON.stringify(list));
@@ -76,7 +78,9 @@ export async function logMatchResult(config: MatchConfig, sim: GameSimulation): 
 export async function getMatchResults(): Promise<MatchResultRecord[]> {
   try {
     const raw = await AsyncStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    // A corrupt/non-array stored value must not crash Match History.
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
