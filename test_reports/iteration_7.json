@@ -1,0 +1,41 @@
+{
+  "summary": "Phase 0 value-pass FRONTEND verification PASS on live web preview (portrait 390x844, https://pickle-arcade.preview.emergentagent.com). All 8 requested flows verified. (1) First-time identity: after localStorage.clear() + reload, identity-prompt renders with player-name-input, team-name-input, identity-save-button ('Let's play'), identity-skip-button ('Skip for now'). (2) Validation: 1-char player name shows identity-error 'Player name needs at least 2 characters'; valid 2-16 char names save and close the prompt. (3) Main menu shell: main-menu-screen present; three ACTIVE rows navigate correctly -- menu-quick-match -> difficulty-screen, menu-history -> history-screen, menu-profile -> profile-screen. Four LOCKED rows (menu-career/training/passport/trophy) stay on menu and show coming-soon-toast on tap. (4) Quick Match: menu -> Quick Match -> difficulty-club -> match-screen loads with the new line-free court background, 4 players, HUD score-display='0 - 0 - 2' (doubles). HUD serve label uses the saved player name: 'Morgan serves - Morgan 0 - Rival 0' (NOT the literal 'You'). Match auto-plays for 5s with no crash. (5) result-team-name not reached in 5s (optional per spec, do not force-play to 11). (6) Match History: history-screen shows all 4 stat labels (Played / Wins / Win / Longest rally) and history-empty testID 'No matches yet - play your first match'. (7) Profile screen: shows current player/team in inputs, validation works (1-char -> identity-error), Save shows profile-saved confirmation, values persist across back + re-navigation (saved Morgan/Thunder, re-entered Profile and inputs still show Morgan/Thunder). (8) Zero critical console errors after filtering known-benign Skia/pointerEvents/shadow/CanvasKit/GL deprecation warnings carried over from prior iterations. Screenshot captured confirms the new line-free court, 4 player figures, and HUD serve label displays the saved player name.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "react-native-skia paths", "issue": "SkPath.moveTo/lineTo/addPath/close/quadTo deprecated; migrate to Skia.PathBuilder.Make(). Non-blocking carryover from iterations 3-6. Reference: /app/frontend/src/game/render/GameCanvas.tsx and sibling renderers."},
+      {"component": "pointerEvents prop", "issue": "'props.pointerEvents is deprecated. Use style.pointerEvents.' Non-blocking carryover. Reference: /app/frontend/app/match.tsx."},
+      {"component": "shadow* style props", "issue": "'shadow*' style props deprecated. Use 'boxShadow'. Non-blocking carryover. Reference: /app/frontend/app/index.tsx menu item style."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_1.json",
+    "/app/test_reports/iteration_2.json",
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/iteration_4.json",
+    "/app/test_reports/iteration_5.json",
+    "/app/test_reports/iteration_6.json",
+    "/app/test_reports/iteration_7.json"
+  ],
+  "action_items": [
+    "No code changes required -- all 8 flows (identity prompt, validation, main menu active+locked navigation, coming-soon-toast, quick match -> difficulty -> match with line-free court, history empty state + stat header, profile edit + persistence) pass live. Commit A engine change (line-free court + kitchen fairness) is covered by the 138/138 headless deterministic tests per the agent-to-agent note; UI-side only confirmed the match still renders and plays without crash as required.",
+    "Optional carryover (unchanged from prior iterations): migrate deprecated react-native-skia SkPath mutators to Skia.PathBuilder.Make(); migrate props.pointerEvents to style.pointerEvents; migrate shadow* style props to boxShadow. All non-blocking web-only console warnings."
+  ],
+  "critical_code_review_comments": [
+    "profile.ts validateName() enforces 2-16 chars + profanity screen; identity-editor returns the first failed field's error -- test confirmed inline identity-error renders for 1-char input in both the identity-prompt and Profile screen.",
+    "index.tsx:60-63 tapLocked() shows coming-soon-toast and auto-dismisses after 1.6s without navigating -- verified: still on main-menu-screen after tapping menu-career and toast appears.",
+    "match.tsx:94 identity default state uses 'You' as a fallback, but match.tsx:291 passes identity.playerName (loaded from AsyncStorage via getIdentity in useEffect) into the HUD -- live test confirms 'Morgan serves - Morgan 0 - Rival 0' once storage hydrates. Note: if getIdentity() resolves slowly, there is a brief window where the HUD could read 'You serves' before hydration. On web this window is <<1s and wasn't visible in the test, but on cold slow native it could flicker. Consider gating the HUD until identity.loaded.",
+    "matchLog.ts:69-71 guards against a non-array stored value -- history-screen correctly shows history-empty state for a fresh profile and did not crash.",
+    "profile.tsx:51 uses key={`${player}|${team}`} to force IdentityEditor remount when saved values change -- verified persistence after back-nav-and-return."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (client-only, no backend)", "frontend": "100% (8/8 flows pass on web preview)"},
+  "seed_data_creation": "Cleared localStorage at test start to force the first-time identity-prompt path; also exercised the already-set path implicitly during Profile re-save.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Portrait 390x844. Public URL: https://pickle-arcade.preview.emergentagent.com. Identity persists in localStorage under keys pw.playerName / pw.teamName / pw.identitySet -- call `await page.evaluate(\"() => localStorage.clear()\")` then `page.reload()` to force the first-time prompt. The HUD serve label is `${playerName} serves · ${playerName} ${near} · Rival ${far}` only when servingNear is true; before identity hydrates it may briefly show 'You' from match.tsx:94 default state. 'Your serve — swipe up to serve' hint banner at the bottom contains literal 'Your' / 'You' -- do NOT false-positive on body-wide 'You' substring; assert on the HUD serve label element only. result-team-name requires match completion (first to 11, win-by-2 unless modified) and will not appear within a 5-10s auto-play window on CLUB difficulty -- treat as optional. Allow ~3s after match-screen appears for Skia/CanvasKit WASM to settle. Known non-blocking carryover web-only warnings: SkPath.*, props.pointerEvents, shadow*, GL_CLOSE_PATH_NV, CanvasKit -- filter them out when counting critical errors.",
+  "rca_of_issue": "N/A -- no regression. All Phase 0 value-pass acceptance criteria (first-time identity prompt + validation, main menu shell with active + locked destinations, coming-soon-toast, Quick Match flow with new line-free court, HUD serve label using saved player name, history empty state + stats header, Profile edit + persistence) are present and functional on live web."
+}
