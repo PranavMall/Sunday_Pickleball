@@ -14,6 +14,7 @@ import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
 import { getIdentity } from "@/src/game/services/profile";
+import { Fullscreen } from "@/src/components/fullscreen";
 import { makeStyles } from "@/src/theme";
 
 // Reserve a small edge margin from game swipe input. (The focused back handler
@@ -323,6 +324,7 @@ export default function Match() {
   return (
     <View style={styles.root} testID="match-screen">
       <Stack.Screen options={{ gestureEnabled: false }} />
+      <Fullscreen />
       <GestureDetector gesture={pan}>
         <View style={styles.canvasWrap}>
           <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} />

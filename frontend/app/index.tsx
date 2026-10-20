@@ -1,38 +1,35 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@react-native-vector-icons/ionicons";
 import React, { useCallback, useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { Fullscreen } from "@/src/components/fullscreen";
 import { IdentityEditor } from "@/src/components/identity-editor";
+import { SHOW_COMING_SOON } from "@/src/game/config/features";
 import { DEFAULT_PLAYER, DEFAULT_TEAM, getIdentity, hasIdentity, saveIdentity, skipIdentity } from "@/src/game/services/profile";
-import { makeStyles } from "@/src/theme";
+import { makeStyles, useTheme } from "@/src/theme";
 
-type ActiveItem = { key: string; title: string; sub: string; route: string; testID: string };
-type LockedItem = { key: string; title: string; testID: string };
-
-const ACTIVE: ActiveItem[] = [
-  { key: "quick", title: "Quick Match", sub: "Jump into a 2v2 rally", route: "/difficulty", testID: "menu-quick-match" },
-  { key: "history", title: "Match History", sub: "Your results & stats", route: "/history", testID: "menu-history" },
-  { key: "profile", title: "Profile", sub: "Name & team", route: "/profile", testID: "menu-profile" },
-];
+type LockedItem = { key: string; title: string; icon: IoniconName; testID: string };
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
 const LOCKED: LockedItem[] = [
-  { key: "career", title: "Career", testID: "menu-career" },
-  { key: "training", title: "Training", testID: "menu-training" },
-  { key: "passport", title: "Passport", testID: "menu-passport" },
-  { key: "trophy", title: "Trophy Room", testID: "menu-trophy" },
+  { key: "career", title: "Career", icon: "briefcase-outline", testID: "menu-career" },
+  { key: "training", title: "Training", icon: "fitness-outline", testID: "menu-training" },
+  { key: "passport", title: "Passport", icon: "airplane-outline", testID: "menu-passport" },
+  { key: "trophy", title: "Trophies", icon: "trophy-outline", testID: "menu-trophy" },
 ];
 
 export default function MainMenu() {
   const router = useRouter();
   const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   const [identity, setIdentity] = useState({ playerName: DEFAULT_PLAYER, teamName: DEFAULT_TEAM });
   const [promptOpen, setPromptOpen] = useState(false);
-  const [comingSoon, setComingSoon] = useState<string | null>(null);
 
   const refreshIdentity = useCallback(() => {
     getIdentity().then(setIdentity);
@@ -46,6 +43,9 @@ export default function MainMenu() {
     })();
   }, [refreshIdentity]);
 
+  // Pick up edits made on the Profile screen when we return here.
+  useFocusEffect(refreshIdentity);
+
   const onSaveIdentity = async (p: string, t: string) => {
     await saveIdentity(p, t);
     setPromptOpen(false);
@@ -57,68 +57,82 @@ export default function MainMenu() {
     refreshIdentity();
   };
 
-  const tapLocked = (title: string) => {
-    setComingSoon(title);
-    setTimeout(() => setComingSoon((c) => (c === title ? null : c)), 1600);
-  };
+  const initial = identity.playerName.trim().charAt(0).toUpperCase() || "P";
 
   return (
     <View style={styles.root} testID="main-menu-screen">
+      <Fullscreen />
       <Image source={require("@/assets/images/court_background.webp")} style={styles.bg} contentFit="cover" />
-      <LinearGradient colors={["rgba(251,246,233,0.12)", "rgba(46,61,42,0.72)"]} style={styles.overlay} />
+      {/* Light top/bottom gradients only, so the artwork stays the hero. */}
+      <LinearGradient colors={["rgba(20,26,18,0.55)", "rgba(20,26,18,0)"]} style={[styles.topShade, { height: insets.top + 150 }]} pointerEvents="none" />
+      <LinearGradient colors={["rgba(20,26,18,0)", "rgba(20,26,18,0.7)"]} style={[styles.bottomShade, { height: insets.bottom + 260 }]} pointerEvents="none" />
 
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 32, paddingBottom: insets.bottom + 24, paddingHorizontal: 24 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.titleWrap}>
-          <Text style={styles.kicker}>GARDEN COURT DOUBLES</Text>
-          <Text style={styles.title}>Picklewood</Text>
-          <Text style={styles.subtitle}>
-            Team {identity.teamName} · {identity.playerName}
-          </Text>
+      {/* TOP: profile chip + small round secondary actions */}
+      <View style={[styles.topBar, { paddingTop: insets.top + 12, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }]}>
+        <Pressable
+          testID="menu-profile"
+          accessibilityRole="button"
+          accessibilityLabel={`Profile: ${identity.playerName}, Team ${identity.teamName}`}
+          style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+          onPress={() => router.push("/profile")}
+        >
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+          <View style={styles.chipText}>
+            <Text style={styles.chipName} numberOfLines={1} testID="home-player-name">{identity.playerName}</Text>
+            <Text style={styles.chipTeam} numberOfLines={1} testID="home-team-name">Team {identity.teamName}</Text>
+          </View>
+        </Pressable>
+        <View style={styles.topIcons}>
+          <RoundIcon testID="menu-history" icon="stats-chart" label="Match History" onPress={() => router.push("/history")} color={colors.onSurface} />
+          <RoundIcon testID="menu-settings" icon="settings-sharp" label="Profile and settings" onPress={() => router.push("/profile")} color={colors.onSurface} />
         </View>
+      </View>
 
-        <View style={styles.menu}>
-          {ACTIVE.map((it) => (
-            <Pressable
-              key={it.key}
-              testID={it.testID}
-              style={({ pressed }) => [styles.item, pressed && styles.pressed]}
-              onPress={() => router.push(it.route as never)}
-            >
-              <View style={styles.itemText}>
-                <Text style={styles.itemTitle}>{it.title}</Text>
-                <Text style={styles.itemSub}>{it.sub}</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ))}
+      <View style={styles.titleWrap} pointerEvents="none">
+        <Text style={styles.title}>Picklewood</Text>
+        <Text style={styles.kicker}>GARDEN COURT DOUBLES</Text>
+      </View>
 
-          <Text style={styles.sectionLabel}>Coming soon</Text>
-          {LOCKED.map((it) => (
-            <Pressable
-              key={it.key}
-              testID={it.testID}
-              style={({ pressed }) => [styles.item, styles.itemLocked, pressed && styles.pressed]}
-              onPress={() => tapLocked(it.title)}
-            >
-              <View style={styles.itemText}>
-                <Text style={[styles.itemTitle, styles.lockedTitle]}>{it.title}</Text>
-              </View>
-              <View style={styles.soonPill}>
-                <Text style={styles.soonText}>SOON</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      </ScrollView>
+      <View style={styles.spacer} />
 
-      {comingSoon ? (
-        <View style={[styles.toast, { bottom: insets.bottom + 24 }]} pointerEvents="none" testID="coming-soon-toast">
-          <Text style={styles.toastText}>{comingSoon} is coming soon</Text>
-        </View>
-      ) : null}
+      {/* LOWER: one dominant PLAY + locked future modes */}
+      <View style={[styles.bottom, { paddingBottom: insets.bottom + 20, paddingLeft: insets.left + 24, paddingRight: insets.right + 24 }]}>
+        <Pressable
+          testID="menu-quick-match"
+          accessibilityRole="button"
+          accessibilityLabel="Play quick match"
+          style={({ pressed }) => [styles.play, pressed && styles.playPressed]}
+          onPress={() => router.push("/difficulty")}
+        >
+          <Ionicons name="play" size={28} color={colors.onBrandPrimary} />
+          <Text style={styles.playText}>PLAY</Text>
+        </Pressable>
+
+        {SHOW_COMING_SOON ? (
+          <View style={styles.lockedRow} testID="coming-soon-row">
+            {LOCKED.map((it) => (
+              <View
+                key={it.key}
+                testID={it.testID}
+                style={styles.lockedItem}
+                accessible
+                accessibilityLabel={`${it.title}, coming soon`}
+                accessibilityState={{ disabled: true }}
+              >
+                <View style={styles.lockedCircle}>
+                  <Ionicons name={it.icon} size={20} color={colors.onSurfaceInverse} />
+                  <View style={styles.lockBadge}>
+                    <Ionicons name="lock-closed" size={10} color={colors.onSurface} />
+                  </View>
+                </View>
+                <Text style={styles.lockedLabel} numberOfLines={1}>{it.title}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
 
       {promptOpen ? (
         <View style={styles.modalWrap} testID="identity-prompt">
@@ -142,41 +156,67 @@ export default function MainMenu() {
   );
 }
 
+function RoundIcon(props: { testID: string; icon: IoniconName; label: string; color: string; onPress: () => void }) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      testID={props.testID}
+      accessibilityRole="button"
+      accessibilityLabel={props.label}
+      hitSlop={6}
+      style={({ pressed }) => [styles.roundIcon, pressed && styles.pressed]}
+      onPress={props.onPress}
+    >
+      <Ionicons name={props.icon} size={20} color={props.color} />
+    </Pressable>
+  );
+}
+
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surfaceInverse },
   bg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  overlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  titleWrap: { alignItems: "flex-start", marginBottom: 24 },
-  kicker: { color: c.accentGold, fontSize: 12, fontWeight: "700", letterSpacing: 3, marginBottom: 6 },
-  title: { color: c.onSurfaceInverse, fontSize: 48, fontWeight: "800", letterSpacing: -1 },
-  subtitle: { color: c.onSurfaceInverse, opacity: 0.9, fontSize: 15, marginTop: 6, fontWeight: "600" },
-  menu: { gap: 12 },
-  item: {
-    backgroundColor: "rgba(251,246,233,0.94)",
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 18,
+  topShade: { position: "absolute", top: 0, left: 0, right: 0 },
+  bottomShade: { position: "absolute", bottom: 0, left: 0, right: 0 },
+  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  chip: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(251,246,233,0.92)", borderRadius: 26, paddingVertical: 5, paddingLeft: 5, paddingRight: 14, maxWidth: "62%", minHeight: 48 },
+  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: c.brandPrimary, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: c.onBrandPrimary, fontSize: 17, fontWeight: "800" },
+  chipText: { marginLeft: 9, flexShrink: 1 },
+  chipName: { color: c.onSurface, fontSize: 15, fontWeight: "800" },
+  chipTeam: { color: c.muted, fontSize: 11, fontWeight: "700" },
+  topIcons: { flexDirection: "row", gap: 10 },
+  roundIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(251,246,233,0.92)", alignItems: "center", justifyContent: "center" },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
+  titleWrap: { alignItems: "center", marginTop: 18 },
+  title: { color: c.onSurfaceInverse, fontSize: 30, fontWeight: "800", letterSpacing: -0.5, textShadowColor: "rgba(0,0,0,0.35)", textShadowRadius: 6, textShadowOffset: { width: 0, height: 2 } },
+  kicker: { color: c.onSurfaceInverse, fontSize: 10, fontWeight: "800", letterSpacing: 3, marginTop: 2, textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 4 },
+  spacer: { flex: 1 },
+  bottom: { alignItems: "center", gap: 18 },
+  play: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: c.brandPrimary,
+    borderRadius: 36,
+    height: 72,
+    width: "100%",
+    maxWidth: 340,
+    borderWidth: 3,
+    borderColor: "rgba(251,246,233,0.9)",
     shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
   },
-  itemLocked: { backgroundColor: "rgba(243,234,211,0.82)" },
-  pressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
-  itemText: { flex: 1 },
-  itemTitle: { color: c.onSurface, fontSize: 20, fontWeight: "800" },
-  lockedTitle: { color: c.muted },
-  itemSub: { color: c.onSurfaceTertiary, fontSize: 13, marginTop: 3 },
-  chevron: { color: c.brandPrimary, fontSize: 28, fontWeight: "700" },
-  sectionLabel: { color: c.onSurfaceInverse, opacity: 0.75, fontSize: 12, fontWeight: "700", letterSpacing: 2, marginTop: 14, marginBottom: 2 },
-  soonPill: { backgroundColor: c.surfaceTertiary, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  soonText: { color: c.onSurfaceTertiary, fontSize: 10, fontWeight: "800", letterSpacing: 1 },
-  toast: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(46,61,42,0.92)", borderRadius: 16, paddingHorizontal: 18, paddingVertical: 10 },
-  toastText: { color: c.onSurfaceInverse, fontSize: 14, fontWeight: "600" },
+  playPressed: { transform: [{ scale: 0.97 }], opacity: 0.95 },
+  playText: { color: c.onBrandPrimary, fontSize: 26, fontWeight: "900", letterSpacing: 4 },
+  lockedRow: { flexDirection: "row", justifyContent: "center", gap: 18 },
+  lockedItem: { alignItems: "center", width: 62, opacity: 0.7 },
+  lockedCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(20,26,18,0.55)", borderWidth: 1, borderColor: "rgba(251,246,233,0.4)", alignItems: "center", justifyContent: "center" },
+  lockBadge: { position: "absolute", right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  lockedLabel: { color: c.onSurfaceInverse, fontSize: 10, fontWeight: "700", marginTop: 4 },
   modalWrap: { ...StyleSheet_abs(), backgroundColor: "rgba(20,26,18,0.78)" },
   modalCenter: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
   modal: { backgroundColor: c.surface, borderRadius: 24, padding: 22, width: "100%", maxWidth: 420, alignSelf: "center" },
