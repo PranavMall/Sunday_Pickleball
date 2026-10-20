@@ -772,6 +772,7 @@ console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
 inputTests();
+serverPositionTests();
 controlsTests();
 partnerTests();
 realConfigTests();

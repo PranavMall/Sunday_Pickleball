@@ -77,7 +77,7 @@ const Hud = memo(function Hud(props: {
   servingNear: boolean;
   paused: boolean;
   top: number;
-  playerName: string;
+  playerName: string | null; // null = identity not loaded yet
   onPause: () => void;
 }) {
   const styles = useStyles();
@@ -95,10 +95,12 @@ const Hud = memo(function Hud(props: {
             </>
           ) : null}
         </Text>
-        <Text style={styles.serveLabel} numberOfLines={1}>
-          {props.servingNear ? `${props.playerName} serves` : "Rival serves"} · {props.playerName} {props.near} · Rival {props.far}
-          {props.doubles ? "" : "  · Singles"}
-        </Text>
+        {props.playerName !== null ? (
+          <Text style={styles.serveLabel} numberOfLines={1} testID="serve-label">
+            {props.servingNear ? `${props.playerName} serves` : "Rival serves"} · {props.playerName} {props.near} · Rival {props.far}
+            {props.doubles ? "" : "  · Singles"}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.hudRight}>
         <Text style={styles.rally}>Rally {props.rally}</Text>
@@ -128,7 +130,8 @@ export default function Match() {
   const [muted, setMuted] = useState(false);
   const [showDev, setShowDev] = useState(false);
   const [fps, setFps] = useState(60);
-  const [identity, setIdentity] = useState({ playerName: "You", teamName: "Picklewood" });
+  // null until loaded from storage — the HUD never flashes a placeholder name.
+  const [identity, setIdentity] = useState<{ playerName: string; teamName: string } | null>(null);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const gameOverRef = useRef(false);
@@ -337,7 +340,7 @@ export default function Match() {
         servingNear={sim.score.servingTeam === "near"}
         paused={paused}
         top={insets.top}
-        playerName={identity.playerName}
+        playerName={identity?.playerName ?? null}
         onPause={() => setPaused((p) => !p)}
       />
 
@@ -419,8 +422,12 @@ export default function Match() {
         <View style={styles.modalWrap} testID="result-overlay">
           <View style={styles.modal}>
             <Text style={styles.resultKicker}>{nearWon ? "VICTORY" : "DEFEAT"}</Text>
-            <Text style={styles.modalTitle}>{nearWon ? "You win!" : "Rivals win"}</Text>
-            <Text style={styles.teamName} testID="result-team-name">Team {identity.teamName}</Text>
+            <Text style={styles.modalTitle} numberOfLines={1} ellipsizeMode="tail" testID="result-title">
+              {nearWon ? `${identity?.playerName ?? "You"} wins!` : "Rivals win"}
+            </Text>
+            <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail" testID="result-team-name">
+              Team {identity?.teamName ?? ""}
+            </Text>
             <Text style={styles.finalScore} testID="final-score">
               {sim.score.nearScore} – {sim.score.farScore}
             </Text>
@@ -498,7 +505,7 @@ const useStyles = makeStyles((c) => ({
   pauseSecondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, width: "100%", alignItems: "center", borderWidth: 1, borderColor: c.border },
   resultKicker: { color: c.accentGold, fontSize: 13, fontWeight: "800", letterSpacing: 3 },
   modalTitle: { color: c.onSurface, fontSize: 28, fontWeight: "800", marginTop: 4 },
-  teamName: { color: c.muted, fontSize: 14, fontWeight: "700", marginTop: 2 },
+  teamName: { color: c.muted, fontSize: 14, fontWeight: "700", marginTop: 2, maxWidth: "100%" },
   finalScore: { color: c.brandPrimary, fontSize: 44, fontWeight: "800", marginVertical: 8 },
   statsRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, marginVertical: 12 },
   stat: { alignItems: "center", minWidth: 70 },

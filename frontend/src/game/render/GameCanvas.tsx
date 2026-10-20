@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { Canvas, Path, Circle, Oval, Group, Skia } from "@shopify/react-native-skia";
 
 import { COURT, netHeightAt } from "../config/court";
@@ -192,6 +193,13 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
 
   return (
     <View style={{ width, height }}>
+      {/* Letterbox fill (static, drawn once): the artwork's own top/bottom edge
+          tones, visible only where the court-fit leaves spare space. */}
+      <LinearGradient
+        colors={["#D8D27D", "#BFD07A", "#D9C766", "#E3C852"]}
+        locations={[0, 0.45, 0.55, 1]}
+        style={{ position: "absolute", left: 0, top: 0, width, height }}
+      />
       {/* Painted court as a background layer (expo-image reliably decodes the
           bundled asset on Expo Go, unlike Skia's image loader). It uses the
           SAME projector scale/offset so it stays pixel-aligned with the

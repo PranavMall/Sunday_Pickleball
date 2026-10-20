@@ -102,10 +102,27 @@ export interface Projector {
 
 const ELEV_FACTOR = 0.82; // how much a foot of height reads as screen "up"
 
+// Painted-court extents in image px (from DST) and the safe screen margin the
+// projected court corners must stay inside (room for players at a sideline).
+const COURT_X_MIN = Math.min(...DST.map((p) => p.x));
+const COURT_X_MAX = Math.max(...DST.map((p) => p.x));
+const COURT_Y_MIN = Math.min(...DST.map((p) => p.y));
+const COURT_Y_MAX = Math.max(...DST.map((p) => p.y));
+export const FIT_MARGIN_X = 16; // px each side
+export const FIT_MARGIN_Y = 96; // px top/bottom (HUD above, server/near players below)
+
 export function makeProjector(screenW: number, screenH: number): Projector {
-  // Cover-fit: fill the whole screen, cropping outer scenery (never the court).
-  const scale = Math.max(screenW / IMAGE_W, screenH / IMAGE_H);
-  const offsetX = (screenW - IMAGE_W * scale) / 2;
+  // COURT-FIT: start from a cover-fit (fills the screen) but never let the
+  // scale push any of the FOUR court corners outside the safe margin — on tall
+  // phones (~19.5:9) the height-based cover crops the near corners. Any spare
+  // vertical space is letterboxed (filled with the art's edge tones behind the
+  // image). Uniform scale only — the image is never stretched.
+  const cover = Math.max(screenW / IMAGE_W, screenH / IMAGE_H);
+  const fitX = (screenW - 2 * FIT_MARGIN_X) / (COURT_X_MAX - COURT_X_MIN);
+  const fitY = (screenH - 2 * FIT_MARGIN_Y) / (COURT_Y_MAX - COURT_Y_MIN);
+  const scale = Math.min(cover, fitX, fitY);
+  // Centre the COURT horizontally; centre the image vertically.
+  const offsetX = screenW / 2 - ((COURT_X_MIN + COURT_X_MAX) / 2) * scale;
   const offsetY = (screenH - IMAGE_H * scale) / 2;
 
   const ground = (x: number, y: number) => {
