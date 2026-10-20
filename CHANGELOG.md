@@ -300,3 +300,15 @@ only; M2 Part B NOT started.
   win-rate relationships preserved (CLUB>ROOKIE, PRO>CLUB), avgLongestRally
   24.93→25.02, avgRallies 34.8→32.7, 0 kitchen faults, 0 stuck states — all
   differences attributable only to the movement-prediction correction.
+
+## Milestone 2 — Part B1: retrieval fix + kitchen gameplay + home screen (2026-06)
+
+Frozen: swipe arming, wind-up, player speed, reach, forgiveness, rally pace,
+render-loop architecture, placeholder players, SFX_ENABLED=false. No lob/smash.
+
+- **Commit 1 [sim/retrieval]** Human post-bounce retrieval: INTERCEPT, don't chase. For a bounced ball the human retriever commits to the earliest reachable low point before the 2nd bounce (`predictIntercept`), and PLANTS once the ball is within 0.8×reach. A buffered swipe now also fires when the gap stops closing (<0.02 ft/tick) or the bounced ball is low & falling to its 2nd bounce — only while the strike is legal (RuleManager). A valid swipe never expires while the human is the striker of a legally hittable ball. Human-only: AI doubles parity battery byte-identical.
+- **Commit 2 [ui/kitchen]** Kitchen button (bottom-right): NET ▲ = hold just behind the kitchen line (default, = previous automatic behaviour), BACK ▼ = retreat toward the baseline; 0.8 s cooldown bar. Decided by explicit `kitchenModeFor` (not the affinity threshold). Applies to the near team only when it has a local human; still waits for the two-bounce phase. Swipes starting on the button are ignored. Kitchen Mastery stays OFF.
+- **Commit 3 [shots/dinks]** BUG: human dinks used baseline-relative depth and landed ~6 ft from the opponent's BASELINE. Now measured from the net (1.5–6 ft) → lands in the opponent's kitchen. AI: dink exchange weight scales with kitchen sense when both sides are at the line; good players rarely speed up a low ball; less accurate dinkers sometimes float it (loopier flight → sits up → gets attacked); Rookie errs more on dinks. **[ui/cue]** "LET IT BOUNCE" pill + subtle ring on the predicted landing spot while the opponents' serve/return is unbounced.
+- **Commit 4 [render/fit]** Court-fit projection: scale = min(cover, width-fit of the court corners with 16 px margin, height-fit with 96 px margin); court centred horizontally; spare space filled with a static gradient of the art's edge tones. **[small]** `SHOW_COMING_SOON` flag (`config/features.ts`); result title "<name> wins!" and ellipsised team name; HUD serve label not rendered until identity loads; `serverPositionTests()` re-enabled. Singles diagnostic script `__tests__/singlesDiag.ts`.
+- **Commit 6 [ui/home]** Art-first home hub: profile chip, small round History/Settings icons (Ionicons via @react-native-vector-icons/ionicons), smaller title, one large PLAY, locked Coming-Soon icons (not tappable). Fullscreen: status bar hidden (home + match); Android nav bar hidden via expo-navigation-bar `<NavigationBar hidden />` (swipe to reveal).
+- Tests 138 → 194 passing.

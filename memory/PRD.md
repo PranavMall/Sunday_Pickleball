@@ -90,3 +90,7 @@ Do NOT start Part B until the user approves.
 - Verified: doubles parity byte-for-byte identical (parity.ts) before/after;
   engine suite 99 → 119 passing.
 
+
+## Milestone 2 — Part B1 (2026-06) — DONE, awaiting user device test
+- C1 human post-bounce retrieval fix (intercept/plant + legal swipe firing) · C2 kitchen button NET/BACK · C3 real dinks + let-it-bounce cue · C4 court-fit + small fixes · C6 home hub + fullscreen. (C5 not needed: no singles-specific bug.)
+- 194/194 headless tests. Next: wait for user approval before B2 (game feel, serve aim helper, lob/smash later).
