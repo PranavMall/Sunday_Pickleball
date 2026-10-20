@@ -14,6 +14,7 @@ import { updateMovement, type MovementInfo } from "../sim/movement";
 import { GameSimulation, humanShotQuality, humanServeQuality } from "../sim/GameSimulation";
 import type { BallState, Difficulty, PlayerState, Team } from "../sim/types";
 import { retrievalScenario, NEAR_LINE_Y } from "./retrieval";
+import { dinkStats } from "./dinkReport";
 
 let passed = 0;
 let failed = 0;
@@ -704,6 +705,69 @@ function kitchenButtonTests() {
   }
 }
 
+// ============== DINKS + LET-IT-BOUNCE (B1 §2–3) ==============
+function dinkTests() {
+  console.log("\n[Dinks & let-it-bounce cue]");
+  // Human dink from the near kitchen line lands in the FAR kitchen and stays low.
+  for (const power of [0.1, 0.25, 0.4]) {
+    const sim = new GameSimulation({ seed: 77, difficulty: "CLUB" });
+    const s: any = sim;
+    sim.phase = "rally"; sim.rallyStrikeCount = 6;
+    const h = sim.players[0]; h.x = 10; h.y = NEAR_LINE_Y;
+    Object.assign(sim.ball, { x: 10, y: 29, z: 1.2, vx: 0, vy: 0, vz: 0, bouncesSinceHit: 1, inPlay: true, lastHitTeam: "far" });
+    s.executeHumanHit(h, { dx: 0, dy: -50, power, tap: false }, 0);
+    eq(sim.lastHumanShot?.type, "dink", `2: short swipe at the line (p=${power}) is a dink`);
+    let land: { x: number; y: number } | null = null, apex = 0;
+    for (let i = 0; i < 240 && sim.phase === "rally"; i++) {
+      // freeze the far team so nobody volleys the dink before we read the bounce
+      for (const o of sim.players) if (o.team === "far") { o.x = o.targetX = 10; o.y = o.targetY = 1; }
+      sim.step();
+      if (!land && sim.ball.bouncesSinceHit === 1 && sim.ball.lastHitTeam === "near") land = { x: sim.ball.x, y: sim.ball.y };
+      if (land) apex = Math.max(apex, sim.ball.z);
+      if (land && sim.ball.vz < 0 && sim.ball.z < 0.3) break;
+    }
+    ok(!!land && land.y >= COURT.FAR_KITCHEN_Y && land.y < COURT.NET_Y, `2: human dink (p=${power}) lands in the opponent's kitchen (y=${land?.y.toFixed(1)})`);
+    ok(apex < 1.2, `2: human dink stays low after the bounce (apex ${apex.toFixed(2)} ft)`);
+  }
+  // AI dink exchanges: Club/Pro sustain them more than Rookie; rally length within ±15% of B1 baseline.
+  const seeds = Array.from({ length: 12 }, (_, i) => 2000 + i);
+  const r = dinkStats("ROOKIE", seeds), c = dinkStats("CLUB", seeds), p = dinkStats("PRO", seeds);
+  console.log(`  dink runs: ROOKIE ${r.avgDinkRun.toFixed(2)} CLUB ${c.avgDinkRun.toFixed(2)} PRO ${p.avgDinkRun.toFixed(2)}; opp dink share R${(r.oppDinkShare * 100).toFixed(0)}% C${(c.oppDinkShare * 100).toFixed(0)}% P${(p.oppDinkShare * 100).toFixed(0)}%`);
+  ok(c.oppDinkShare > r.oppDinkShare * 1.5 && p.oppDinkShare > r.oppDinkShare * 1.5, "2: Club/Pro dink far more than Rookie");
+  ok(c.avgDinkRun > 1.9 && p.avgDinkRun > 1.9, "2: Club/Pro sustain dink exchanges (avg run > 1.9)");
+  ok(c.highAttack > 0.8 && p.highAttack > 0.8, "2: Club/Pro attack a ball that sits up (>80% driven)");
+  ok(r.dinkApex > p.dinkApex, "2: Rookie dinks float higher (sit up) than Pro dinks");
+  // B1 baseline avg rally (strikes/point incl. serve) measured before this pass.
+  const base = { ROOKIE: 7.19, CLUB: 10.9, PRO: 13.04 };
+  const full = { ROOKIE: r, CLUB: c, PRO: p };
+  for (const d of ["ROOKIE", "CLUB", "PRO"] as const) {
+    const ratio = full[d].avgRally / base[d];
+    ok(ratio > 0.85 && ratio < 1.15, `2: ${d} avg rally within ±15% of baseline (${full[d].avgRally.toFixed(2)} vs ${base[d]})`);
+  }
+
+  // Let-it-bounce cue: opponents' serve heading to me, unbounced → cue ON; after the bounce → OFF.
+  const sim = new GameSimulation({ seed: 21, difficulty: "CLUB" });
+  sim.score = { ...sim.score, servingTeam: "far" };
+  sim.serverSlot = 2;
+  sim.setupServe();
+  let sawCue = false, cueAfterBounce = false, spotOk = false;
+  for (let i = 0; i < 60 * 5 && sim.rallyStrikeCount < 2; i++) {
+    sim.step();
+    if (sim.humanMustLetBounce()) {
+      sawCue = true;
+      if (sim.bounceCueSpot && sim.bounceCueSpot.y > COURT.NEAR_KITCHEN_Y) spotOk = true;
+    }
+    if (sim.ball.bouncesSinceHit >= 1 && sim.rallyStrikeCount === 1 && sim.humanMustLetBounce()) cueAfterBounce = true;
+  }
+  ok(sawCue, "3: 'let it bounce' cue shows while the opponents' serve is unbounced");
+  ok(spotOk, "3: the cue marks a landing spot in my service area");
+  ok(!cueAfterBounce, "3: the cue clears once the ball has bounced");
+  const late = new GameSimulation({ seed: 21, difficulty: "CLUB" });
+  late.phase = "rally"; late.rallyStrikeCount = 5;
+  Object.assign(late.ball, { lastHitTeam: "far", bouncesSinceHit: 0, inPlay: true });
+  ok(!late.humanMustLetBounce(), "3: no cue after the two-bounce phase (volleys are legal)");
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -716,6 +780,7 @@ kitchenTests();
 kitchenRuleTests();
 retrievalTests();
 kitchenButtonTests();
+dinkTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

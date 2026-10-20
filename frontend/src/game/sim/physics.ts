@@ -65,6 +65,20 @@ export function predictContact(
   return { x, y, t: horizon, bounced: bounces > 0, reachable: false };
 }
 
+// Where will the ball FIRST touch the court? (one forward sim; used for the
+// "let it bounce" cue — computed once per strike, not per frame.)
+export function firstBouncePoint(ball: BallState, dt = 1 / 60, horizon = 3): { x: number; y: number } | null {
+  let { x, y, z, vx, vy, vz } = ball;
+  for (let i = 0; i < horizon / dt; i++) {
+    x += vx * dt;
+    y += vy * dt;
+    z += vz * dt;
+    vz -= PHYS.GRAVITY * dt;
+    if (z <= 0 && vz < 0) return { x, y };
+  }
+  return null;
+}
+
 // INTERCEPT (human retrieval of a bounced ball): walk the ball's remaining path
 // up to its SECOND bounce and return the EARLIEST point that is low enough to
 // hit and that the player can reach in time from where they stand now. Because

@@ -290,7 +290,8 @@ export default function Match() {
   const gameOver = sim.phase === "game_over";
   gameOverRef.current = gameOver;
   const nearWon = sim.winner === "near";
-  const dinkCue = !paused && !gameOver && sim.humanInDinkRange();
+  const letBounceCue = !paused && !gameOver && sim.humanMustLetBounce();
+  const dinkCue = !paused && !gameOver && !letBounceCue && sim.humanInDinkRange();
   const shotLabel =
     !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
       ? sim.lastHumanShot.type.toUpperCase()
@@ -349,6 +350,11 @@ export default function Match() {
         />
       )}
 
+      {letBounceCue && (
+        <View style={[styles.bounceCue, { bottom: insets.bottom + 74 }]} pointerEvents="none" testID="let-it-bounce-cue">
+          <Text style={styles.bounceCueText}>LET IT BOUNCE</Text>
+        </View>
+      )}
       {dinkCue && (
         <View style={[styles.dinkCue, { bottom: insets.bottom + 74 }]} pointerEvents="none">
           <Text style={styles.dinkCueText}>Dink range — short swipe</Text>
@@ -475,6 +481,8 @@ const useStyles = makeStyles((c) => ({
   iconText: { color: c.onSurfaceInverse, fontSize: 18 },
   dinkCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(197,160,40,0.9)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
   dinkCueText: { color: "#1c2417", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
+  bounceCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.62)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: "rgba(197,160,40,0.8)" },
+  bounceCueText: { color: c.accentGold, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
   shotLabel: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.6)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4 },
   shotLabelText: { color: c.accentGold, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
   hint: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(46,61,42,0.78)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 9 },

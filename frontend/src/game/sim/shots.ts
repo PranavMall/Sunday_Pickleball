@@ -21,7 +21,7 @@ export function solveShot(
   targetX: number,
   targetY: number,
   shotType: ShotType,
-  opts?: { accuracy?: number; rng?: RNG; unforcedError?: number; clampInBounds?: boolean; control?: number },
+  opts?: { accuracy?: number; rng?: RNG; unforcedError?: number; clampInBounds?: boolean; control?: number; flightScale?: number },
 ): ShotResult {
   const tune = SHOTS[shotType];
   const g = PHYS.GRAVITY;
@@ -63,7 +63,7 @@ export function solveShot(
   const xAtNet = fromX + dx * fNet;
   const required = netHeightAt(Math.max(0, Math.min(COURT.WIDTH, xAtNet))) + tune.netClear;
 
-  let T = tune.flight;
+  let T = tune.flight * (opts?.flightScale ?? 1);
   // Increase arc until the ball clears the net (keeps the landing on target).
   for (let i = 0; i < 8; i++) {
     const vz = (0.5 * g * T * T - contactZ) / T;

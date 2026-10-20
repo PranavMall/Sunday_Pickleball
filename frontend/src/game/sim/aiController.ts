@@ -14,6 +14,7 @@ export interface ShotIntent {
   targetY: number;
   accuracy: number;
   unforcedError: number;
+  flightScale?: number; // >1 = loopier arc (a dink that "sits up")
 }
 
 interface Ctx {
@@ -100,6 +101,14 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
   } else if (nearKitchen && ballLow) {
     wDink += 0.5;
     wDrive -= 0.1;
+    // DINK EXCHANGE: when both sides are at the kitchen and the ball is low,
+    // patient players keep dinking (Club/Pro sustain the exchange; Rookie,
+    // with low kitchen sense, dinks less).
+    const oppAtLine = ctx.opponents.every((o) => Math.abs(o.y - reg.kitchenLineY) < 4);
+    if (oppAtLine) {
+      wDink += 0.3 + ctx.params.kitchenAffinity * 1.4;
+      wDrive -= 0.15;
+    }
   } else if (!nearKitchen) {
     wDrive += 0.15;
     wDrop += 0.25;
@@ -123,7 +132,9 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
   // or a pop-up. Frequency scales with aggressiveness so rallies always resolve
   // (no infinite dinking) while staying believable.
   if (shotType === "dink") {
-    const speedUp = 0.06 + ctx.params.aggressiveness * 0.14 + Math.max(0, ctx.bias.driveBias) * 0.2;
+    let speedUp = 0.06 + ctx.params.aggressiveness * 0.14 + Math.max(0, ctx.bias.driveBias) * 0.2;
+    // A good player rarely speeds up a LOW ball (they wait for one that sits up).
+    if (ballLow) speedUp *= 1.2 - ctx.params.shotAccuracy;
     if (ctx.rng.chance(speedUp)) shotType = "drive";
   }
 
@@ -158,6 +169,21 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
     targetY = reg.kitchenY + ctx.rng.noise(1.2);
   }
   targetX = clampX(targetX);
+
+  if (shotType === "dink") {
+    // Dink QUALITY: a less accurate dinker sometimes floats it (longer, loopier
+    // flight → higher bounce) — a ball that sits up and invites the attack.
+    // Rookie also errs more on the soft game.
+    const loose = 1 - ctx.params.shotAccuracy;
+    return {
+      shotType,
+      targetX,
+      targetY,
+      accuracy: ctx.params.shotAccuracy,
+      unforcedError: ctx.params.unforcedError * (0.6 + loose),
+      flightScale: 1 + ctx.rng.range(0, loose * 0.7),
+    };
+  }
 
   return {
     shotType,

@@ -181,6 +181,11 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
     );
   };
 
+  // "Let it bounce" cue: a subtle ring on the predicted landing spot (one Oval).
+  const letBounce = sim.humanMustLetBounce() && sim.bounceCueSpot;
+  const cue = letBounce ? projector.ground(sim.bounceCueSpot!.x, sim.bounceCueSpot!.y) : null;
+  const cueR = cue ? projector.pxPerFootAt(sim.bounceCueSpot!.y) * 0.9 : 0;
+
   const farPlayers = sim.players.filter((p) => p.team === "far").map((p) => p.slot);
   const nearPlayers = sim.players.filter((p) => p.team === "near").map((p) => p.slot);
   const ballFar = sim.ball.y < COURT.NET_Y;
@@ -212,6 +217,16 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
         <Path path={lines.boundary} style="stroke" strokeWidth={3.2} color={colors.courtLine} opacity={0.9} />
         <Path path={lines.center} style="stroke" strokeWidth={2.4} color={colors.courtLine} opacity={0.85} />
         <Path path={lines.kitchen} style="stroke" strokeWidth={2.6} color={colors.courtLine} opacity={0.9} />
+
+        {cue && (
+          <Oval
+            rect={Skia.XYWHRect(cue.x - cueR, cue.y - cueR * 0.45, cueR * 2, cueR * 0.9)}
+            style="stroke"
+            strokeWidth={2}
+            color={colors.accentGold}
+            opacity={0.8}
+          />
+        )}
 
         {/* Far team behind the net */}
         {farPlayers.map(drawPlayer)}

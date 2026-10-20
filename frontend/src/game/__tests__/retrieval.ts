@@ -97,7 +97,7 @@ export function retrievalScenario(opts: {
 // Kitchen-line standing position (just behind the near NVZ line).
 export const NEAR_LINE_Y = COURT.NEAR_KITCHEN_Y + PLAYER.KITCHEN_LINE_STANDOFF;
 
-if (require.main === module) {
+if (process.argv[1]?.includes("retrieval")) {
   const cases = [
     { name: "dink→kitchen, human at line, swipe 0.05s after bounce", o: { humanX: 13, humanY: NEAR_LINE_Y, fromX: 13, fromY: 16, targetX: 13, targetY: 25.8, shot: "dink" as ShotType, swipeDelayAfterBounce: 0.05 } },
     { name: "dink→kitchen, human at line, swipe 0.2s after bounce", o: { humanX: 13, humanY: NEAR_LINE_Y, fromX: 13, fromY: 16, targetX: 13, targetY: 25.8, shot: "dink" as ShotType, swipeDelayAfterBounce: 0.2 } },

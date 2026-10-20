@@ -13,6 +13,7 @@ import { updateMovement, STRIKE_MAX_Z, type MovementInfo } from "./movement";
 import { RuleManager, type ServeContext } from "./rules";
 import { ScoreManager } from "./score";
 import { solveShot } from "./shots";
+import { firstBouncePoint } from "./physics";
 import type {
   BallState,
   BounceEvent,
@@ -124,6 +125,9 @@ export class GameSimulation {
   kitchenMode: KitchenMode | null = null;
   private kitchenModeChangedAt = -10;
   lastHumanShot: { type: ShotType; time: number } | null = null; // for the HUD label
+  // Predicted landing spot of the current shot during the two-bounce phase
+  // (for the "let it bounce" cue). Set once per strike.
+  bounceCueSpot: { x: number; y: number } | null = null;
 
   constructor(cfg: MatchConfig | SimOptions) {
     const config = isMatchConfig(cfg) ? cfg : optionsToConfig(cfg);
@@ -629,6 +633,7 @@ export class GameSimulation {
         this.executeShot(p, intent.shotType, intent.targetX, intent.targetY, {
           accuracy: intent.accuracy,
           unforcedError: intent.unforcedError,
+          flightScale: intent.flightScale,
         });
       }
     }
@@ -799,7 +804,14 @@ export class GameSimulation {
     const downward = clamp01(input.dy / len); // 0 = pure up, 1 = pure down
     let depth = tune.maxDepth + (tune.minDepth - tune.maxDepth) * Math.min(1, power / 0.9);
     depth -= downward * 7; // backward swipe sends it long (toward/over the baseline)
-    const targetY = this.depthToY(p.team, depth);
+    let targetY = this.depthToY(p.team, depth);
+    if (shotType === "dink") {
+      // A DINK lands in the opponent's KITCHEN: depth is measured from the NET
+      // (1.5 ft for the softest touch → 6 ft, still inside the 7 ft NVZ).
+      // (Previously it used baseline-relative depth and landed deep.)
+      const fromNet = 1.5 + Math.min(1, power / INPUT.DINK_POWER_MAX) * 4.5 + downward * 7;
+      targetY = p.team === "near" ? COURT.NET_Y - fromNet : COURT.NET_Y + fromNet;
+    }
     const lateral = (input.dx / INPUT.POWER_MAX_PX) * 12;
     let targetX = p.x + lateral;
     targetX = Math.max(COURT.RADIUS_MARGIN, Math.min(COURT.WIDTH - COURT.RADIUS_MARGIN, targetX));
@@ -812,6 +824,21 @@ export class GameSimulation {
       accuracy: q.accuracy,
       unforcedError: q.unforcedError,
     });
+  }
+
+  // "LET IT BOUNCE": during the two-bounce phase, the opponents' serve or
+  // return is heading to the human's team and has not bounced yet — the human
+  // must not volley it.
+  humanMustLetBounce(): boolean {
+    const slot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
+    if (slot < 0 || this.phase !== "rally") return false;
+    const team = this.players[slot].team;
+    return (
+      this.rallyStrikeCount <= 2 &&
+      this.ball.lastHitTeam !== null &&
+      this.ball.lastHitTeam !== team &&
+      this.ball.bouncesSinceHit === 0
+    );
   }
 
   // Is the human currently positioned within dink range of their kitchen line?
@@ -833,7 +860,7 @@ export class GameSimulation {
     shotType: ShotType,
     targetX: number,
     targetY: number,
-    opts: { accuracy: number; unforcedError: number },
+    opts: { accuracy: number; unforcedError: number; flightScale?: number },
   ) {
     // Validate legality at contact BEFORE launching.
     const strikeNumber = this.rallyStrikeCount + 1;
@@ -850,7 +877,7 @@ export class GameSimulation {
     shotType: ShotType,
     targetX: number,
     targetY: number,
-    opts: { accuracy: number; unforcedError: number; isServe: boolean },
+    opts: { accuracy: number; unforcedError: number; isServe: boolean; flightScale?: number },
   ) {
     const b = this.ball;
     const wasVolley = !opts.isServe && b.bouncesSinceHit === 0 && b.z > 0.05;
@@ -904,6 +931,7 @@ export class GameSimulation {
       accuracy: opts.accuracy,
       unforcedError: 0,
       control: p.stats.control,
+      flightScale: opts.flightScale,
       rng: opts.accuracy < 1 ? this.rng : undefined,
       clampInBounds: !opts.isServe, // serves may spray out/wrong-box; rallies stay in
     });
@@ -947,6 +975,7 @@ export class GameSimulation {
 
     this.rallyStrikeCount++;
     this.stats.rallyCount = this.rallyStrikeCount;
+    this.bounceCueSpot = this.rallyStrikeCount <= 2 && !miss ? firstBouncePoint(b) : null;
     if (this.rallyStrikeCount > this.stats.longestRally) this.stats.longestRally = this.rallyStrikeCount;
     if (shotType === "dink" && !miss) this.stats.dinks++;
 
