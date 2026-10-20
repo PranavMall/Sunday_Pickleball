@@ -65,6 +65,52 @@ export function predictContact(
   return { x, y, t: horizon, bounced: bounces > 0, reachable: false };
 }
 
+// INTERCEPT (human retrieval of a bounced ball): walk the ball's remaining path
+// up to its SECOND bounce and return the EARLIEST point that is low enough to
+// hit and that the player can reach in time from where they stand now. Because
+// the trajectory is deterministic this point is stable frame-to-frame — the
+// player commits to it instead of chasing the ball's current position.
+export function predictIntercept(
+  ball: BallState,
+  team: Team,
+  px: number,
+  py: number,
+  speed: number,
+  reach: number,
+  maxZ: number,
+  dt = 1 / 60,
+  horizon = 2.6,
+): { x: number; y: number; t: number } | null {
+  let x = ball.x;
+  let y = ball.y;
+  let z = ball.z;
+  let vx = ball.vx;
+  let vy = ball.vy;
+  let vz = ball.vz;
+  let bounces = ball.bouncesSinceHit;
+  let last: { x: number; y: number; t: number } | null = null;
+  const steps = Math.floor(horizon / dt);
+  for (let i = 1; i <= steps; i++) {
+    x += vx * dt;
+    y += vy * dt;
+    z += vz * dt;
+    vz -= PHYS.GRAVITY * dt;
+    if (z <= 0 && vz < 0) {
+      z = 0;
+      vz = -vz * PHYS.BOUNCE_RESTITUTION;
+      vx *= PHYS.BOUNCE_FRICTION;
+      vy *= PHYS.BOUNCE_FRICTION;
+      bounces++;
+      if (bounces >= 2) break; // second bounce = too late
+    }
+    if (bounces < 1 || teamOfY(y) !== team || z > maxZ) continue;
+    const t = i * dt;
+    last = { x, y, t };
+    if (Math.hypot(x - px, y - py) - reach <= speed * t) return last;
+  }
+  return last;
+}
+
 // Clamp a position to a team's legal movement region (their half + kitchen).
 export function clampToHalf(team: Team, x: number, y: number): { x: number; y: number } {
   const cx = Math.max(COURT.RADIUS_MARGIN, Math.min(x, COURT.WIDTH - COURT.RADIUS_MARGIN));

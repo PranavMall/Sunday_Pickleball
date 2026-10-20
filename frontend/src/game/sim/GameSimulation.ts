@@ -9,7 +9,7 @@ import {
 import { NEUTRAL_STATS, applyChemistry, normaliseStats, type StatMultipliers } from "../config/profiles";
 import { RNG } from "../core/rng";
 import { decideServe, decideShot } from "./aiController";
-import { updateMovement, type MovementInfo } from "./movement";
+import { updateMovement, STRIKE_MAX_Z, type MovementInfo } from "./movement";
 import { RuleManager, type ServeContext } from "./rules";
 import { ScoreManager } from "./score";
 import { solveShot } from "./shots";
@@ -386,6 +386,10 @@ export class GameSimulation {
     if (humanSlot < 0) return false;
     return this.canHit[humanSlot] && this.strikerSlot === humanSlot;
   }
+  // Would striking the ball right now be legal for this player (RuleManager)?
+  private humanStrikeLegal(p: PlayerState): boolean {
+    return RuleManager.validateStrike(this.ball, p, this.rallyStrikeCount + 1, false) === null;
+  }
   humanIsServer(): boolean {
     const humanSlot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
     return this.serverSlot === humanSlot && this.phase === "waiting_serve";
@@ -399,8 +403,16 @@ export class GameSimulation {
     this.messages = this.messages.filter((m) => (m.life -= dt) > 0);
 
     // Expire a stale swipe: an input only stays valid for a short deterministic
-    // window, so an early swipe can never fire seconds later.
-    if (this.pendingInput && !this.armHeld && this.time - this.pendingInputTime > INPUT.SWIPE_BUFFER_TIME) {
+    // window, so an early swipe can never fire seconds later. EXCEPTION: while
+    // the human is the designated striker of a LEGALLY hittable ball (within
+    // reach, legal height, no rule violation) the swipe stays alive — it must
+    // not expire just because player and ball are moving together.
+    if (
+      this.pendingInput &&
+      !this.armHeld &&
+      this.time - this.pendingInputTime > INPUT.SWIPE_BUFFER_TIME &&
+      !(this.phase === "rally" && this.humanCanHit() && this.humanStrikeLegal(this.players[this.strikerSlot!]))
+    ) {
       this.pushTrace("expired", this.pendingInput, this.strikerSlot);
       this.pendingInput = null;
     }
@@ -517,7 +529,7 @@ export class GameSimulation {
       const cooldownOk = this.time - p.lastHitTime > PLAYER.HIT_COOLDOWN;
       const bounceOk = !requireBounce || this.ball.bouncesSinceHit >= 1;
       const d = Math.hypot(this.ball.x - p.x, this.ball.y - p.y);
-      const reachOk = d <= PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach && this.ball.z <= 4.6;
+      const reachOk = d <= PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach && this.ball.z <= STRIKE_MAX_Z;
       // Post-kitchen fairness: don't auto-designate a not-yet-re-established
       // player to VOLLEY an airborne ball (automatic movement must not
       // manufacture an unavoidable kitchen fault). A genuine illegal volley is
@@ -547,11 +559,19 @@ export class GameSimulation {
       const d = Math.hypot(this.ball.x - p.x, this.ball.y - p.y);
       if (d < this.humanMinDist) this.humanMinDist = d;
       const receding = d > this.humanLastDist + 1e-3;
+      // "Not closing": the gap is no longer meaningfully shrinking (e.g. the
+      // player and a slow post-bounce ball moving together). Waiting longer
+      // gains nothing, so fire instead of letting the swipe expire.
+      const notClosing = this.humanLastDist !== Infinity && this.humanLastDist - d < 0.02;
       this.humanLastDist = d;
       if (this.pendingInput && !this.pendingInput.tap) {
         const windowClosing =
           this.ball.z > 4.0 || d > PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach * 0.98;
-        if (receding || windowClosing) {
+        // A bounced ball that is low and falling toward its SECOND bounce must
+        // be taken now.
+        const lowToSecondBounce = this.ball.bouncesSinceHit >= 1 && this.ball.vz < 0 && this.ball.z < 0.9;
+        const legal = this.humanStrikeLegal(p);
+        if (receding || windowClosing || (legal && (notClosing || lowToSecondBounce))) {
           const lateness = Math.max(0, d - this.humanMinDist);
           const consumed = this.pendingInput;
           this.executeHumanHit(p, consumed, lateness);

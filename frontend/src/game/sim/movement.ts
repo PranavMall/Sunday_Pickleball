@@ -1,7 +1,12 @@
 import { COURT, teamOfY } from "../config/court";
 import { PLAYER } from "../config/tuning";
-import { predictContact, clampToHalf } from "./physics";
+import { predictContact, predictIntercept, clampToHalf } from "./physics";
 import type { BallState, PlayerState, Team } from "./types";
+
+// Highest ball the strike-eligibility check accepts (keep in sync with
+// GameSimulation.computeReach); intercepts aim a little below it.
+export const STRIKE_MAX_Z = 4.6;
+const HUMAN_MAX_Z = 4.0;
 
 // PlayerController — automatic positioning for ALL players (human included; the
 // human's skill is timing/shot choice, not steering). Predicts the interception
@@ -67,7 +72,23 @@ export function updateMovement(
 
     for (const p of mates) {
       const isServer = info.serverSlot === p.slot;
-      if (p === retriever) {
+      if (p === retriever && p.controller === "LOCAL_HUMAN" && pred.bounced && ball.bouncesSinceHit >= 1) {
+        // HUMAN post-bounce retrieval: INTERCEPT, DON'T CHASE. If the bounced
+        // ball is already within comfortable reach, PLANT (hold position) so
+        // the ball comes to the paddle; otherwise commit to the earliest
+        // reachable low point before its second bounce. (AI keeps its own
+        // behaviour — it strikes after its reaction delay.)
+        const reach = PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach;
+        const dNow = Math.hypot(ball.x - p.x, ball.y - p.y);
+        if (dNow <= reach * 0.8 && ball.z <= HUMAN_MAX_Z) {
+          p.targetX = p.x;
+          p.targetY = p.y;
+        } else {
+          const ic = predictIntercept(ball, team, p.x, p.y, PLAYER.SPEED, reach * 0.6, HUMAN_MAX_Z);
+          p.targetX = ic ? ic.x : pred.x;
+          p.targetY = ic ? ic.y : pred.y;
+        }
+      } else if (p === retriever) {
         // Go to the predicted contact point.
         const noise = info.posErrorFor(p.slot);
         p.targetX = pred.x + (noise ? rand(p.slot, ball.totalBounces) * noise : 0);

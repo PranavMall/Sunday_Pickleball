@@ -13,6 +13,7 @@ import { predictContact } from "../sim/physics";
 import { updateMovement, type MovementInfo } from "../sim/movement";
 import { GameSimulation, humanShotQuality, humanServeQuality } from "../sim/GameSimulation";
 import type { BallState, Difficulty, PlayerState, Team } from "../sim/types";
+import { retrievalScenario, NEAR_LINE_Y } from "./retrieval";
 
 let passed = 0;
 let failed = 0;
@@ -47,6 +48,7 @@ function player(partial: Partial<PlayerState>): PlayerState {
     inKitchen: false, touchingKitchenLine: false, feetEstablished: true,
     wasInKitchen: false, momentumTimer: 0, reestablishTimer: 0,
     lastHitTime: -10, reactionUntil: 0, committedToBall: false, swingCue: -10,
+    windUpCue: -10, stats: { power: 1, control: 1, spin: 1, reach: 1 }, chemistry: 1,
     ...partial,
   };
 }
@@ -624,6 +626,30 @@ function kitchenRuleTests() {
   ok(!!f3e && f3e.reason === "KITCHEN_VOLLEY", "3E: a genuine illegal kitchen volley STILL faults (rule authoritative)");
 }
 
+// ============== HUMAN POST-BOUNCE RETRIEVAL (B1 §0) ==============
+// Intercept-don't-chase + swipe firing for a LEGALLY hittable bounced ball.
+function retrievalTests() {
+  console.log("\n[Human post-bounce retrieval]");
+  const dink = { humanX: 13, humanY: NEAR_LINE_Y, fromX: 13, fromY: 16, targetX: 13, targetY: 25.8, shot: "dink" as const };
+  for (const delay of [0.0, 0.05, 0.15, 0.25]) {
+    const r = retrievalScenario({ ...dink, swipeDelayAfterBounce: delay });
+    ok(r.contact && !r.doubleBounce, `0: dink bounces in my kitchen (me at the line), swipe ${delay}s after bounce → contact before 2nd bounce`);
+    ok(!r.expired, `0: valid swipe (${delay}s after bounce) never expires while legally hittable`);
+    ok(r.minGap > 0.3, `0: player intercepts/holds instead of gluing to the ball (min gap ${r.minGap.toFixed(2)} ft)`);
+  }
+  const held = retrievalScenario({ ...dink, swipeDelayAfterBounce: 0.05, release: false });
+  ok(held.contact && !held.doubleBounce, "0: a HELD (armed) swipe after a kitchen bounce produces contact");
+  const deep = { humanX: 13, humanY: 42, fromX: 10, fromY: 10, targetX: 13, targetY: 39, shot: "drop" as const };
+  const dr = retrievalScenario({ ...deep, swipeDelayAfterBounce: 0.05 });
+  ok(dr.contact && !dr.doubleBounce && !dr.expired, "0: deep ball bouncing near my baseline → contact before 2nd bounce");
+  const dr2 = retrievalScenario({ ...deep, humanY: 35, swipeDelayAfterBounce: 0.1 });
+  ok(dr2.contact && !dr2.doubleBounce, "0: deep bounced ball with me mid-court → I back up and make contact");
+  // Out of reach: dink to the far sideline while I stand at the other sideline
+  // and partner is parked deep — the human must NOT hit it.
+  const far = retrievalScenario({ humanX: 1.5, humanY: 43, fromX: 18, fromY: 16, targetX: 19, targetY: 23.5, shot: "dink", swipeDelayAfterBounce: 0.0 });
+  ok(!far.contact, "0: a ball outside reach is still NOT hit");
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -634,6 +660,7 @@ realConfigTests();
 singlesTests();
 kitchenTests();
 kitchenRuleTests();
+retrievalTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {
