@@ -31,6 +31,8 @@ import type {
   Team,
 } from "./types";
 
+export type KitchenMode = "hold" | "retreat";
+
 export interface SwipeInput {
   dx: number; // screen swipe delta x (px)
   dy: number; // screen swipe delta y (px, up is negative)
@@ -111,7 +113,16 @@ export class GameSimulation {
   messages: FloatingMessage[] = [];
   lastFault: FaultEvent | null = null;
   winner: Team | null = null;
-  holdKitchen = false; // optional player toggle: hold near team at the kitchen
+  // KITCHEN BUTTON (near team): "hold" = advance to / hold just behind the
+  // kitchen line once the two-bounce phase allows it (the default, identical to
+  // automatic play); "retreat" = stay back toward the baseline. This only
+  // positions players relative to the line — it never means "step into the
+  // kitchen"; RuleManager alone decides re-establishment.
+  // null = automatic (all-AI near team, e.g. headless parity batteries). A near
+  // team with a local human starts in "hold" (identical to the previous
+  // automatic advance for the human + CLUB partner).
+  kitchenMode: KitchenMode | null = null;
+  private kitchenModeChangedAt = -10;
   lastHumanShot: { type: ShotType; time: number } | null = null; // for the HUD label
 
   constructor(cfg: MatchConfig | SimOptions) {
@@ -161,6 +172,7 @@ export class GameSimulation {
 
     this.players = [...makePlayers(config.near.players, "near"), ...makePlayers(config.far.players, "far")];
     this.controllers = this.players.map((p) => p.controller);
+    if (this.players.some((p) => p.team === "near" && p.controller === "LOCAL_HUMAN")) this.kitchenMode = "hold";
     this.personalities = this.players.map((p) => p.personality);
     // Nominal match difficulty (the opponents') for the overlay / analytics.
     this.difficulty = config.far.players.find((p) => p.profileId)?.profileId ?? "CLUB";
@@ -380,6 +392,18 @@ export class GameSimulation {
     }
   }
 
+  // Toggle the near team's kitchen mode. Ignored during the short cooldown.
+  toggleKitchenMode(): boolean {
+    if (this.kitchenCooldownLeft() > 0) return false;
+    this.kitchenMode = this.kitchenMode === "retreat" ? "hold" : "retreat";
+    this.kitchenModeChangedAt = this.time;
+    return true;
+  }
+  // Seconds of kitchen-button cooldown remaining (0 = available).
+  kitchenCooldownLeft(): number {
+    return Math.max(0, KITCHEN.BUTTON_COOLDOWN - (this.time - this.kitchenModeChangedAt));
+  }
+
   // Public: is the human currently able to strike?
   humanCanHit(): boolean {
     const humanSlot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
@@ -497,9 +521,9 @@ export class GameSimulation {
       rallyStrikeCount: this.rallyStrikeCount,
       serving: this.phase === "waiting_serve",
       serverSlot: this.serverSlot,
+      kitchenModeFor: (slot) => (this.players[slot].team === "near" ? this.kitchenMode : null),
       affinityFor: (slot) => {
         const p = this.players[slot];
-        if (p.team === "near" && this.holdKitchen) return 0.9;
         if (p.controller !== "AI") return 0.6;
         return this.paramsFor(slot).kitchenAffinity;
       },

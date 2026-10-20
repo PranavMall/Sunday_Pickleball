@@ -650,6 +650,60 @@ function retrievalTests() {
   ok(!far.contact, "0: a ball outside reach is still NOT hit");
 }
 
+// ============== KITCHEN BUTTON (B1 §1) ==============
+function kitchenButtonTests() {
+  console.log("\n[Kitchen button]");
+  // Ball travelling AWAY toward the far side → near players take ready spots.
+  const mk = () => ({
+    me: player({ slot: 0, team: "near", controller: "LOCAL_HUMAN", x: 14, y: 36, courtSide: "R" }),
+    mate: player({ slot: 1, team: "near", controller: "AI", x: 6, y: 36, courtSide: "L", difficulty: "CLUB" }),
+    opp: player({ slot: 2, team: "far", controller: "AI", x: 10, y: 8, courtSide: "L", difficulty: "CLUB" }),
+  });
+  const b = () => ball({ x: 10, y: 18, z: 3, vx: 0, vy: -20, vz: 2, bouncesSinceHit: 0, lastHitTeam: "near", lastHitBy: 0 });
+  const run = (mode: "hold" | "retreat") => {
+    const t = mk();
+    updateMovement([t.me, t.mate, t.opp], b(), { ...moveInfo(6), kitchenModeFor: (s) => (s < 2 ? mode : null) }, 1 / 60);
+    return t;
+  };
+  const hold = run("hold");
+  const back = run("retreat");
+  ok(Math.abs(hold.me.targetY - (COURT.NEAR_KITCHEN_Y + PLAYER.KITCHEN_LINE_STANDOFF)) < 1e-6, `1: HOLD targets just behind the kitchen line (y=${hold.me.targetY})`);
+  ok(hold.me.targetY > COURT.NEAR_KITCHEN_Y + KITCHEN.LINE_TOLERANCE, "1: HOLD never targets the line itself or the NVZ");
+  ok(back.me.targetY > COURT.LENGTH - 8, `1: RETREAT targets toward the baseline (y=${back.me.targetY})`);
+  ok(back.me.targetY - hold.me.targetY > 5, "1: HOLD vs RETREAT target positions clearly DIFFER (>5 ft)");
+  ok(back.mate.targetY - hold.mate.targetY > 5, "1: the partner follows the kitchen mode too");
+  // Two-bounce phase: HOLD does not rush before the rules allow (strike < 2).
+  const early = mk();
+  updateMovement([early.me, early.mate, early.opp], b(), { ...moveInfo(1), kitchenModeFor: (s) => (s < 2 ? "hold" : null) }, 1 / 60);
+  ok(early.me.targetY > COURT.LENGTH - 8, "1: HOLD waits for the two-bounce phase before advancing");
+
+  // Sim toggle + cooldown.
+  const sim = new GameSimulation({ seed: 9, difficulty: "CLUB" });
+  eq(sim.kitchenMode, "hold", "1: default kitchen mode is HOLD (= previous automatic behaviour)");
+  ok(sim.toggleKitchenMode(), "1: toggle accepted when available");
+  eq(sim.kitchenMode, "retreat", "1: toggled to RETREAT");
+  ok(sim.kitchenCooldownLeft() > 0, "1: cooldown is active right after a toggle");
+  ok(!sim.toggleKitchenMode(), "1: toggle ignored during cooldown");
+  for (let i = 0; i < Math.ceil((KITCHEN.BUTTON_COOLDOWN + 0.05) * 60); i++) sim.step();
+  ok(sim.kitchenCooldownLeft() === 0 && sim.toggleKitchenMode(), "1: toggle available again after the cooldown");
+
+  // Fairness: whole matches with the near team in RETREAT / HOLD create no
+  // extra kitchen faults and never stall.
+  for (const mode of ["hold", "retreat"] as const) {
+    let kf = 0, stuck = 0;
+    for (let i = 0; i < 6; i++) {
+      const m = new GameSimulation({ seed: 4100 + i, difficulty: "CLUB", controllers: ["AI", "AI", "AI", "AI"] });
+      m.kitchenMode = mode;
+      let t = 0;
+      while (m.phase !== "game_over" && t < 60 * 60 * 20) { m.step(); t++; }
+      if (m.phase !== "game_over") stuck++;
+      kf += m.stats.kitchenFaults;
+    }
+    ok(stuck === 0, `1: ${mode.toUpperCase()} matches complete (no stuck states)`);
+    eq(kf, 0, `1: ${mode.toUpperCase()} creates no kitchen faults`);
+  }
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -661,6 +715,7 @@ singlesTests();
 kitchenTests();
 kitchenRuleTests();
 retrievalTests();
+kitchenButtonTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

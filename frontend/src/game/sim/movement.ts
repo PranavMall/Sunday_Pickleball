@@ -16,7 +16,11 @@ const HUMAN_MAX_Z = 4.0;
 export interface MovementInfo {
   rallyStrikeCount: number;
   serving: boolean;
-  affinityFor: (slot: number) => number; // kitchen advance tendency 0..1
+  affinityFor: (slot: number) => number; // kitchen advance tendency 0..1 (AI / auto)
+  // Explicit kitchen-button mode for a slot (near team), or null = automatic.
+  // "hold" ALWAYS advances to the line (when allowed), "retreat" NEVER does —
+  // decided here explicitly, not via the affinity threshold.
+  kitchenModeFor?: (slot: number) => "hold" | "retreat" | null;
   posErrorFor: (slot: number) => number; // ft of positioning noise (AI)
   serverSlot: number | null;
 }
@@ -104,10 +108,9 @@ export function updateMovement(
         }
       } else {
         // Ready / covering position.
-        const advance =
-          !ballComingHere &&
-          info.rallyStrikeCount >= 2 &&
-          info.affinityFor(p.slot) > 0.3;
+        const mode = info.kitchenModeFor?.(p.slot) ?? null;
+        const wantsLine = mode === "hold" ? true : mode === "retreat" ? false : info.affinityFor(p.slot) > 0.3;
+        const advance = !ballComingHere && info.rallyStrikeCount >= 2 && wantsLine;
         const atKitchen = advance;
         // Singles (one player per team) covers the MIDDLE of the half; doubles
         // each cover their own service-court lane (unchanged behaviour).

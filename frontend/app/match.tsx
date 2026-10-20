@@ -7,7 +7,7 @@ import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GameSimulation, MATCH, quickMatchConfig, devSinglesConfig, type Difficulty, type MatchConfig } from "@/src/game";
-import { INPUT } from "@/src/game/config/tuning";
+import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { analytics } from "@/src/game/services/analytics";
@@ -19,6 +19,43 @@ import { makeStyles } from "@/src/theme";
 // Reserve a small edge margin from game swipe input. (The focused back handler
 // is the real Android-back protection — not this margin.)
 const EDGE_MARGIN = 24;
+// Kitchen button geometry (bottom-right, clear of the pause button and the
+// centred hint/cue pills). Swipes that START on it are ignored.
+const KB_SIZE = 64;
+const KB_RIGHT = 14;
+const KB_BOTTOM = 70; // + safe-area bottom inset
+
+// Memoised kitchen button: NET (hold the kitchen line) ↔ BACK (retreat toward
+// the baseline), with a short cooldown bar after each toggle.
+const KitchenButton = memo(function KitchenButton(props: {
+  mode: "hold" | "retreat";
+  cooldown: number; // 0..1 remaining
+  bottom: number;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const hold = props.mode === "hold";
+  const cooling = props.cooldown > 0;
+  return (
+    <Pressable
+      testID="kitchen-button"
+      accessibilityLabel={hold ? "Kitchen: holding the line. Tap to retreat" : "Kitchen: back. Tap to rush the line"}
+      onPress={props.onPress}
+      disabled={cooling}
+      style={[styles.kitchenBtn, { bottom: props.bottom }, hold ? styles.kitchenBtnHold : styles.kitchenBtnBack, cooling && styles.kitchenBtnCooling]}
+    >
+      <Text style={[styles.kitchenBtnIcon, !hold && styles.kitchenBtnIconBack]}>{hold ? "▲" : "▼"}</Text>
+      <Text style={[styles.kitchenBtnText, !hold && styles.kitchenBtnTextBack]} testID="kitchen-button-state">
+        {hold ? "NET" : "BACK"}
+      </Text>
+      {cooling ? (
+        <View style={styles.kitchenCdTrack}>
+          <View style={[styles.kitchenCdFill, { width: `${Math.round(props.cooldown * 100)}%` }]} />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+});
 
 function buildMatch(difficulty: Difficulty, singles: boolean): { sim: GameSimulation; config: MatchConfig } {
   const seed = (Math.random() * 1e9) | 0;
@@ -181,9 +218,17 @@ export default function Match() {
     return { dx: tx, dy: ty, power: Math.min(1, len / INPUT.POWER_MAX_PX), tap: len < INPUT.MIN_SWIPE, len };
   }, []);
 
+  // A swipe that starts on the kitchen button is not a game swipe.
+  const onKitchenBtn = useCallback(
+    (x: number, y: number) =>
+      x >= width - KB_RIGHT - KB_SIZE - 6 && y >= height - insets.bottom - KB_BOTTOM - KB_SIZE - 6 && y <= height - insets.bottom - KB_BOTTOM + 6,
+    [width, height, insets.bottom],
+  );
+
   const onGestureUpdate = useCallback(
-    (tx: number, ty: number, startX: number) => {
+    (tx: number, ty: number, startX: number, startY: number) => {
       if (startX < EDGE_MARGIN || startX > width - EDGE_MARGIN) return;
+      if (onKitchenBtn(startX, startY)) return;
       const i = toInput(tx, ty);
       if (i.len < INPUT.MIN_SWIPE) return; // not yet a clear swipe
       if (!armedRef.current) {
@@ -193,20 +238,20 @@ export default function Match() {
         sim.updateArmedSwipe(i);
       }
     },
-    [sim, width, toInput],
+    [sim, width, toInput, onKitchenBtn],
   );
 
   const onGestureEnd = useCallback(
-    (tx: number, ty: number, startX: number) => {
+    (tx: number, ty: number, startX: number, startY: number) => {
       const i = toInput(tx, ty);
       if (armedRef.current) {
         sim.releaseSwipe(i); // finalise the armed snapshot (or no-op if consumed)
-      } else if (startX >= EDGE_MARGIN && startX <= width - EDGE_MARGIN) {
+      } else if (startX >= EDGE_MARGIN && startX <= width - EDGE_MARGIN && !onKitchenBtn(startX, startY)) {
         sim.submitSwipe(i); // a tap / short swipe (serve release / no-op)
       }
       armedRef.current = false;
     },
-    [sim, width, toInput],
+    [sim, width, toInput, onKitchenBtn],
   );
 
   const resetArmed = useCallback(() => {
@@ -218,10 +263,10 @@ export default function Match() {
       Gesture.Pan()
         .minDistance(0)
         .onUpdate((e) => {
-          runOnJS(onGestureUpdate)(e.translationX, e.translationY, e.x - e.translationX);
+          runOnJS(onGestureUpdate)(e.translationX, e.translationY, e.x - e.translationX, e.y - e.translationY);
         })
         .onEnd((e) => {
-          runOnJS(onGestureEnd)(e.translationX, e.translationY, e.x - e.translationX);
+          runOnJS(onGestureEnd)(e.translationX, e.translationY, e.x - e.translationX, e.y - e.translationY);
         })
         .onFinalize(() => {
           runOnJS(resetArmed)();
@@ -237,6 +282,9 @@ export default function Match() {
     setPaused(false);
   };
   const goMenu = () => router.replace("/");
+  const toggleKitchen = useCallback(() => {
+    if (!pausedRef.current) sim.toggleKitchenMode();
+  }, [sim]);
   const toggleMute = () => sfx.toggleMuted().then(setMuted);
 
   const gameOver = sim.phase === "game_over";
@@ -291,6 +339,15 @@ export default function Match() {
         playerName={identity.playerName}
         onPause={() => setPaused((p) => !p)}
       />
+
+      {!gameOver && (
+        <KitchenButton
+          mode={sim.kitchenMode ?? "hold"}
+          cooldown={Math.ceil((sim.kitchenCooldownLeft() / KITCHEN.BUTTON_COOLDOWN) * 10) / 10}
+          bottom={insets.bottom + KB_BOTTOM}
+          onPress={toggleKitchen}
+        />
+      )}
 
       {dinkCue && (
         <View style={[styles.dinkCue, { bottom: insets.bottom + 74 }]} pointerEvents="none">
@@ -444,6 +501,16 @@ const useStyles = makeStyles((c) => ({
   secondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, alignItems: "center", flex: 1, borderWidth: 1, borderColor: c.border },
   secondaryText: { color: c.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
   resultRow: { flexDirection: "row", gap: 12, marginTop: 12, width: "100%" },
+  kitchenBtn: { position: "absolute", right: KB_RIGHT, width: KB_SIZE, height: KB_SIZE, borderRadius: KB_SIZE / 2, alignItems: "center", justifyContent: "center", borderWidth: 2 },
+  kitchenBtnHold: { backgroundColor: "rgba(197,160,40,0.92)", borderColor: "#FBF6E9" },
+  kitchenBtnBack: { backgroundColor: "rgba(46,61,42,0.82)", borderColor: "rgba(251,246,233,0.55)" },
+  kitchenBtnCooling: { opacity: 0.6 },
+  kitchenBtnIcon: { color: "#1c2417", fontSize: 14, fontWeight: "900", lineHeight: 16 },
+  kitchenBtnIconBack: { color: c.onSurfaceInverse },
+  kitchenBtnText: { color: "#1c2417", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+  kitchenBtnTextBack: { color: c.onSurfaceInverse },
+  kitchenCdTrack: { position: "absolute", bottom: 9, left: 14, right: 14, height: 3, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.25)", overflow: "hidden" },
+  kitchenCdFill: { height: 3, backgroundColor: "#FBF6E9" },
   rotate: { flex: 1, backgroundColor: c.surfaceInverse, alignItems: "center", justifyContent: "center", padding: 32 },
   rotateEmoji: { fontSize: 48, marginBottom: 16 },
   rotateText: { color: c.onSurfaceInverse, fontSize: 18, fontWeight: "600", textAlign: "center" },

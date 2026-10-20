@@ -90,6 +90,7 @@ export const KITCHEN = {
   MOMENTUM_WINDOW: 0.6, // s after a volley in which entering NVZ is a fault
   REESTABLISH_TIME: 0.25, // s of both feet out required before a legal volley
   LINE_TOLERANCE: 0.25, // ft, treated as "touching" the kitchen line
+  BUTTON_COOLDOWN: 0.8, // s after a kitchen-button toggle before it can toggle again
 } as const;
 
 export const MATCH = {
