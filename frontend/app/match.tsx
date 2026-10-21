@@ -20,18 +20,23 @@ import { makeStyles } from "@/src/theme";
 // Reserve a small edge margin from game swipe input. (The focused back handler
 // is the real Android-back protection — not this margin.)
 const EDGE_MARGIN = 24;
-// Kitchen button geometry (bottom-right, clear of the pause button and the
-// centred hint/cue pills). Swipes that START on it are ignored.
+// TACTICAL ROW (bottom-right, inside the bottom safe area): LOB + NET/BACK,
+// same size, side by side. Clear of the pause button (top-right) and the
+// centred hint/cue pills (which sit ABOVE the row). Swipes that START anywhere
+// on the row are ignored.
 const KB_SIZE = 64;
 const KB_RIGHT = 14;
-const KB_BOTTOM = 70; // + safe-area bottom inset
+const KB_BOTTOM = 14; // + safe-area bottom inset
+const KB_GAP = 10;
+const ROW_W = KB_SIZE * 2 + KB_GAP;
+const PILL_BASE = KB_BOTTOM + KB_SIZE + 12; // pills start above the row
 
 // Memoised kitchen button: NET (hold the kitchen line) ↔ BACK (retreat toward
 // the baseline), with a short cooldown bar after each toggle.
 const KitchenButton = memo(function KitchenButton(props: {
   mode: "hold" | "retreat";
   cooldown: number; // 0..1 remaining
-  bottom: number;
+  pulse: boolean; // "BACK ▼" hint right after my lob (no automatic retreat)
   onPress: () => void;
 }) {
   const styles = useStyles();
@@ -43,7 +48,7 @@ const KitchenButton = memo(function KitchenButton(props: {
       accessibilityLabel={hold ? "At the net. Tap to move back" : "Back court. Tap to rush the net"}
       onPress={props.onPress}
       disabled={cooling}
-      style={[styles.kitchenBtn, { bottom: props.bottom }, hold ? styles.kitchenBtnBack : styles.kitchenBtnHold, cooling && styles.kitchenBtnCooling]}
+      style={[styles.kitchenBtn, hold ? styles.kitchenBtnBack : styles.kitchenBtnHold, cooling && styles.kitchenBtnCooling, props.pulse && styles.kitchenBtnPulse]}
     >
       {/* Shows the ACTION a tap performs; the small dot row shows where we are now. */}
       <Text style={[styles.kitchenBtnText, hold && styles.kitchenBtnTextBack]} testID="kitchen-button-state">
@@ -57,6 +62,22 @@ const KitchenButton = memo(function KitchenButton(props: {
           <View style={[styles.kitchenCdFill, { width: `${Math.round(props.cooldown * 100)}%` }]} />
         </View>
       ) : null}
+    </Pressable>
+  );
+});
+
+// LOB arm button: tap arms my next strike as a lob; tap again to clear.
+const LobButton = memo(function LobButton(props: { armed: boolean; onPress: () => void }) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      testID="lob-button"
+      accessibilityLabel={props.armed ? "Lob armed. Tap to cancel" : "Arm a lob for my next shot"}
+      onPress={props.onPress}
+      style={[styles.kitchenBtn, props.armed ? styles.lobArmed : styles.kitchenBtnBack]}
+    >
+      <Text style={[styles.kitchenBtnText, !props.armed && styles.kitchenBtnTextBack]} testID="lob-button-state">LOB</Text>
+      <Text style={[styles.kitchenBtnNow, !props.armed && styles.kitchenBtnTextBack]}>{props.armed ? "● ARMED" : "tap to arm"}</Text>
     </Pressable>
   );
 });
@@ -141,6 +162,7 @@ export default function Match() {
   const gameOverRef = useRef(false);
   const loggedRef = useRef(false);
   const armedRef = useRef(false); // one armed swipe per physical gesture
+  const gestureT0 = useRef(0); // touch-down time (ms) for the stable speed signal
 
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
   const projector = useMemo(() => makeProjector(width, height), [width, height]);
@@ -220,17 +242,24 @@ export default function Match() {
   }, [sim, config, difficulty, humanSlot]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
+  // speed = average px/s since touch-down with a clamped minimum elapsed time
+  // (stable; a tiny instant flick can't read as fast), capped.
   const toInput = useCallback((tx: number, ty: number) => {
     const len = Math.hypot(tx, ty);
-    return { dx: tx, dy: ty, power: Math.min(1, len / INPUT.POWER_MAX_PX), tap: len < INPUT.MIN_SWIPE, len };
+    const elapsed = Math.max(INPUT.SPEED_MIN_ELAPSED, (Date.now() - gestureT0.current) / 1000);
+    const speed = Math.min(INPUT.SPEED_CAP, len / elapsed);
+    return { dx: tx, dy: ty, power: Math.min(1, len / INPUT.POWER_MAX_PX), tap: len < INPUT.MIN_SWIPE, len, speed };
   }, []);
 
-  // A swipe that starts on the kitchen button is not a game swipe.
+  // A swipe that starts anywhere on the tactical row is not a game swipe.
   const onKitchenBtn = useCallback(
     (x: number, y: number) =>
-      x >= width - KB_RIGHT - KB_SIZE - 6 && y >= height - insets.bottom - KB_BOTTOM - KB_SIZE - 6 && y <= height - insets.bottom - KB_BOTTOM + 6,
+      x >= width - KB_RIGHT - ROW_W - 8 && y >= height - insets.bottom - KB_BOTTOM - KB_SIZE - 8 && y <= height - insets.bottom - KB_BOTTOM + 8,
     [width, height, insets.bottom],
   );
+  const onGestureBegin = useCallback(() => {
+    gestureT0.current = Date.now();
+  }, []);
 
   const onGestureUpdate = useCallback(
     (tx: number, ty: number, startX: number, startY: number) => {
@@ -269,6 +298,9 @@ export default function Match() {
     () =>
       Gesture.Pan()
         .minDistance(0)
+        .onBegin(() => {
+          runOnJS(onGestureBegin)();
+        })
         .onUpdate((e) => {
           runOnJS(onGestureUpdate)(e.translationX, e.translationY, e.x - e.translationX, e.y - e.translationY);
         })
@@ -278,7 +310,7 @@ export default function Match() {
         .onFinalize(() => {
           runOnJS(resetArmed)();
         }),
-    [onGestureUpdate, onGestureEnd, resetArmed],
+    [onGestureUpdate, onGestureEnd, resetArmed, onGestureBegin],
   );
 
   const rematch = () => {
@@ -292,13 +324,22 @@ export default function Match() {
   const toggleKitchen = useCallback(() => {
     if (!pausedRef.current) sim.toggleKitchenMode();
   }, [sim]);
+  const toggleLob = useCallback(() => {
+    if (!pausedRef.current) sim.toggleLob();
+  }, [sim]);
   const toggleMute = () => sfx.toggleMuted().then(setMuted);
 
   const gameOver = sim.phase === "game_over";
   gameOverRef.current = gameOver;
   const nearWon = sim.winner === "near";
   const letBounceCue = !paused && !gameOver && sim.humanMustLetBounce();
-  const dinkCue = !paused && !gameOver && !letBounceCue && sim.humanInDinkRange();
+  const smashCue = !paused && !gameOver && !letBounceCue && sim.humanSmashCue();
+  const dinkCue = !paused && !gameOver && !letBounceCue && !smashCue && sim.humanInDinkRange();
+  // Right after MY lob: pulse "BACK ▼" (a hint only — no automatic retreat).
+  const lobBackPulse =
+    !paused && !gameOver && sim.kitchenMode === "hold" && sim.lastHumanShot?.type === "lob" && sim.time - sim.lastHumanShot.time < 1.4
+      ? Math.floor(sim.time * 5) % 2 === 0
+      : false;
   const shotLabel =
     !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
       ? sim.lastHumanShot.type.toUpperCase()
@@ -350,31 +391,39 @@ export default function Match() {
       />
 
       {!gameOver && (
-        <KitchenButton
-          mode={sim.kitchenMode ?? "hold"}
-          cooldown={Math.ceil((sim.kitchenCooldownLeft() / KITCHEN.BUTTON_COOLDOWN) * 10) / 10}
-          bottom={insets.bottom + KB_BOTTOM}
-          onPress={toggleKitchen}
-        />
+        <View style={[styles.tacticalRow, { bottom: insets.bottom + KB_BOTTOM }]} testID="tactical-row">
+          <LobButton armed={sim.lobArmed} onPress={toggleLob} />
+          <KitchenButton
+            mode={sim.kitchenMode ?? "hold"}
+            cooldown={Math.ceil((sim.kitchenCooldownLeft() / KITCHEN.BUTTON_COOLDOWN) * 10) / 10}
+            pulse={lobBackPulse}
+            onPress={toggleKitchen}
+          />
+        </View>
       )}
 
       {letBounceCue && (
-        <View style={[styles.bounceCue, { bottom: insets.bottom + 74 }]} pointerEvents="none" testID="let-it-bounce-cue">
+        <View style={[styles.bounceCue, { bottom: insets.bottom + PILL_BASE + 50 }]} pointerEvents="none" testID="let-it-bounce-cue">
           <Text style={styles.bounceCueText}>LET IT BOUNCE</Text>
         </View>
       )}
       {dinkCue && (
-        <View style={[styles.dinkCue, { bottom: insets.bottom + 74 }]} pointerEvents="none">
+        <View style={[styles.dinkCue, { bottom: insets.bottom + PILL_BASE + 50 }]} pointerEvents="none">
           <Text style={styles.dinkCueText}>Dink range — short swipe</Text>
         </View>
       )}
+      {smashCue && (
+        <View style={[styles.smashCue, { bottom: insets.bottom + PILL_BASE + 50 }]} pointerEvents="none" testID="smash-cue">
+          <Text style={styles.smashCueText}>SMASH!</Text>
+        </View>
+      )}
       {shotLabel && (
-        <View style={[styles.shotLabel, { bottom: insets.bottom + 108 }]} pointerEvents="none">
+        <View style={[styles.shotLabel, { bottom: insets.bottom + PILL_BASE + 84 }]} pointerEvents="none">
           <Text style={styles.shotLabelText}>{shotLabel}</Text>
         </View>
       )}
       {serveHint ? (
-        <View style={[styles.hint, { bottom: insets.bottom + 24 }]} pointerEvents="none">
+        <View style={[styles.hint, { bottom: insets.bottom + PILL_BASE }]} pointerEvents="none">
           <Text style={styles.hintText}>{serveHint}</Text>
         </View>
       ) : null}
@@ -522,7 +571,12 @@ const useStyles = makeStyles((c) => ({
   secondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 18, alignItems: "center", flex: 1, borderWidth: 1, borderColor: c.border },
   secondaryText: { color: c.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
   resultRow: { flexDirection: "row", gap: 12, marginTop: 12, width: "100%" },
-  kitchenBtn: { position: "absolute", right: KB_RIGHT, width: KB_SIZE, height: KB_SIZE, borderRadius: KB_SIZE / 2, alignItems: "center", justifyContent: "center", borderWidth: 2 },
+  tacticalRow: { position: "absolute", right: KB_RIGHT, flexDirection: "row", gap: KB_GAP },
+  lobArmed: { backgroundColor: "rgba(214,96,60,0.95)", borderColor: "#FBF6E9" },
+  kitchenBtnPulse: { borderColor: c.accentGold, borderWidth: 4, transform: [{ scale: 1.08 }] },
+  smashCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(214,96,60,0.95)", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 5 },
+  smashCueText: { color: "#FBF6E9", fontSize: 13, fontWeight: "900", letterSpacing: 2 },
+  kitchenBtn: { width: KB_SIZE, height: KB_SIZE, borderRadius: KB_SIZE / 2, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   kitchenBtnHold: { backgroundColor: "rgba(197,160,40,0.92)", borderColor: "#FBF6E9" },
   kitchenBtnBack: { backgroundColor: "rgba(46,61,42,0.82)", borderColor: "rgba(251,246,233,0.55)" },
   kitchenBtnCooling: { opacity: 0.6 },

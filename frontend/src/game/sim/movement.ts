@@ -1,6 +1,6 @@
 import { COURT, teamOfY } from "../config/court";
-import { PLAYER } from "../config/tuning";
-import { predictContact, predictIntercept, clampToHalf, firstBouncePoint } from "./physics";
+import { PLAYER, TACTIC } from "../config/tuning";
+import { predictContact, predictIntercept, predictOverhead, clampToHalf, firstBouncePoint } from "./physics";
 import type { BallState, PlayerState, Team } from "./types";
 
 // Highest ball the strike-eligibility check accepts (keep in sync with
@@ -23,6 +23,7 @@ export interface MovementInfo {
   kitchenModeFor?: (slot: number) => "hold" | "retreat" | null;
   posErrorFor: (slot: number) => number; // ft of positioning noise (AI)
   serverSlot: number | null;
+  apexSinceHit?: number; // highest the live ball has flown since the last strike
 }
 
 function globalRight(team: Team, side: "L" | "R"): boolean {
@@ -83,10 +84,25 @@ export function updateMovement(
       }
     }
 
+    // A high lob / pop-up dropping into our FRONT/MID court: the retriever
+    // steps under it to take it as an overhead (smash height) instead of
+    // waiting for it to fall to the low contact point.
+    const overhead = retriever && info.apexSinceHit !== undefined
+      ? predictOverhead(ball, team, info.apexSinceHit, TACTIC.SMASH_MIN_APEX, 4.2)
+      : null;
+    const overheadOk = !!overhead && Math.abs(overhead.y - COURT.NET_Y) <= TACTIC.SMASH_MAX_NET_DIST - 0.5;
     for (const p of mates) {
       const isServer = info.serverSlot === p.slot;
       const humanRetriever = p === retriever && p.controller === "LOCAL_HUMAN";
-      if (humanRetriever && !pred.bounced && deepUnbounced(ball, team)) {
+      if (p === retriever && overheadOk) {
+        p.targetX = overhead!.x;
+        p.targetY = overhead!.y;
+        // never step into the kitchen for an unbounced ball
+        const kl = team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+        const standoff = PLAYER.KITCHEN_LINE_STANDOFF * 0.6;
+        if (team === "near") p.targetY = Math.max(p.targetY, kl + standoff);
+        else p.targetY = Math.min(p.targetY, kl - standoff);
+      } else if (humanRetriever && !pred.bounced && deepUnbounced(ball, team)) {
         // DEEP drive/drop: commit to the earliest reachable post-bounce point
         // (may be a step behind the baseline) instead of the volley point.
         const reach = PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach;
@@ -114,6 +130,12 @@ export function updateMovement(
         const noise = info.posErrorFor(p.slot);
         p.targetX = pred.x + (noise ? rand(p.slot, ball.totalBounces) * noise : 0);
         p.targetY = pred.y;
+        // A very FAST incoming ball (a smash): don't charge forward into it —
+        // hold depth (move laterally / back) so it can be blocked after it
+        // bounces and slows. Normal drives (< FAST_BALL_SPEED) are unaffected.
+        if (Math.hypot(ball.vx, ball.vy) > TACTIC.FAST_BALL_SPEED) {
+          p.targetY = team === "near" ? Math.max(p.targetY, p.y) : Math.min(p.targetY, p.y);
+        }
         // Don't step INTO the kitchen to volley an un-bounced ball — hold
         // behind the line (legal net play). We only enter the NVZ for a ball
         // that has already bounced there (a dink).

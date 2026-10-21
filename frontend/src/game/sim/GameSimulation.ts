@@ -1,6 +1,6 @@
 import { COURT, isInsideCourt, serviceBoxFor, teamOfY } from "../config/court";
 import { DIFFICULTY_TABLE, PARTNER_DIFFICULTY, PERSONALITY_BIAS, type AIParams } from "../config/ai";
-import { HUMAN, KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT } from "../config/tuning";
+import { HUMAN, KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT, TACTIC } from "../config/tuning";
 import {
   type MatchConfig,
   type MatchFormat,
@@ -39,6 +39,7 @@ export interface SwipeInput {
   dy: number; // screen swipe delta y (px, up is negative)
   power: number; // 0..1
   tap: boolean; // true if below movement threshold (serve release)
+  speed?: number; // px/s stable average gesture speed (0/undefined = slow)
 }
 
 export interface SimOptions {
@@ -131,6 +132,13 @@ export class GameSimulation {
   // Predicted landing spot of the current shot during the two-bounce phase
   // (for the "let it bounce" cue). Set once per strike.
   bounceCueSpot: { x: number; y: number } | null = null;
+  // LOB ARM (near human): the next legal strike by ME is a lob. Clears on my
+  // team's next strike (mine or my partner's), at point end, or a second tap.
+  lobArmed = false;
+  // Shot type of the last real strike (AI reads an incoming smash → block).
+  lastShotType: ShotType | null = null;
+  // Highest the ball has flown since the last strike (a "high ball" for smash).
+  apexSinceHit = 0;
 
   constructor(cfg: MatchConfig | SimOptions) {
     const config = isMatchConfig(cfg) ? cfg : optionsToConfig(cfg);
@@ -323,6 +331,7 @@ export class GameSimulation {
     this.pendingInput.dx = input.dx;
     this.pendingInput.dy = input.dy;
     this.pendingInput.power = input.power;
+    this.pendingInput.speed = input.speed;
   }
 
   // Finger-up: finalise the armed snapshot and start the deterministic buffer
@@ -405,6 +414,35 @@ export class GameSimulation {
     this.kitchenMode = this.kitchenMode === "retreat" ? "hold" : "retreat";
     this.kitchenModeChangedAt = this.time;
     return true;
+  }
+  // Tap LOB: arm my next strike as a lob; a second tap clears it.
+  toggleLob(): boolean {
+    if (this.phase === "game_over") return false;
+    this.lobArmed = !this.lobArmed;
+    return this.lobArmed;
+  }
+  // Is the human in a legal SMASH window right now (high, hittable, legal)?
+  humanSmashWindow(): boolean {
+    if (this.phase !== "rally" || !this.humanCanHit() || this.lobArmed) return false;
+    return this.highBall() && this.humanStrikeLegal(this.players[this.strikerSlot!]);
+  }
+  // SMASH CUE: a high ball is coming down to ME (not yet necessarily in
+  // reach) and striking it would be legal — shown briefly ahead of contact.
+  humanSmashCue(): boolean {
+    const slot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
+    if (slot < 0 || this.phase !== "rally" || this.lobArmed) return false;
+    const h = this.players[slot];
+    const b = this.ball;
+    if (b.lastHitTeam === h.team || b.bouncesSinceHit > 0 || b.vz >= 0) return false;
+    if (b.z < TACTIC.SMASH_MIN_Z || this.apexSinceHit < TACTIC.SMASH_MIN_APEX) return false;
+    if (teamOfY(b.y) !== h.team && Math.abs(b.y - COURT.NET_Y) > 4) return false;
+    if (Math.hypot(b.x - h.x, b.y - h.y) > PLAYER.REACH * PLAYER.REACH_MULT * h.stats.reach * 1.8) return false;
+    if (!smashPositionOk(h)) return false;
+    return this.humanStrikeLegal(h);
+  }
+  // A genuinely HIGH ball: at smash height and descending from a high arc.
+  highBall(): boolean {
+    return this.ball.bouncesSinceHit === 0 && this.ball.z >= TACTIC.SMASH_MIN_Z && this.ball.vz < 0 && this.apexSinceHit >= TACTIC.SMASH_MIN_APEX;
   }
   // Seconds of kitchen-button cooldown remaining (0 = available).
   kitchenCooldownLeft(): number {
@@ -528,6 +566,7 @@ export class GameSimulation {
       rallyStrikeCount: this.rallyStrikeCount,
       serving: this.phase === "waiting_serve",
       serverSlot: this.serverSlot,
+      apexSinceHit: this.apexSinceHit,
       kitchenModeFor: (slot) => (this.players[slot].team === "near" ? this.kitchenMode : null),
       affinityFor: (slot) => {
         const p = this.players[slot];
@@ -620,7 +659,15 @@ export class GameSimulation {
       if (!p.committedToBall) {
         p.committedToBall = true;
         const prm = this.paramsFor(p.slot);
-        p.reactionUntil = this.time + prm.reactionDelay;
+        // A high lob / pop-up has been in the air long enough to read — the
+        // reaction delay is already spent watching it (makes smash windows
+        // genuinely playable; everything else keeps the normal delay).
+        // A very FAST incoming ball (a smash) needs more reaction time — so
+        // net players rarely get a smash back while deeper players, facing a
+        // bounced (slower) ball, sometimes block it. Emerges from speed.
+        const spd = Math.hypot(this.ball.vx, this.ball.vy, this.ball.vz);
+        const fastMult = 1 + Math.max(0, spd - TACTIC.FAST_BALL_SPEED) * TACTIC.FAST_BALL_REACTION_PER_FT;
+        p.reactionUntil = this.time + (this.apexSinceHit >= TACTIC.SMASH_MIN_APEX ? 0 : prm.reactionDelay * fastMult);
         // LONG-GRIND GUARD: deep into a rally (where the pressure ramp makes
         // mishits common) an unbounced ball heading OUT is let go instead of
         // being volleyed back into play, so the ramp genuinely resolves the
@@ -641,6 +688,8 @@ export class GameSimulation {
           opponents: this.players.filter((o) => o.team !== p.team),
           rng: this.rng,
           strikeNumber: this.rallyStrikeCount + 1,
+          incomingShot: this.lastShotType,
+          highBall: this.highBall() && smashPositionOk(p),
         });
         this.executeShot(p, intent.shotType, intent.targetX, intent.targetY, {
           accuracy: intent.accuracy,
@@ -663,6 +712,7 @@ export class GameSimulation {
     b.y += b.vy * dt;
     b.z += b.vz * dt;
     b.vz -= PHYS.GRAVITY * dt;
+    if (b.z > this.apexSinceHit) this.apexSinceHit = b.z;
 
     b.trail.push({ x: b.x, y: b.y, z: b.z });
     if (b.trail.length > 22) b.trail.shift();
@@ -736,6 +786,18 @@ export class GameSimulation {
 
     // Hard out-of-bounds safety (ball sailing far without a useful bounce).
     if (b.y < -12 || b.y > COURT.LENGTH + 12 || b.x < -10 || b.x > COURT.WIDTH + 10) {
+      // Already bounced IN on the receiving side (a fast smash/drive that ran
+      // away): the receiving side failed to return it — not the hitter's out.
+      if (b.bounceSideCount >= 1 && b.lastBounce && b.lastBounce.side !== b.lastHitTeam) {
+        this.registerFault({
+          reason: "DEAD_BALL",
+          faultingTeam: b.lastBounce.side,
+          x: Math.max(0, Math.min(COURT.WIDTH, b.x)),
+          y: Math.max(0, Math.min(COURT.LENGTH, b.y)),
+          message: "Winner",
+        });
+        return;
+      }
       this.registerFault({
         reason: this.serveCtx.active ? "SERVE_OUT" : "OUT",
         faultingTeam: b.lastHitTeam ?? teamOfY(b.y),
@@ -801,12 +863,7 @@ export class GameSimulation {
 
   private executeHumanHit(p: PlayerState, input: SwipeInput, lateness: number) {
     const power = input.power;
-    const kitchenLineY = p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
-    const nearKitchen = Math.abs(p.y - kitchenLineY) < INPUT.DINK_RANGE_FT || p.inKitchen;
-    let shotType: ShotType;
-    if (nearKitchen && power < INPUT.DINK_POWER_MAX) shotType = "dink";
-    else if (power < INPUT.DROP_POWER_MAX && !nearKitchen) shotType = "drop";
-    else shotType = "drive";
+    const shotType = classifyHumanShot(p, input, this.highBall() && smashPositionOk(p), this.lobArmed);
 
     // Aim from the FULL swipe vector: lateral from dx, depth from power & shot
     // type. A downward/backward swipe (dy > 0) is a mishit — it overcooks the
@@ -814,27 +871,35 @@ export class GameSimulation {
     const tune = SHOTS[shotType];
     const len = Math.hypot(input.dx, input.dy) || 1;
     const downward = clamp01(input.dy / len); // 0 = pure up, 1 = pure down
+    // Timing quality: how early/late the swipe was vs the ball's closest
+    // approach (lateness), plus height, aim and swipe-direction penalties.
+    // A smash is MEANT for a high ball: no height penalty, a little forgiving.
+    const q = humanShotQuality(shotType === "smash" ? 0 : this.ball.z, lateness, input, shotType === "smash" ? TACTIC.SMASH_FORGIVENESS : 1);
     let depth = tune.maxDepth + (tune.minDepth - tune.maxDepth) * Math.min(1, power / 0.9);
+    if (shotType === "lob") {
+      // Good lob = full + on time → deep. Weak swipe or poor timing/aim → it
+      // lands SHORT (sits up / gives the opponent a smash).
+      depth = TACTIC.LOB_BASE_DEPTH + Math.max(0, 0.55 - power) * 12 + q.errLevel * TACTIC.LOB_SHORT_PER_ERR;
+    }
     depth -= downward * 7; // backward swipe sends it long (toward/over the baseline)
     let targetY = this.depthToY(p.team, depth);
     if (shotType === "dink") {
       // A DINK lands in the opponent's KITCHEN: depth is measured from the NET
       // (1.5 ft for the softest touch → 6 ft, still inside the 7 ft NVZ).
-      // (Previously it used baseline-relative depth and landed deep.)
       const fromNet = 1.5 + Math.min(1, power / INPUT.DINK_POWER_MAX) * 4.5 + downward * 7;
       targetY = p.team === "near" ? COURT.NET_Y - fromNet : COURT.NET_Y + fromNet;
     }
     const lateral = (input.dx / INPUT.POWER_MAX_PX) * 12;
     let targetX = p.x + lateral;
-    targetX = Math.max(COURT.RADIUS_MARGIN, Math.min(COURT.WIDTH - COURT.RADIUS_MARGIN, targetX));
+    // A SMASH is not kept in for you: an extreme angle can sail wide.
+    const smash = shotType === "smash";
+    if (!smash) targetX = Math.max(COURT.RADIUS_MARGIN, Math.min(COURT.WIDTH - COURT.RADIUS_MARGIN, targetX));
 
-    // Timing quality: how early/late the swipe was vs the ball's closest
-    // approach (lateness), plus height, aim and swipe-direction penalties.
-    const q = humanShotQuality(this.ball.z, lateness, input);
     this.lastHumanShot = { type: shotType, time: this.time };
     this.executeShot(p, shotType, targetX, targetY, {
       accuracy: q.accuracy,
       unforcedError: q.unforcedError,
+      allowOut: smash,
     });
   }
 
@@ -872,7 +937,7 @@ export class GameSimulation {
     shotType: ShotType,
     targetX: number,
     targetY: number,
-    opts: { accuracy: number; unforcedError: number; flightScale?: number },
+    opts: { accuracy: number; unforcedError: number; flightScale?: number; allowOut?: boolean },
   ) {
     // Validate legality at contact BEFORE launching.
     const strikeNumber = this.rallyStrikeCount + 1;
@@ -889,7 +954,7 @@ export class GameSimulation {
     shotType: ShotType,
     targetX: number,
     targetY: number,
-    opts: { accuracy: number; unforcedError: number; isServe: boolean; flightScale?: number },
+    opts: { accuracy: number; unforcedError: number; isServe: boolean; flightScale?: number; allowOut?: boolean },
   ) {
     const b = this.ball;
     const wasVolley = !opts.isServe && b.bouncesSinceHit === 0 && b.z > 0.05;
@@ -945,7 +1010,7 @@ export class GameSimulation {
       control: p.stats.control,
       flightScale: opts.flightScale,
       rng: opts.accuracy < 1 ? this.rng : undefined,
-      clampInBounds: !opts.isServe, // serves may spray out/wrong-box; rallies stay in
+      clampInBounds: !opts.isServe && !opts.allowOut, // serves (and human smashes) may spray out
     });
 
     b.x = p.x;
@@ -975,6 +1040,10 @@ export class GameSimulation {
 
     p.lastHitTime = this.time;
     p.swingCue = this.time;
+    this.lastShotType = shotType;
+    this.apexSinceHit = b.z;
+    // An armed lob only ever applies to the very next strike by my team.
+    if (this.lobArmed && this.players.some((h) => h.controller === "LOCAL_HUMAN" && h.team === p.team)) this.lobArmed = false;
     p.committedToBall = false;
 
     // A volley from outside the kitchen starts a momentum window.
@@ -1021,6 +1090,7 @@ export class GameSimulation {
   // ---- Fault / scoring -----------------------------------------------------
   private registerFault(fault: FaultEvent) {
     this.lastFault = fault;
+    this.lobArmed = false; // point end clears an armed lob
     this.ball.inPlay = false;
     this.phase = "point_over";
     this.pointResetTimer = MATCH.POINT_RESET_DELAY;
@@ -1111,6 +1181,11 @@ function optionsToConfig(opts: SimOptions): MatchConfig {
   });
 }
 
+// Smash only from the front/mid court (not from the baseline under a deep lob).
+function smashPositionOk(p: { y: number }): boolean {
+  return Math.abs(p.y - COURT.NET_Y) <= TACTIC.SMASH_MAX_NET_DIST;
+}
+
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
@@ -1128,6 +1203,7 @@ export function humanShotQuality(
   ballZ: number,
   lateness: number,
   input: { dx: number; dy: number },
+  extraForgiveness = 1,
 ): { accuracy: number; unforcedError: number; errLevel: number } {
   const timingErr = clamp01(lateness / HUMAN.lateRangeFt);
   const zErr = ballZ > HUMAN.highZ ? Math.min(1, (ballZ - HUMAN.highZ) / HUMAN.highZRange) : 0;
@@ -1137,13 +1213,38 @@ export function humanShotQuality(
   const aimExtreme = clamp01((Math.abs(lateralFt) - HUMAN.extremeAimFt) / HUMAN.extremeAimRange);
   let errLevel = Math.max(timingErr, zErr * 0.6, downward * HUMAN.downwardPenalty);
   errLevel = Math.min(1, errLevel + aimExtreme * 0.5);
-  errLevel = Math.min(1, errLevel / HUMAN.forgiveness);
+  errLevel = Math.min(1, errLevel / (HUMAN.forgiveness * extraForgiveness));
   const accuracy = 1 - errLevel * HUMAN.maxInaccuracy;
   const unforcedError =
     errLevel > HUMAN.faultThreshold
       ? ((errLevel - HUMAN.faultThreshold) / (1 - HUMAN.faultThreshold)) * HUMAN.maxFaultChance
       : 0;
   return { accuracy, unforcedError, errLevel };
+}
+
+// HUMAN SHOT VOCABULARY (pure, unit-testable):
+//   LOB   — the LOB button armed my next strike
+//   SMASH — a high (≥ SMASH_MIN_Z) legal ball + a fast/firm swipe
+//   DRIVE — a fast swipe (stable speed ≥ DRIVE_SPEED_MIN) or a long/firm one
+//   DINK  — short + gentle near my kitchen line
+//   DROP  — short + gentle from mid/back court
+export function classifyHumanShot(
+  p: { team: Team; y: number; inKitchen: boolean },
+  input: { power: number; speed?: number },
+  highBall: boolean,
+  lobArmed: boolean,
+): ShotType {
+  if (lobArmed) return "lob";
+  const power = input.power;
+  const fast = (input.speed ?? 0) >= INPUT.DRIVE_SPEED_MIN;
+  const firm = fast || power >= INPUT.DRIVE_POWER_MIN;
+  if (highBall && firm) return "smash";
+  if (fast) return "drive";
+  const kitchenLineY = p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+  const nearKitchen = Math.abs(p.y - kitchenLineY) < INPUT.DINK_RANGE_FT || p.inKitchen;
+  if (nearKitchen && power < INPUT.DINK_POWER_MAX) return "dink";
+  if (power < INPUT.DROP_POWER_MAX && !nearKitchen) return "drop";
+  return "drive";
 }
 
 // Serve quality: the human controls the serve's timing, so quality comes from

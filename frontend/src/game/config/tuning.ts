@@ -41,7 +41,7 @@ export const SHOTS = {
   drop: { flight: 1.0, contactH: 1.3, minDepth: 0.5, maxDepth: 5, netClear: 1.0 }, // lands in/near far kitchen
   dink: { flight: 0.85, contactH: 1.1, minDepth: 0.5, maxDepth: 6, netClear: 0.35 }, // soft into kitchen
   lob: { flight: 1.55, contactH: 1.5, minDepth: 2, maxDepth: 6, netClear: 5.0 }, // M2
-  smash: { flight: 0.5, contactH: 3.4, minDepth: 3, maxDepth: 18, netClear: 0.6 }, // M2
+  smash: { flight: 0.4, contactH: 4.2, minDepth: 3, maxDepth: 18, netClear: 0.3 }, // overhead: hit from high, fast & downward
 } as const;
 
 export type ShotTuning = (typeof SHOTS)[keyof typeof SHOTS];
@@ -54,6 +54,13 @@ export const INPUT = {
   DINK_RANGE_FT: 4.5, // ft from the kitchen line counted as "dink range"
   DRIVE_POWER_MIN: 0.55,
   DROP_POWER_MAX: 0.4,
+  // DRIVE by gesture SPEED (B2 §3): average swipe speed from touch-down
+  // (swipe length / max(SPEED_MIN_ELAPSED, elapsed)), capped — a stable signal,
+  // not a single noisy velocity sample. A tiny flick can't reach the threshold
+  // because the elapsed time is clamped (needs ≥ 45 px even if instantaneous).
+  DRIVE_SPEED_MIN: 900, // px/s
+  SPEED_MIN_ELAPSED: 0.05, // s
+  SPEED_CAP: 3000, // px/s
   // A swipe is only valid for a short deterministic window; if the player can't
   // legally strike within it, the input EXPIRES so an early swipe can never
   // fire seconds later.
@@ -85,6 +92,20 @@ export const HUMAN = {
     extremeAimFt: 7,
     extremeAimRange: 7,
   },
+} as const;
+
+// Lob + smash (B2 §3). No meters / unlocks: lob is armed by the LOB button,
+// smash is contextual (a high, legally playable ball + a fast/firm swipe).
+export const TACTIC = {
+  SMASH_MIN_Z: 3.0, // ft: ball at/above this at legal contact = smash window…
+  SMASH_MIN_APEX: 5.5, // …and it must be coming DOWN from a high arc (lob / pop-up), not a flat drive
+  SMASH_MAX_NET_DIST: 13, // ft: smash only from front/mid court (a deep lob can't be smashed from the baseline)
+  FAST_BALL_SPEED: 40, // ft/s: above this an incoming ball needs extra reaction time…
+  FAST_BALL_REACTION_PER_FT: 1 / 25, // …+1× reaction delay per 25 ft/s over (drives ≈ 36 ft/s are unaffected)
+  SMASH_FORGIVENESS: 1.2, // smash error level is divided by this (forgiving at first)
+  LOB_BASE_DEPTH: 3, // ft from the receiving baseline for a full, well-timed lob
+  LOB_SHORT_PER_ERR: 14, // ft shorter per unit of timing/aim error (bad lob sits short)
+  BLOCK_ERROR_MULT: 1.6, // AI block-return of a smash: error multiplier
 } as const;
 
 // Kitchen mechanic timings.

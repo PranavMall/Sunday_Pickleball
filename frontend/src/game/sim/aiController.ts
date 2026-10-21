@@ -1,4 +1,5 @@
 import { COURT } from "../config/court";
+import { TACTIC } from "../config/tuning";
 import type { AIParams, PersonalityBias } from "../config/ai";
 import type { RNG } from "../core/rng";
 import type { BallState, PlayerState, ShotType, Team } from "./types";
@@ -23,6 +24,8 @@ interface Ctx {
   opponents: PlayerState[];
   rng: RNG;
   strikeNumber: number; // ordinal of THIS strike in the rally (serve = 1)
+  incomingShot?: ShotType | null; // the shot type we are returning
+  highBall?: boolean; // ball at smash height, descending from a high arc
 }
 
 function oppRegion(team: Team) {
@@ -101,6 +104,49 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
     };
   }
 
+  // SMASH — CONTEXT-GATED, not a weighted pick: only a genuinely high, legally
+  // playable ball (the sim only calls us once the strike is legal). Better
+  // players RECOGNISE the chance more reliably and execute it more cleanly.
+  if (ctx.highBall && ctx.rng.chance(0.3 + ctx.params.anticipation * 0.75)) {
+    return {
+      shotType: "smash",
+      targetX: clampX(gapX(ctx) + ctx.rng.noise(2)),
+      targetY: (p.team === "near" ? 8 : COURT.LENGTH - 8) + ctx.rng.noise(3),
+      accuracy: ctx.params.shotAccuracy,
+      unforcedError: ctx.params.unforcedError * (1.4 - ctx.params.shotAccuracy),
+    };
+  }
+
+  // SMASH DEFENCE: an incoming smash can only be BLOCKED — a soft reset toward
+  // the kitchen, and harder to control than a normal shot.
+  if (ctx.incomingShot === "smash") {
+    return {
+      shotType: "drop",
+      targetX: clampX(COURT.CENTER_X + ctx.rng.noise(4)),
+      targetY: reg.kitchenY + ctx.rng.noise(2.5),
+      accuracy: ctx.params.shotAccuracy * 0.85,
+      unforcedError: ctx.params.unforcedError * TACTIC.BLOCK_ERROR_MULT,
+    };
+  }
+
+  // LOB — CONTEXT-GATED: only when BOTH opponents crowd the kitchen line and
+  // the ball is too low to attack (never vs deep opponents). Rare, and Rookie
+  // lobs land short (sit up / invite the smash) far more often.
+  if (oppAtLineNow && ball.z < 2.4) {
+    const lobSense = 0.01 + ctx.params.tacticalVariety * 0.04 + Math.max(0, ctx.bias.lobBias) * 0.1;
+    if (ctx.rng.chance(lobSense)) {
+      const short = ctx.rng.range(0, (1 - ctx.params.shotAccuracy) * 16);
+      const depth = TACTIC.LOB_BASE_DEPTH + 0.5 + short;
+      return {
+        shotType: "lob",
+        targetX: clampX(gapX(ctx) + ctx.rng.noise(2)),
+        targetY: p.team === "near" ? depth : COURT.LENGTH - depth,
+        accuracy: ctx.params.shotAccuracy,
+        unforcedError: ctx.params.unforcedError,
+      };
+    }
+  }
+
   // Weighted shot selection.
   let wDrive = 0.3 + ctx.bias.driveBias + ctx.params.aggressiveness * 0.35;
   let wDink = 0.25 + ctx.bias.dinkBias + ctx.params.kitchenAffinity * 0.3;
@@ -119,7 +165,7 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
     // with low kitchen sense, dinks less). B2: softened from the B1
     // overcorrection (0.3 + affinity × 1.4) so speed-ups still appear.
     if (oppAtLineNow) {
-      wDink += 0.2 + ctx.params.kitchenAffinity * 1.05;
+      wDink += 0.22 + ctx.params.kitchenAffinity * 1.15;
       wDrive -= 0.1;
     } else {
       // Opponents still in transition / deep: attack their feet or push deep.

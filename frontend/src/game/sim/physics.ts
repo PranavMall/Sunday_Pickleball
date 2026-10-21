@@ -135,3 +135,31 @@ export function clampToHalf(team: Team, x: number, y: number, behind = 0): { x: 
   else cy = Math.max(0.6 - behind, Math.min(y, COURT.NET_Y - 0.4));
   return { x: cx, y: cy };
 }
+
+// OVERHEAD: for an unbounced ball coming down from a high arc (peak ≥ minApex,
+// including the part already flown), the first point on this team's side
+// where it descends through smash height — the spot to stand to take it as a
+// smash rather than waiting for it to drop. null if not a high ball.
+export function predictOverhead(
+  ball: BallState,
+  team: Team,
+  apexSoFar: number,
+  minApex: number,
+  zHit: number,
+  dt = 1 / 60,
+  horizon = 2.6,
+): { x: number; y: number; t: number } | null {
+  if (ball.bouncesSinceHit > 0) return null;
+  let { x, y, z, vx, vy, vz } = ball;
+  let apex = Math.max(apexSoFar, z);
+  for (let i = 1; i <= horizon / dt; i++) {
+    x += vx * dt;
+    y += vy * dt;
+    z += vz * dt;
+    vz -= PHYS.GRAVITY * dt;
+    if (z > apex) apex = z;
+    if (z <= 0) return null;
+    if (vz < 0 && z <= zHit && teamOfY(y) === team) return apex >= minApex ? { x, y, t: i * dt } : null;
+  }
+  return null;
+}

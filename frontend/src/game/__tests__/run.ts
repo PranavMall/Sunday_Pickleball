@@ -11,11 +11,12 @@ import { RuleManager } from "../sim/rules";
 import { ScoreManager } from "../sim/score";
 import { predictContact } from "../sim/physics";
 import { updateMovement, type MovementInfo } from "../sim/movement";
-import { GameSimulation, humanShotQuality, humanServeQuality } from "../sim/GameSimulation";
+import { GameSimulation, classifyHumanShot, humanShotQuality, humanServeQuality } from "../sim/GameSimulation";
 import type { BallState, Difficulty, PlayerState, Team } from "../sim/types";
 import { retrievalScenario, NEAR_LINE_Y } from "./retrieval";
 import { dinkStats } from "./dinkReport";
 import { shotMix } from "./shotMix";
+import { humanLobOutcomes, humanSmashScenario, humanShotMixScript, lobClearTests } from "./humanTactics";
 
 let passed = 0;
 let failed = 0;
@@ -802,6 +803,44 @@ function dinkTests() {
   ok(!late.humanMustLetBounce(), "3: no cue after the two-bounce phase (volleys are legal)");
 }
 
+// ============== SHOT VOCABULARY + LOB + SMASH (B2 §3) ==============
+function vocabularyTests() {
+  console.log("\n[Shot vocabulary, lob & smash]");
+  const at = { team: "near" as const, y: NEAR_LINE_Y, inKitchen: false };
+  const mid = { team: "near" as const, y: 37, inKitchen: false };
+  const T = INPUT.DRIVE_SPEED_MIN;
+  eq(classifyHumanShot(at, { power: 0.25, speed: T - 50 }, false, false), "dink", `3: short gentle swipe at the line (speed ${T - 50}px/s) = DINK`);
+  eq(classifyHumanShot(at, { power: 0.25, speed: T + 50 }, false, false), "drive", `3: short FAST swipe at the line (speed ${T + 50}px/s) = DRIVE (speed-up)`);
+  eq(classifyHumanShot(mid, { power: 0.3, speed: T - 50 }, false, false), "drop", "3: short gentle swipe from mid court = DROP");
+  eq(classifyHumanShot(mid, { power: 0.3, speed: T + 50 }, false, false), "drive", "3: fast swipe from mid court = DRIVE");
+  eq(classifyHumanShot(mid, { power: 0.7, speed: 300 }, false, false), "drive", "3: long/firm swipe = DRIVE (unchanged)");
+  eq(classifyHumanShot(at, { power: 0.2, speed: 0 }, false, true), "lob", "3: armed LOB → my strike is a lob");
+  eq(classifyHumanShot(at, { power: 0.3, speed: T + 50 }, true, false), "smash", "3: high ball + fast swipe = SMASH");
+  eq(classifyHumanShot(at, { power: 0.2, speed: T - 50 }, true, false), "dink", "3: high ball + gentle swipe is NOT a smash");
+  // Tiny flick: the speed signal clamps elapsed time, so a 30 px instant flick
+  // reads 30 / 0.05 = 600 px/s — below the drive threshold.
+  const flick = Math.min(INPUT.SPEED_CAP, 30 / Math.max(INPUT.SPEED_MIN_ELAPSED, 0.01));
+  ok(flick < T, `3: a tiny 30 px flick (${flick} px/s) can't become a drive`);
+  const quick = Math.min(INPUT.SPEED_CAP, 120 / Math.max(INPUT.SPEED_MIN_ELAPSED, 0.1));
+  ok(quick >= T, `3: a 120 px swipe in 0.1 s (${quick} px/s) is a drive`);
+
+  for (const r of lobClearTests()) ok(r.ok, r.name);
+
+  const sm = humanSmashScenario();
+  console.log(`  human smash: good ${sm.goodIn}/${sm.goodN} in, mistimed/extreme ${sm.badOut}/${sm.badN} out`);
+  ok(sm.goodIn / sm.goodN >= 0.9, "3: a well-timed, sensibly-aimed smash stays in (≥90%)");
+  ok(sm.badOut > 0, "3: mistimed / extreme-angle smashes can go out");
+  ok(sm.cueSeen, "3: the SMASH cue shows while a high ball drops to me");
+
+  const lo = humanLobOutcomes();
+  console.log(`  human lob outcomes: ${JSON.stringify(lo)}`);
+  ok(lo.good.deep === 6, "3: a good lob (full + on time) lands deep");
+  ok(lo.bad.short + lo.bad.sits === 6 && lo.bad.short > 0, "3: a weak / mistimed lob lands short or sits up");
+  const mix = humanShotMixScript();
+  console.log(`  scripted human shot mix: ${JSON.stringify(mix.mix)}  (lobs deep/sits/short ${mix.lobDeep}/${mix.lobSits}/${mix.lobShort})`);
+  for (const t of ["dink", "drop", "drive", "lob"]) ok((mix.mix[t] ?? 0) > 0, `3: scripted human produced ${t}s`);
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -816,6 +855,7 @@ kitchenRuleTests();
 retrievalTests();
 kitchenButtonTests();
 dinkTests();
+vocabularyTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {
