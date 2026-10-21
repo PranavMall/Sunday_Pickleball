@@ -17,6 +17,7 @@ import { retrievalScenario, NEAR_LINE_Y } from "./retrieval";
 import { dinkStats } from "./dinkReport";
 import { shotMix } from "./shotMix";
 import { humanLobOutcomes, humanSmashScenario, humanShotMixScript, lobClearTests } from "./humanTactics";
+import { twoBounceTests } from "./twoBounce";
 
 let passed = 0;
 let failed = 0;
@@ -841,6 +842,11 @@ function vocabularyTests() {
   for (const t of ["dink", "drop", "drive", "lob"]) ok((mix.mix[t] ?? 0) > 0, `3: scripted human produced ${t}s`);
 }
 
+function b3TwoBounceTests() {
+  console.log("\n[B3 §1 visible + enforceable two-bounce]");
+  for (const r of twoBounceTests()) { if (r.info) console.log(`  ${r.name}: ${r.info}`); ok(r.ok, r.name); }
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -856,6 +862,7 @@ retrievalTests();
 kitchenButtonTests();
 dinkTests();
 vocabularyTests();
+b3TwoBounceTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

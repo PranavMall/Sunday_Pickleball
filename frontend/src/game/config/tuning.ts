@@ -108,6 +108,18 @@ export const TACTIC = {
   BLOCK_ERROR_MULT: 1.6, // AI block-return of a smash: error multiplier
 } as const;
 
+// B3 §1 — VISIBLE + ENFORCEABLE TWO-BOUNCE RULE (serve return + third shot only).
+export const TWO_BOUNCE = {
+  // Minimum time between the required bounce and contact (human + AI) so the
+  // bounce is perceptible. 6 frames at 60 fps. Later rally contacts unaffected.
+  VISIBLE_DELAY: 0.1, // s
+  // A human swipe made while the UNBOUNCED ball is within strike reach and this
+  // close (or closer) to its bounce is read as an intended groundstroke and
+  // stays buffered until after the legal bounce. Farther from the bounce = a
+  // clear airborne volley → RuleManager calls TWO_BOUNCE.
+  GRACE: 0.25, // s before the predicted first bounce
+} as const;
+
 // Kitchen mechanic timings.
 export const KITCHEN = {
   MOMENTUM_WINDOW: 0.6, // s after a volley in which entering NVZ is a fault

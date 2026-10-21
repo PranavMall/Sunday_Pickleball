@@ -1,6 +1,6 @@
 import { COURT, isInsideCourt, serviceBoxFor, teamOfY } from "../config/court";
 import { DIFFICULTY_TABLE, PARTNER_DIFFICULTY, PERSONALITY_BIAS, type AIParams } from "../config/ai";
-import { HUMAN, KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT, TACTIC } from "../config/tuning";
+import { HUMAN, KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT, TACTIC, TWO_BOUNCE } from "../config/tuning";
 import {
   type MatchConfig,
   type MatchFormat,
@@ -144,6 +144,11 @@ export class GameSimulation {
   lastPoint = { time: -10, winner: null as Team | null };
   // Highest the ball has flown since the last strike (a "high ball" for smash).
   apexSinceHit = 0;
+  // Sim time of the last court bounce (two-bounce visibility delay).
+  private lastBounceAt = -10;
+  // A human swipe read as a clear airborne volley in the two-bounce phase;
+  // executed (and faulted by RuleManager) on the next step.
+  private volleyAttempt = false;
 
   constructor(cfg: MatchConfig | SimOptions) {
     const config = isMatchConfig(cfg) ? cfg : optionsToConfig(cfg);
@@ -315,6 +320,7 @@ export class GameSimulation {
     this.armHeld = false;
     this.pushTrace("received", input, this.strikerSlot);
     this.maybeWindUp(input);
+    this.volleyAttempt = this.isClearAirborneVolley(input);
   }
 
   // Finger-DOWN path (low latency): arm ONE swipe for the gesture as soon as it
@@ -328,6 +334,25 @@ export class GameSimulation {
     this.pushTrace("received", input, this.strikerSlot);
     this.pushTrace("buffered", input, this.strikerSlot);
     this.maybeWindUp(input);
+    this.volleyAttempt = this.isClearAirborneVolley(input);
+  }
+
+  // TWO-BOUNCE (human, serve return / third shot only): is this fresh swipe a
+  // CLEAR airborne volley? The opponents' unbounced ball must already be within
+  // realistic strike reach AND more than the grace window from its bounce.
+  // Otherwise (out of reach, or just before it lands) the swipe stays buffered
+  // as an intended groundstroke — the existing forgiving behaviour.
+  private isClearAirborneVolley(input: SwipeInput): boolean {
+    if (input.tap || this.phase !== "rally" || this.rallyStrikeCount >= 3) return false;
+    const slot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
+    if (slot < 0) return false;
+    const h = this.players[slot];
+    const b = this.ball;
+    if (!b.inPlay || b.lastHitTeam === h.team || b.bouncesSinceHit > 0 || b.z <= 0.05 || b.z > STRIKE_MAX_Z) return false;
+    if (teamOfY(b.y) !== h.team || this.time - h.lastHitTime <= PLAYER.HIT_COOLDOWN) return false;
+    if (Math.hypot(b.x - h.x, b.y - h.y) > PLAYER.REACH * PLAYER.REACH_MULT * h.stats.reach) return false;
+    const tBounce = (b.vz + Math.sqrt(b.vz * b.vz + 2 * PHYS.GRAVITY * b.z)) / PHYS.GRAVITY;
+    return tBounce > TWO_BOUNCE.GRACE;
   }
 
   // Refresh the armed swipe's dx/dy/power from the latest finger position.
@@ -559,6 +584,20 @@ export class GameSimulation {
     }
 
     // RALLY
+    // A clear human airborne volley in the two-bounce phase: execute it so the
+    // authoritative RuleManager calls TWO_BOUNCE (never decided here).
+    if (this.volleyAttempt) {
+      this.volleyAttempt = false;
+      const slot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
+      if (this.pendingInput && slot >= 0 && this.ball.bouncesSinceHit === 0) {
+        const consumed = this.pendingInput;
+        this.pendingInput = null;
+        this.armHeld = false;
+        this.pushTrace("consumed", consumed, slot);
+        this.executeHumanHit(this.players[slot], consumed, 0);
+        if (this.phase !== "rally") return;
+      }
+    }
     this.integrateBall(dt);
     if (this.phase !== "rally") return; // a fault may have ended the point
 
@@ -646,7 +685,12 @@ export class GameSimulation {
         // be taken now.
         const lowToSecondBounce = this.ball.bouncesSinceHit >= 1 && this.ball.vz < 0 && this.ball.z < 0.9;
         const legal = this.humanStrikeLegal(p);
-        if (receding || windowClosing || (legal && (notClosing || lowToSecondBounce))) {
+        // Two-bounce phase: let the required bounce be SEEN — hold a legal
+        // contact for VISIBLE_DELAY after the bounce unless the ball is about
+        // to leave reach (never lose the ball to the delay).
+        const bounceHold =
+          this.rallyStrikeCount < 3 && !windowClosing && !lowToSecondBounce && this.time - this.lastBounceAt < TWO_BOUNCE.VISIBLE_DELAY - 1e-6;
+        if (!bounceHold && (receding || windowClosing || (legal && (notClosing || lowToSecondBounce)))) {
           const lateness = Math.max(0, d - this.humanMinDist);
           const consumed = this.pendingInput;
           this.executeHumanHit(p, consumed, lateness);
@@ -672,7 +716,14 @@ export class GameSimulation {
         // bounced (slower) ball, sometimes block it. Emerges from speed.
         const spd = Math.hypot(this.ball.vx, this.ball.vy, this.ball.vz);
         const fastMult = 1 + Math.max(0, spd - TACTIC.FAST_BALL_SPEED) * TACTIC.FAST_BALL_REACTION_PER_FT;
-        p.reactionUntil = this.time + (this.apexSinceHit >= TACTIC.SMASH_MIN_APEX ? 0 : prm.reactionDelay * fastMult);
+        // The zero-reaction high-ball read applies to later rally overheads
+        // only. In the two-bounce phase (serve return / third shot) a high
+        // arc is still read in flight, but contact waits VISIBLE_DELAY after
+        // the required bounce so the bounce is seen (never on the bounce frame).
+        const twoBouncePhase = this.rallyStrikeCount < 3;
+        const highRead = this.apexSinceHit >= TACTIC.SMASH_MIN_APEX;
+        p.reactionUntil = this.time + (highRead ? 0 : prm.reactionDelay * fastMult);
+        if (twoBouncePhase) p.reactionUntil = Math.max(p.reactionUntil, this.lastBounceAt + TWO_BOUNCE.VISIBLE_DELAY);
         // LONG-GRIND GUARD: deep into a rally (where the pressure ramp makes
         // mishits common) an unbounced ball heading OUT is let go instead of
         // being volleyed back into play, so the ramp genuinely resolves the
@@ -757,6 +808,7 @@ export class GameSimulation {
       b.totalBounces++;
       b.bounceSideCount++;
       b.lastBounce = { x: b.x, y: b.y, side: teamOfY(b.y) };
+      this.lastBounceAt = this.time;
 
       // Authoritative BOUNCE event (one per court contact), separate from
       // CONTACT. Never inferred from shot type.
