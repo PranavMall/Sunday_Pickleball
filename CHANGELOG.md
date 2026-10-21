@@ -312,3 +312,18 @@ render-loop architecture, placeholder players, SFX_ENABLED=false. No lob/smash.
 - **Commit 4 [render/fit]** Court-fit projection: scale = min(cover, width-fit of the court corners with 16 px margin, height-fit with 96 px margin); court centred horizontally; spare space filled with a static gradient of the art's edge tones. **[small]** `SHOW_COMING_SOON` flag (`config/features.ts`); result title "<name> wins!" and ellipsised team name; HUD serve label not rendered until identity loads; `serverPositionTests()` re-enabled. Singles diagnostic script `__tests__/singlesDiag.ts`.
 - **Commit 6 [ui/home]** Art-first home hub: profile chip, small round History/Settings icons (Ionicons via @react-native-vector-icons/ionicons), smaller title, one large PLAY, locked Coming-Soon icons (not tappable). Fullscreen: status bar hidden (home + match); Android nav bar hidden via expo-navigation-bar `<NavigationBar hidden />` (swipe to reveal).
 - Tests 138 → 194 passing.
+
+## Milestone 2 Part B2 — B1 fixes, shot vocabulary, lob/smash, game feel (2026-06)
+Commits: 5a16ac2 (1) · e3f3ba6 (2) · b489fa3 (3) · f5d3158 (4) · 30480c1 (5). Tests: 236/236 (was 194).
+- **[kitchen button]** label shows the ACTION ("BACK ▼" at net / "NET ▲" when back) + current-state dot.
+- **[movement]** kitchen-button BACK uses its own RETREAT_DEPTH_BASELINE = 2.5 ft (AI ready depth unchanged 6.5 ft).
+- **[movement]** rally players may step RALLY_BEHIND_BASELINE = 3 ft behind their baseline; the human positions for the post-bounce intercept on a DEEP unbounced ball (was pulled forward to a volley point). Deep-drive retrieval tests added. Parity: ROOKIE avgRally 7.38→7.22, opp-win 13%→10%; CLUB/PRO ~identical.
+- **[AI]** shot balance: B1 dink boost 0.3+aff×1.4 → 0.22+aff×1.15; less speed-up reluctance; transition drives; third-shot drive (12% + aggressiveness×30%). Long-grind guard: after strike 20 the AI lets an out-bound ball go (fixed a 64-strike, 52 s PRO point).
+- **[result]** "My dinks" separate from "Match dinks".
+- **[input]** DRIVE by stable gesture speed: len / max(0.05 s, elapsed since touch-down), cap 3000 — threshold 900 px/s (30 px flick = 600 ✗, 120 px in 0.1 s = 1200 ✓). Long/firm swipes stay drives.
+- **[lob]** LOB arm button (tactical row with NET/BACK); clears on my team's next strike, point end, second tap; never times out. Good lob = deep, weak/mistimed = sits up/short. BACK ▼ pulses after my lob (hint only).
+- **[smash]** contextual: unbounced ball ≥ 3.0 ft, descending from an arc ≥ 5.5 ft, striker ≤ 13 ft from the net, + fast/firm swipe. No reach change. Human smash: no height penalty, forgiveness ×1.2, extreme aim may go wide. SMASH! cue while a high ball drops to me.
+- **[AI lob/smash]** lob only when both opponents crowd the line and the ball is low (Rookie lobs land short); smash only on genuine high balls (recognition 0.3+anticipation×0.75); smash return = block (drop, error ×1.6). Fast balls (> 40 ft/s) add reaction time and retrievers don't charge into them; high lobs: AI steps under for an overhead.
+- **[rules bug fix]** a ball that bounced IN and ran past the 12 ft safety bound was scored as the hitter's OUT; now a winner for the hitter.
+- **[feel]** body lean + follow-through, ball squash/stretch (0.09 s), one contact-flash ring per real contact, winner hop / loser slump, serve aim marker. No new Skia paths/images.
+- **[pause]** no sim steps and no re-render while paused (was 60 renders/s), immersive nav bar re-asserted on resume, DEV perf probe; loading cover until the court image + first frame are ready.
