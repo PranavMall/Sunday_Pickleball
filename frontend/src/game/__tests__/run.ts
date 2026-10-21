@@ -15,6 +15,7 @@ import { GameSimulation, humanShotQuality, humanServeQuality } from "../sim/Game
 import type { BallState, Difficulty, PlayerState, Team } from "../sim/types";
 import { retrievalScenario, NEAR_LINE_Y } from "./retrieval";
 import { dinkStats } from "./dinkReport";
+import { shotMix } from "./shotMix";
 
 let passed = 0;
 let failed = 0;
@@ -756,6 +757,26 @@ function dinkTests() {
   for (const d of ["ROOKIE", "CLUB", "PRO"] as const) {
     const ratio = full[d].avgRally / base[d];
     ok(ratio > 0.85 && ratio < 1.15, `2: ${d} avg rally within ±15% of baseline (${full[d].avgRally.toFixed(2)} vs ${base[d]})`);
+  }
+
+  // B2 §2 AI shot balance: more drives / attacks before both teams reach the
+  // kitchen than B1 (B1 pre-kitchen drive share: R30% C26% P31%), while
+  // Club/Pro still dink more than Rookie.
+  for (const d of ["ROOKIE", "CLUB", "PRO"] as const) {
+    const m = shotMix(d, seeds.slice(0, 8));
+    ok(m.earlyDriveShare > 0.33, `S2: ${d} drives regularly before the kitchen (${(m.earlyDriveShare * 100).toFixed(0)}% > 33%)`);
+    ok(m.mix.drive >= 30 && m.mix.drop >= 15 && m.mix.dink >= 12, `S2: ${d} mix has drives/drops/dinks (dink ${m.mix.dink}% drop ${m.mix.drop}% drive ${m.mix.drive}%)`);
+  }
+  // My dinks are counted separately from the match total.
+  {
+    const sim = new GameSimulation({ seed: 77, difficulty: "CLUB" });
+    const s: any = sim;
+    sim.phase = "rally"; sim.rallyStrikeCount = 6;
+    const h = sim.players[0]; h.x = 10; h.y = NEAR_LINE_Y;
+    Object.assign(sim.ball, { x: 10, y: 29, z: 1.2, vx: 0, vy: 0, vz: 0, bouncesSinceHit: 1, inPlay: true, lastHitTeam: "far" });
+    s.executeHumanHit(h, { dx: 0, dy: -50, power: 0.2, tap: false }, 0);
+    eq(sim.stats.myDinks, 1, "S2: my dink counted in myDinks");
+    eq(sim.stats.dinks, 1, "S2: …and in the match total");
   }
 
   // Let-it-bounce cue: opponents' serve heading to me, unbounced → cue ON; after the bounce → OFF.

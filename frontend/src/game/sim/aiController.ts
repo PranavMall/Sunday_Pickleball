@@ -75,6 +75,19 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
   // SERVE RETURN (strike 2) and THIRD SHOT (strike 3): deliberately soft,
   // central and MID-COURT so the other team can comfortably field it — never a
   // deep/fast winner. This is what keeps rallies alive off the serve.
+  // THIRD-SHOT DRIVE (B2 §2): the serving team sometimes drives the third
+  // shot instead of dropping it — aggressive tiers more often. Aimed mid-deep
+  // at the returner's backcourt (not a sideline winner).
+  const oppAtLineNow = ctx.opponents.every((o) => Math.abs(o.y - reg.kitchenLineY) < 4);
+  if (ctx.strikeNumber === 3 && ctx.rng.chance(0.12 + ctx.params.aggressiveness * 0.3 + Math.max(0, ctx.bias.driveBias) * 0.3)) {
+    return {
+      shotType: "drive",
+      targetX: clampX(COURT.CENTER_X + ctx.rng.noise(4)),
+      targetY: (p.team === "near" ? 9 : COURT.LENGTH - 9) + ctx.rng.noise(2),
+      accuracy: ctx.params.shotAccuracy,
+      unforcedError: ctx.params.unforcedError * 0.7,
+    };
+  }
   if (ctx.strikeNumber <= 3) {
     const returnY = p.team === "near" ? 12 : COURT.LENGTH - 12; // ~12 ft from opp baseline
     const targetX = clampX(COURT.CENTER_X + ctx.rng.noise(3.0));
@@ -103,16 +116,22 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
     wDrive -= 0.1;
     // DINK EXCHANGE: when both sides are at the kitchen and the ball is low,
     // patient players keep dinking (Club/Pro sustain the exchange; Rookie,
-    // with low kitchen sense, dinks less).
-    const oppAtLine = ctx.opponents.every((o) => Math.abs(o.y - reg.kitchenLineY) < 4);
-    if (oppAtLine) {
-      wDink += 0.3 + ctx.params.kitchenAffinity * 1.4;
-      wDrive -= 0.15;
+    // with low kitchen sense, dinks less). B2: softened from the B1
+    // overcorrection (0.3 + affinity × 1.4) so speed-ups still appear.
+    if (oppAtLineNow) {
+      wDink += 0.2 + ctx.params.kitchenAffinity * 1.05;
+      wDrive -= 0.1;
+    } else {
+      // Opponents still in transition / deep: attack their feet or push deep.
+      wDrive += 0.25;
+      wDink -= 0.2;
     }
   } else if (!nearKitchen) {
     wDrive += 0.15;
     wDrop += 0.25;
     wDink -= 0.2;
+    // TRANSITION: before both teams reach the kitchen, more drives / deep balls.
+    if (!oppAtLineNow) wDrive += 0.2;
   }
   wDrive += ctx.rng.noise(ctx.params.tacticalVariety * 0.2 + ctx.bias.paceVariety * 0.2);
   wDink += ctx.rng.noise(ctx.params.tacticalVariety * 0.2);
@@ -132,9 +151,10 @@ export function decideShot(p: PlayerState, ball: BallState, ctx: Ctx): ShotInten
   // or a pop-up. Frequency scales with aggressiveness so rallies always resolve
   // (no infinite dinking) while staying believable.
   if (shotType === "dink") {
-    let speedUp = 0.06 + ctx.params.aggressiveness * 0.14 + Math.max(0, ctx.bias.driveBias) * 0.2;
-    // A good player rarely speeds up a LOW ball (they wait for one that sits up).
-    if (ballLow) speedUp *= 1.2 - ctx.params.shotAccuracy;
+    let speedUp = 0.08 + ctx.params.aggressiveness * 0.16 + Math.max(0, ctx.bias.driveBias) * 0.2;
+    // A good player is reluctant to speed up a LOW ball (waits for one that
+    // sits up) — B2: less reluctant than B1 so attacks still come.
+    if (ballLow) speedUp *= 1.45 - ctx.params.shotAccuracy;
     if (ctx.rng.chance(speedUp)) shotType = "drive";
   }
 

@@ -150,7 +150,8 @@ export interface MatchStats {
   rallyCount: number; // strikes in current rally
   longestRally: number;
   totalRallies: number;
-  dinks: number;
+  dinks: number; // every player's dinks (match total)
+  myDinks: number; // the local human's dinks only
   kitchenFaults: number;
   pointsPlayed: number;
 }

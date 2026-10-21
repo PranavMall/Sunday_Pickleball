@@ -1,4 +1,4 @@
-import { COURT, serviceBoxFor, teamOfY } from "../config/court";
+import { COURT, isInsideCourt, serviceBoxFor, teamOfY } from "../config/court";
 import { DIFFICULTY_TABLE, PARTNER_DIFFICULTY, PERSONALITY_BIAS, type AIParams } from "../config/ai";
 import { HUMAN, KITCHEN, MATCH, PHYS, PLAYER, SHOTS, INPUT } from "../config/tuning";
 import {
@@ -71,6 +71,7 @@ export class GameSimulation {
     longestRally: 0,
     totalRallies: 0,
     dinks: 0,
+    myDinks: 0,
     kitchenFaults: 0,
     pointsPlayed: 0,
   };
@@ -110,6 +111,8 @@ export class GameSimulation {
   private strikerSlot: number | null = null;
   private humanMinDist = Infinity; // closest approach seen while human is striker
   private humanLastDist = Infinity; // previous tick distance (to detect receding)
+  // AI read "that ball is going OUT — let it go" (decided once per commit).
+  private aiLetGo: boolean[] = [false, false, false, false];
 
   messages: FloatingMessage[] = [];
   lastFault: FaultEvent | null = null;
@@ -616,8 +619,17 @@ export class GameSimulation {
     if (p.controller === "AI") {
       if (!p.committedToBall) {
         p.committedToBall = true;
-        p.reactionUntil = this.time + this.paramsFor(p.slot).reactionDelay;
+        const prm = this.paramsFor(p.slot);
+        p.reactionUntil = this.time + prm.reactionDelay;
+        // LONG-GRIND GUARD: deep into a rally (where the pressure ramp makes
+        // mishits common) an unbounced ball heading OUT is let go instead of
+        // being volleyed back into play, so the ramp genuinely resolves the
+        // point. Normal-length rallies are unaffected.
+        const fb = this.ball.bouncesSinceHit === 0 && this.rallyStrikeCount > 20 ? firstBouncePoint(this.ball) : null;
+        const goingOut = !!fb && teamOfY(fb.y) === p.team && !isInsideCourt(fb.x, fb.y);
+        this.aiLetGo[p.slot] = goingOut && this.rng.chance(0.35 + prm.anticipation * 0.55);
       }
+      if (this.aiLetGo[p.slot]) return;
       if (this.time >= p.reactionUntil) {
         // Never take a volley the rules forbid (in/near the kitchen, or before
         // feet are re-established). A good player holds and lets it bounce.
@@ -977,7 +989,10 @@ export class GameSimulation {
     this.stats.rallyCount = this.rallyStrikeCount;
     this.bounceCueSpot = this.rallyStrikeCount <= 2 && !miss ? firstBouncePoint(b) : null;
     if (this.rallyStrikeCount > this.stats.longestRally) this.stats.longestRally = this.rallyStrikeCount;
-    if (shotType === "dink" && !miss) this.stats.dinks++;
+    if (shotType === "dink" && !miss) {
+      this.stats.dinks++;
+      if (p.controller === "LOCAL_HUMAN") this.stats.myDinks++;
+    }
 
     // Emit the single authoritative contact event for this strike.
     this.contactEvents.push({

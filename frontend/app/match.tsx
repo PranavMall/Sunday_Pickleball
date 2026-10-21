@@ -439,7 +439,8 @@ export default function Match() {
             <View style={styles.statsRow}>
               <Stat label="Longest rally" value={sim.stats.longestRally} />
               <Stat label="Rallies" value={sim.stats.totalRallies} />
-              <Stat label="Dinks" value={sim.stats.dinks} />
+              <Stat label="My dinks" value={sim.stats.myDinks} />
+              <Stat label="Match dinks" value={sim.stats.dinks} />
               <Stat label="Kitchen faults" value={sim.stats.kitchenFaults} />
             </View>
             <Pressable testID="rematch-button" style={styles.primaryBtn} onPress={rematch}>
