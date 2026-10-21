@@ -128,7 +128,16 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
       sim.time - p.windUpCue < 0.25 && p.windUpCue > p.swingCue
         ? 1 - (sim.time - p.windUpCue) / 0.25
         : 0;
-    const swing = sim.time - p.swingCue < 0.25 ? 1 - (sim.time - p.swingCue) / 0.25 : 0;
+    const sinceHit = sim.time - p.swingCue;
+    const swing = sinceHit < 0.25 ? 1 - sinceHit / 0.25 : 0;
+    // Follow-through: paddle finishes across the body (0.1 → 0.4 s after contact).
+    const follow = sinceHit > 0.1 && sinceHit < 0.4 ? Math.sin(((sinceHit - 0.1) / 0.3) * Math.PI) : 0;
+    // Point reactions (first ~1.1 s of point_over): winners hop, losers slump.
+    const sincePoint = sim.time - sim.lastPoint.time;
+    const reacting = sim.phase !== "rally" && sincePoint < 1.1;
+    const won = reacting && sim.lastPoint.winner === p.team;
+    const hop = won ? Math.abs(Math.sin(sincePoint * 9)) * scale * 0.5 * (1 - sincePoint / 1.1) : 0;
+    const slump = reacting && !won ? Math.min(1, sincePoint * 4) * (1 - sincePoint / 1.1) : 0;
 
     const charColors: CharacterColors = {
       primary: teamColor,
@@ -150,7 +159,7 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
           geom={{ x: g.x, feetY, scale, globalRight }}
           colors={charColors}
           view={view}
-          anim={{ windUp, swing }}
+          anim={{ windUp, swing, follow, hop, slump }}
         />
       </Group>
     );
@@ -164,6 +173,10 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
     const ppf = projector.pxPerFootAt(b.y);
     const r = Math.max(3, ppf * 0.35);
     const shadowR = r * (1 + b.z * 0.04);
+    const sinceContact = sim.time - sim.lastContact.time;
+    const k = sinceContact >= 0 && sinceContact < 0.09 ? 1 - sinceContact / 0.09 : 0;
+    const sq = 1 + 0.38 * k * (0.5 + sim.lastContact.power); // horizontal stretch
+    const st = 1 - 0.22 * k; // vertical squash
     const trail = Skia.Path.Make();
     b.trail.forEach((t, i) => {
       const tp = projector.project(t.x, t.y, t.z);
@@ -174,13 +187,27 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
       <Group>
         <Oval rect={Skia.XYWHRect(g.x - shadowR, g.y - shadowR * 0.4, shadowR * 2, shadowR * 0.8)} color={colors.ballShadow} opacity={Math.max(0.12, 0.4 - b.z * 0.02)} />
         <Path path={trail} style="stroke" strokeWidth={r * 0.9} color={colors.ballColor} opacity={0.25} />
-        <Circle cx={proj.x} cy={proj.y} r={r} color={colors.ballColor} />
-        <Circle cx={proj.x} cy={proj.y} r={r} style="stroke" strokeWidth={1} color="#C9B400" opacity={0.7} />
+        {/* Squash & stretch for ~0.09 s after a REAL contact (Oval via numbers). */}
+        <Oval x={proj.x - r * sq} y={proj.y - r * st} width={r * 2 * sq} height={r * 2 * st} color={colors.ballColor} />
+        <Oval x={proj.x - r * sq} y={proj.y - r * st} width={r * 2 * sq} height={r * 2 * st} style="stroke" strokeWidth={1} color="#C9B400" opacity={0.7} />
         <Circle cx={proj.x - r * 0.3} cy={proj.y} r={r * 0.14} color="#C9B400" opacity={0.6} />
         <Circle cx={proj.x + r * 0.35} cy={proj.y - r * 0.2} r={r * 0.12} color="#C9B400" opacity={0.5} />
       </Group>
     );
   };
+
+  // ONE contact flash per REAL contact: a quick expanding ring at the contact
+  // point for 0.12 s (driven by sim.lastContact; never re-fires).
+  const lc = sim.lastContact;
+  const flashT = sim.time - lc.time;
+  const contactFlash = flashT >= 0 && flashT < 0.12 && !lc.miss;
+  const flashP = contactFlash ? projector.project(lc.x, lc.y, lc.z) : null;
+  const flashR = contactFlash ? projector.pxPerFootAt(lc.y) * (0.5 + flashT * 9) : 0;
+
+  // SERVE AIM HELPER: faint landing marker while I prepare my serve.
+  const aim = sim.serveAimPreview();
+  const aimG = aim ? projector.ground(aim.x, aim.y) : null;
+  const aimR = aim ? projector.pxPerFootAt(aim.y) * 0.8 : 0;
 
   // "Let it bounce" cue: a subtle ring on the predicted landing spot (one Oval).
   const letBounce = sim.humanMustLetBounce() && sim.bounceCueSpot;
@@ -236,6 +263,13 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
           />
         )}
 
+        {aimG && (
+          <>
+            <Oval x={aimG.x - aimR} y={aimG.y - aimR * 0.45} width={aimR * 2} height={aimR * 0.9} style="stroke" strokeWidth={1.5} color={colors.courtLine} opacity={0.55} />
+            <Circle cx={aimG.x} cy={aimG.y} r={2.5} color={colors.courtLine} opacity={0.6} />
+          </>
+        )}
+
         {/* Far team behind the net */}
         {farPlayers.map(drawPlayer)}
         {ballFar && drawBall()}
@@ -249,6 +283,10 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
         {/* Near team in front of the net */}
         {nearPlayers.map(drawPlayer)}
         {!ballFar && drawBall()}
+
+        {flashP && (
+          <Circle cx={flashP.x} cy={flashP.y} r={flashR} style="stroke" strokeWidth={2.5} color="#FFFFFF" opacity={0.85 * (1 - flashT / 0.12)} />
+        )}
       </Canvas>
     </View>
   );

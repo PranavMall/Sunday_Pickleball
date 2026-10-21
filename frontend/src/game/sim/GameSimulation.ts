@@ -137,6 +137,11 @@ export class GameSimulation {
   lobArmed = false;
   // Shot type of the last real strike (AI reads an incoming smash → block).
   lastShotType: ShotType | null = null;
+  // GAME FEEL (renderer reads these; updated in place, no per-frame allocation):
+  // the last REAL contact (one flash + ball squash per contact) and the last
+  // point result (celebrate / frustration reactions).
+  lastContact = { time: -10, x: 0, y: 0, z: 0, power: 0, miss: false };
+  lastPoint = { time: -10, winner: null as Team | null };
   // Highest the ball has flown since the last strike (a "high ball" for smash).
   apexSinceHit = 0;
 
@@ -833,16 +838,10 @@ export class GameSimulation {
     let unforced = 0;
     if (input) {
       // Human swipe → placement within the legal box. Up = deeper, x = lateral.
-      const power = Math.max(0.25, input.power);
-      const lo = box.yLo;
-      const hi = box.yHi;
-      // deeper serve with more power (toward receiving baseline)
-      const depthT = this.score.servingTeam === "near" ? 1 - power : power;
-      targetY = lo + (hi - lo) * depthT;
-      const cx = (box.xLo + box.xHi) / 2;
-      const lateral = (input.dx / INPUT.POWER_MAX_PX) * (box.xHi - box.xLo) * 0.7;
       // NOTE: no hard clamp into the box — a poor serve must be able to miss.
-      targetX = cx + lateral;
+      const t = this.humanServeTarget(input, box);
+      targetX = t.x;
+      targetY = t.y;
       // Serve quality: a very short swipe or an extreme angle can fault.
       const q = humanServeQuality(input);
       accuracy = q.accuracy;
@@ -859,6 +858,28 @@ export class GameSimulation {
     server.isServing = false;
     this.phase = "rally";
     this.pushMessage("Serve!", server.x, server.y, "info");
+  }
+
+  private humanServeTarget(input: { dx: number; power: number }, box: { xLo: number; xHi: number; yLo: number; yHi: number }, out = { x: 0, y: 0 }) {
+    const power = Math.max(0.25, input.power);
+    // deeper serve with more power (toward receiving baseline)
+    const depthT = this.score.servingTeam === "near" ? 1 - power : power;
+    out.y = box.yLo + (box.yHi - box.yLo) * depthT;
+    out.x = (box.xLo + box.xHi) / 2 + (input.dx / INPUT.POWER_MAX_PX) * (box.xHi - box.xLo) * 0.7;
+    return out;
+  }
+
+  // SERVE AIM HELPER: where my serve would land right now — follows the live
+  // held swipe, else a standard swipe. null when I'm not about to serve.
+  // Writes into a reused object (no per-frame allocation).
+  private aimOut = { x: 0, y: 0 };
+  private aimDefault = { dx: 0, power: 0.6 };
+  serveAimPreview(): { x: number; y: number } | null {
+    if (!this.humanIsServer()) return null;
+    const server = this.players[this.serverSlot!];
+    const box = serviceBoxFor(this.score.servingTeam, server.courtSide);
+    const live = this.armHeld && this.pendingInput ? this.pendingInput : this.aimDefault;
+    return this.humanServeTarget(live, box, this.aimOut);
   }
 
   private executeHumanHit(p: PlayerState, input: SwipeInput, lateness: number) {
@@ -1063,6 +1084,9 @@ export class GameSimulation {
       if (p.controller === "LOCAL_HUMAN") this.stats.myDinks++;
     }
 
+    const lc = this.lastContact;
+    lc.time = this.time; lc.x = b.x; lc.y = b.y; lc.z = b.z; lc.miss = miss;
+    lc.power = Math.min(1, Math.hypot(b.vx, b.vy, b.vz) / 60);
     // Emit the single authoritative contact event for this strike.
     this.contactEvents.push({
       id: ++this.contactId,
@@ -1100,6 +1124,8 @@ export class GameSimulation {
     this.pushMessage(fault.message, fault.x, fault.y, "error");
 
     const rallyWinner: Team = fault.faultingTeam === "near" ? "far" : "near";
+    this.lastPoint.time = this.time;
+    this.lastPoint.winner = rallyWinner;
     const outcome = ScoreManager.resolve(this.score, rallyWinner, this.format);
     this.score = outcome.score;
 
