@@ -1,6 +1,7 @@
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BackHandler, Platform, Pressable, Share, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, BackHandler, Platform, Pressable, Share, Text, useWindowDimensions, View } from "react-native";
+import * as NavigationBar from "expo-navigation-bar";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
@@ -159,13 +160,34 @@ export default function Match() {
   const [identity, setIdentity] = useState<{ playerName: string; teamName: string } | null>(null);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  // LOADING COVER: held until the court image has decoded AND a first frame
+  // has been drawn; the sim does not run underneath it.
+  const [ready, setReady] = useState(false);
+  const readyRef = useRef(false);
+  readyRef.current = ready;
+  const onCourtReady = useCallback(() => {
+    requestAnimationFrame(() => setReady(true));
+  }, []);
+  // DEV perf probe (pause/resume diagnosis): renders/s, loop work ms/frame,
+  // projector rebuilds, window-size changes.
+  const perf = useRef({ renders: 0, rendersPerSec: 0, workMs: 0, projBuilds: 0, sizeChanges: 0, lastW: 0, lastH: 0 });
+  perf.current.renders++;
+  if (__DEV__) (globalThis as any).__pwPerf = perf.current; // read by the dev pause/resume probe
   const gameOverRef = useRef(false);
   const loggedRef = useRef(false);
   const armedRef = useRef(false); // one armed swipe per physical gesture
   const gestureT0 = useRef(0); // touch-down time (ms) for the stable speed signal
 
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
-  const projector = useMemo(() => makeProjector(width, height), [width, height]);
+  const projector = useMemo(() => {
+    perf.current.projBuilds++;
+    return makeProjector(width, height);
+  }, [width, height]);
+  if (perf.current.lastW !== width || perf.current.lastH !== height) {
+    if (perf.current.lastW !== 0) perf.current.sizeChanges++;
+    perf.current.lastW = width;
+    perf.current.lastH = height;
+  }
 
   useEffect(() => {
     let alive = true;
@@ -199,42 +221,68 @@ export default function Match() {
     let acc = 0;
     let fpsAcc = 0;
     let fpsCount = 0;
+    let renders0 = perf.current.renders;
+    let wasIdle = true;
     const loop = (t: number) => {
+      const w0 = performance.now();
       if (last === 0) last = t;
       const dt = Math.min(0.05, (t - last) / 1000);
       last = t;
+      // PAUSED (or still loading): no sim steps AND no React re-render — the
+      // frozen frame stays on screen. (Root cause of the post-resume slowdown
+      // was a full 60 Hz re-render of the match + overlay while paused.)
+      // (__DEV__ A/B switch for the diagnosis: globalThis.__PW_LEGACY_PAUSE
+      // restores the old "re-render every frame while paused" behaviour.)
+      const legacy = __DEV__ && (globalThis as any).__PW_LEGACY_PAUSE && readyRef.current;
+      if (legacy && pausedRef.current) {
+        setFrame((f) => (f + 1) % 1000000);
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      const idle = pausedRef.current || !readyRef.current;
+      if (idle) {
+        if (!wasIdle) setFrame((f) => (f + 1) % 1000000); // one render to show the pause state
+        wasIdle = true;
+        acc = 0;
+        fpsAcc = 0;
+        fpsCount = 0;
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      wasIdle = false;
       fpsAcc += dt;
       fpsCount++;
       if (fpsAcc >= 0.5) {
         setFps(Math.round(fpsCount / fpsAcc));
+        perf.current.rendersPerSec = Math.round((perf.current.renders - renders0) / fpsAcc);
+        renders0 = perf.current.renders;
         fpsAcc = 0;
         fpsCount = 0;
       }
-      if (!pausedRef.current) {
-        acc += dt;
-        let guard = 0;
-        while (acc >= MATCH.FIXED_DT && guard++ < 5) {
-          sim.step();
-          acc -= MATCH.FIXED_DT;
-        }
-        // One sound per real contact (mishits included) + one per real bounce.
-        for (const ev of sim.consumeContactEvents()) {
-          sfx.playForContact(ev);
-          if (ev.slot === humanSlot && Platform.OS !== "web") {
-            Haptics.impactAsync(
-              ev.power > 0.55 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
-            ).catch(() => {});
-          }
-        }
-        for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
-
-        if (sim.phase === "game_over" && !loggedRef.current) {
-          loggedRef.current = true;
-          logMatchResult(config, sim);
-          analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
+      acc += dt;
+      let guard = 0;
+      while (acc >= MATCH.FIXED_DT && guard++ < 5) {
+        sim.step();
+        acc -= MATCH.FIXED_DT;
+      }
+      // One sound per real contact (mishits included) + one per real bounce.
+      for (const ev of sim.consumeContactEvents()) {
+        sfx.playForContact(ev);
+        if (ev.slot === humanSlot && Platform.OS !== "web") {
+          Haptics.impactAsync(
+            ev.power > 0.55 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
+          ).catch(() => {});
         }
       }
+      for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
+
+      if (sim.phase === "game_over" && !loggedRef.current) {
+        loggedRef.current = true;
+        logMatchResult(config, sim);
+        analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
+      }
       setFrame((f) => (f + 1) % 1000000);
+      perf.current.workMs = perf.current.workMs * 0.9 + (performance.now() - w0) * 0.1;
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -320,6 +368,11 @@ export default function Match() {
     setMatch(buildMatch(difficulty, singles));
     setPaused(false);
   };
+  // Re-assert immersive mode on resume (a system-bar reveal during pause is
+  // otherwise never re-hidden, leaving a resized window behind the game).
+  useEffect(() => {
+    if (!paused && Platform.OS === "android") NavigationBar.setVisibilityAsync("hidden").catch(() => {});
+  }, [paused]);
   const goMenu = () => router.replace("/");
   const toggleKitchen = useCallback(() => {
     if (!pausedRef.current) sim.toggleKitchenMode();
@@ -371,7 +424,7 @@ export default function Match() {
       <Fullscreen />
       <GestureDetector gesture={pan}>
         <View style={styles.canvasWrap}>
-          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} />
+          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} onReady={onCourtReady} />
         </View>
       </GestureDetector>
 
@@ -439,6 +492,9 @@ export default function Match() {
           <Text style={styles.debugText}>
             {fps} fps · {sim.phase} · z{sim.ball.z.toFixed(1)} · sfx {sfx.ready ? "rdy" : "…"} {sfx.lastLatencyMs.toFixed(1)}ms · snd{sfx.playedCount}
           </Text>
+          <Text style={styles.debugText} testID="perf-probe">
+            renders/s {perf.current.rendersPerSec} · work {perf.current.workMs.toFixed(1)}ms · proj {perf.current.projBuilds} · resize {perf.current.sizeChanges} · {width}x{height}
+          </Text>
           {sim
             .getInputTrace()
             .slice(-4)
@@ -447,6 +503,13 @@ export default function Match() {
                 {e.time.toFixed(2)} {e.kind} dx{e.dx.toFixed(0)} dy{e.dy.toFixed(0)} p{e.power.toFixed(2)} lh{e.lastHitBy ?? "-"}
               </Text>
             ))}
+        </View>
+      )}
+
+      {!ready && (
+        <View style={styles.loadingCover} testID="loading-cover">
+          <Text style={styles.loadingTitle}>PICKLEWOOD</Text>
+          <ActivityIndicator color="#FBF6E9" style={{ marginTop: 16 }} />
         </View>
       )}
 
@@ -585,6 +648,8 @@ const useStyles = makeStyles((c) => ({
   kitchenBtnTextBack: { color: c.onSurfaceInverse },
   kitchenCdTrack: { position: "absolute", bottom: 9, left: 14, right: 14, height: 3, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.25)", overflow: "hidden" },
   kitchenCdFill: { height: 3, backgroundColor: "#FBF6E9" },
+  loadingCover: { ...abs(), backgroundColor: c.surfaceInverse, alignItems: "center", justifyContent: "center" },
+  loadingTitle: { color: c.accentGold, fontSize: 30, fontWeight: "900", letterSpacing: 6 },
   rotate: { flex: 1, backgroundColor: c.surfaceInverse, alignItems: "center", justifyContent: "center", padding: 32 },
   rotateEmoji: { fontSize: 48, marginBottom: 16 },
   rotateText: { color: c.onSurfaceInverse, fontSize: 18, fontWeight: "600", textAlign: "center" },

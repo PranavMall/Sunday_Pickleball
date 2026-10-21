@@ -10,6 +10,7 @@ export interface CourtRendererProps {
   width: number;
   height: number;
   frame: number;
+  onReady?: () => void; // court image decoded (first frame can be shown)
 }
 
 // On native, Skia is ready immediately — render the canvas directly. On web,

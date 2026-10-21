@@ -18,13 +18,14 @@ interface Props {
   width: number;
   height: number;
   frame: number; // bump to force re-render each simulation tick
+  onReady?: () => void; // fired once the court image has loaded
 }
 
 // PerspectiveRenderer: projects logical court coordinates onto the painted
 // court. Code-drawn lines/kitchen/net sit at the OFFICIAL projected positions
 // so what the player sees always matches RuleManager. z (height) reads as a
 // depth-scaled screen offset so the ball and its shadow separate as it rises.
-export function GameCanvas({ sim, projector, width, height }: Props) {
+export function GameCanvas({ sim, projector, width, height, onReady }: Props) {
   const { colors } = useTheme();
 
   const seg = (
@@ -241,7 +242,11 @@ export function GameCanvas({ sim, projector, width, height }: Props) {
           height: IMAGE_H * projector.scale,
         }}
         contentFit="fill"
-        onError={(e) => console.warn("[court] background image failed to load", e)}
+        onLoad={onReady}
+        onError={(e) => {
+          console.warn("[court] background image failed to load", e);
+          onReady?.(); // never trap the player behind the loading cover
+        }}
       />
       <Canvas style={{ width, height, backgroundColor: "transparent" }}>
         {/* Kitchen fills (own drawable layer, can flash) */}
