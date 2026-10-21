@@ -1,7 +1,7 @@
 import { COURT, teamOfY } from "../config/court";
 import { PLAYER, TACTIC } from "../config/tuning";
 import { predictContact, predictIntercept, predictOverhead, clampToHalf, firstBouncePoint } from "./physics";
-import type { BallState, PlayerState, Team } from "./types";
+import type { BallState, PlayerState, ShotType, Team } from "./types";
 
 // Highest ball the strike-eligibility check accepts (keep in sync with
 // GameSimulation.computeReach); intercepts aim a little below it.
@@ -24,6 +24,51 @@ export interface MovementInfo {
   posErrorFor: (slot: number) => number; // ft of positioning noise (AI)
   serverSlot: number | null;
   apexSinceHit?: number; // highest the live ball has flown since the last strike
+  // The last real strike (type + predicted first-bounce y), for the net
+  // transition read. Undefined = treat as a neutral ball.
+  lastShot?: { type: ShotType; landY: number | null; miss: boolean };
+}
+
+// NET TRANSITION (B3 §2). Decided once per own-team strike (from the return
+// onward): a soft drop/dink/lob or a ball landing short in the opponents'
+// kitchen buys time to move up; a drive is neutral. Tendency = difficulty
+// kitchenAffinity + personality kitchenRush (affinityFor). A player already
+// established at the line HOLDS it; the team drops back only for a lob or a
+// clearly deep incoming ball.
+const NET = {
+  SOFT_BONUS: 0.35, // drop / dink / lob / short landing
+  NEUTRAL_BONUS: 0.25, // drive or other
+  ESTABLISHED_FT: 1.5, // within this of the line ready spot = established
+  DEEP_FROM_LINE: 10, // incoming first bounce this far behind our kitchen line = clearly deep
+};
+
+function decideNet(p: PlayerState, team: Team, info: MovementInfo, ball: BallState, atLineY: number) {
+  if (p.netDecidedFor === info.rallyStrikeCount) return;
+  p.netDecidedFor = info.rallyStrikeCount;
+  const mode = info.kitchenModeFor?.(p.slot) ?? null;
+  if (mode === "retreat") { p.netIntent = false; return; }
+  if (info.rallyStrikeCount < 2) { p.netIntent = false; return; } // serve: stay back for the return
+  if (mode === "hold") { p.netIntent = true; return; }
+  if (p.netIntent && Math.abs(p.y - atLineY) < NET.ESTABLISHED_FT) return; // hold the line
+  const ls = info.lastShot;
+  if (ls?.miss) return;
+  const oppKitchenY = team === "near" ? COURT.FAR_KITCHEN_Y : COURT.NEAR_KITCHEN_Y;
+  const short = !!ls && ls.landY != null && Math.abs(ls.landY - COURT.NET_Y) <= Math.abs(oppKitchenY - COURT.NET_Y) + 2;
+  const soft = !!ls && (ls.type === "drop" || ls.type === "dink" || ls.type === "lob");
+  const s = info.affinityFor(p.slot) + (soft || short ? NET.SOFT_BONUS : NET.NEUTRAL_BONUS);
+  const roll = (rand(p.slot * 7 + info.rallyStrikeCount, ball.totalBounces + 3) + 1) / 2;
+  if (roll < s) p.netIntent = true;
+}
+
+// Incoming ball that justifies dropping back from the line: a lob (high arc)
+// or a clearly deep ball landing near our baseline.
+function deepOrLob(ball: BallState, team: Team, apex: number): boolean {
+  if (ball.bouncesSinceHit > 0) return false;
+  const fb = firstBouncePoint(ball);
+  if (!fb || teamOfY(fb.y) !== team) return false;
+  const kl = team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+  const behind = Math.abs(fb.y - kl);
+  return behind >= NET.DEEP_FROM_LINE || (apex >= TACTIC.SMASH_MIN_APEX && behind >= 6);
 }
 
 function globalRight(team: Team, side: "L" | "R"): boolean {
@@ -67,6 +112,10 @@ export function updateMovement(
     const ballComingHere = ball.inPlay && teamOfY(ball.y) === team && isApproaching(ball, team);
     const requireBounce = info.rallyStrikeCount < 3; // two-bounce phase
     const pred = predictContact(ball, team, requireBounce);
+    // One forward sim per team only when it matters (ball incoming, unbounced).
+    const lobOrDeep = ballComingHere && ball.bouncesSinceHit === 0 && mates.some((m) => m.netIntent)
+      ? deepOrLob(ball, team, info.apexSinceHit ?? 0)
+      : false;
 
     // Decide the retriever (responsible player) when the ball is coming here.
     let retriever: PlayerState | null = null;
@@ -148,15 +197,28 @@ export function updateMovement(
       } else {
         // Ready / covering position.
         const mode = info.kitchenModeFor?.(p.slot) ?? null;
-        const wantsLine = mode === "hold" ? true : mode === "retreat" ? false : info.affinityFor(p.slot) > 0.3;
-        const advance = !ballComingHere && info.rallyStrikeCount >= 2 && wantsLine;
-        const atKitchen = advance;
+        const lineY = readyDepth(team, true);
+        if (ball.inPlay && ball.lastHitTeam === team) decideNet(p, team, info, ball, lineY);
+        if (mode === "retreat" || info.rallyStrikeCount < 2) p.netIntent = false;
+        if (p.netIntent && ballComingHere && lobOrDeep) p.netIntent = false;
+        const established = Math.abs(p.y - lineY) < NET.ESTABLISHED_FT;
+        // Mid-transition when the opponents strike: split-step (hold depth)
+        // rather than run back; continue on our next good shot.
+        const splitStep = !!p.netIntent && ballComingHere && !established;
+        const atKitchen = !!p.netIntent;
         // Singles (one player per team) covers the MIDDLE of the half; doubles
         // each cover their own service-court lane (unchanged behaviour).
         const singles = mates.length === 1;
         const coverX = singles ? COURT.CENTER_X : sideCenterX(p.team, p.courtSide);
         p.targetX = coverX;
         p.targetY = readyDepth(team, atKitchen, mode === "retreat");
+        if (atKitchen) {
+          // Positioning quality: less precise players settle a little behind
+          // the ideal line spot (never in front of it).
+          const err = Math.abs(info.posErrorFor(p.slot)) * (1.5 + rand(p.slot + 11, 5));
+          p.targetY += team === "near" ? err : -err;
+        }
+        if (splitStep) p.targetY = team === "near" ? Math.max(p.y, p.targetY) : Math.min(p.y, p.targetY);
         if (isServer && info.serving) {
           // Server walks BEHIND their baseline to serve (exempt from the clamp),
           // standing on their current service-court side.

@@ -35,6 +35,11 @@ export interface PlayerState {
   reactionUntil: number; // AI: cannot commit to strike before this sim time
   committedToBall: boolean; // AI has decided to play this ball
 
+  // Net transition (B3 §2): wants to be / hold at the kitchen line, and the
+  // strike number this was last decided for (once per team strike).
+  netIntent?: boolean;
+  netDecidedFor?: number;
+
   // AI config (undefined for humans)
   difficulty?: Difficulty;
   personality?: Personality;

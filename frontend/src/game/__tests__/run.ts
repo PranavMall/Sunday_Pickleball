@@ -18,6 +18,7 @@ import { dinkStats } from "./dinkReport";
 import { shotMix } from "./shotMix";
 import { humanLobOutcomes, humanSmashScenario, humanShotMixScript, lobClearTests } from "./humanTactics";
 import { twoBounceTests } from "./twoBounce";
+import { netTransitionTests } from "./netTransition";
 
 let passed = 0;
 let failed = 0;
@@ -685,7 +686,8 @@ function kitchenButtonTests() {
   ok(back.me.targetY > COURT.LENGTH - 8, `1: RETREAT targets toward the baseline (y=${back.me.targetY})`);
   ok(Math.abs(back.me.targetY - (COURT.LENGTH - PLAYER.RETREAT_DEPTH_BASELINE)) < 1e-6, `1b: RETREAT uses its own depth ${PLAYER.RETREAT_DEPTH_BASELINE} ft inside the baseline`);
   const auto = mk();
-  updateMovement([auto.me, auto.mate, auto.opp], b(), { ...moveInfo(6), affinityFor: () => 0.1 }, 1 / 60);
+  // (B3 §2: advancing is a per-strike read; a player with no net tendency stays back.)
+  updateMovement([auto.me, auto.mate, auto.opp], b(), { ...moveInfo(6), affinityFor: () => -1 }, 1 / 60);
   ok(Math.abs(auto.mate.targetY - (COURT.LENGTH - PLAYER.RECOVER_DEPTH_BASELINE)) < 1e-6, "1b: automatic/AI deep ready depth is unchanged (RECOVER_DEPTH_BASELINE)");
   ok(back.me.targetY - hold.me.targetY > 5, "1: HOLD vs RETREAT target positions clearly DIFFER (>5 ft)");
   ok(back.mate.targetY - hold.mate.targetY > 5, "1: the partner follows the kitchen mode too");
@@ -847,6 +849,11 @@ function b3TwoBounceTests() {
   for (const r of twoBounceTests()) { if (r.info) console.log(`  ${r.name}: ${r.info}`); ok(r.ok, r.name); }
 }
 
+function b3NetTests() {
+  console.log("\n[B3 §2 net transition]");
+  for (const r of netTransitionTests()) { if (r.info) console.log(`  ${r.name}: ${r.info}`); ok(r.ok, r.name); }
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -863,6 +870,7 @@ kitchenButtonTests();
 dinkTests();
 vocabularyTests();
 b3TwoBounceTests();
+b3NetTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

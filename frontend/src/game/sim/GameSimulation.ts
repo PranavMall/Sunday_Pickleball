@@ -146,6 +146,8 @@ export class GameSimulation {
   apexSinceHit = 0;
   // Sim time of the last court bounce (two-bounce visibility delay).
   private lastBounceAt = -10;
+  // Last real strike, for the movement net-transition read (reused object).
+  private lastShotInfo: { type: ShotType; landY: number | null; miss: boolean } = { type: "serve", landY: null, miss: false };
   // A human swipe read as a clear airborne volley in the two-bounce phase;
   // executed (and faulted by RuleManager) on the next step.
   private volleyAttempt = false;
@@ -277,6 +279,8 @@ export class GameSimulation {
       p.reestablishTimer = 0;
       p.isServing = false;
       p.committedToBall = false;
+      p.netIntent = false;
+      p.netDecidedFor = -1;
     }
 
     if (this.serverSlot === null) this.serverSlot = this.pickServerSlot(this.score.servingTeam);
@@ -611,11 +615,13 @@ export class GameSimulation {
       serving: this.phase === "waiting_serve",
       serverSlot: this.serverSlot,
       apexSinceHit: this.apexSinceHit,
+      lastShot: this.lastShotInfo,
       kitchenModeFor: (slot) => (this.players[slot].team === "near" ? this.kitchenMode : null),
       affinityFor: (slot) => {
         const p = this.players[slot];
         if (p.controller !== "AI") return 0.6;
-        return this.paramsFor(slot).kitchenAffinity;
+        // Net-transition tendency: difficulty kitchen sense + personality rush.
+        return this.paramsFor(slot).kitchenAffinity + PERSONALITY_BIAS[p.personality ?? "TACTICAL"].kitchenRush;
       },
       posErrorFor: (slot) => {
         const p = this.players[slot];
@@ -1115,6 +1121,9 @@ export class GameSimulation {
     p.swingCue = this.time;
     this.lastShotType = shotType;
     this.apexSinceHit = b.z;
+    const ls = this.lastShotInfo;
+    ls.type = shotType; ls.miss = miss;
+    ls.landY = isServe || miss ? null : firstBouncePoint(b)?.y ?? null;
     // An armed lob only ever applies to the very next strike by my team.
     if (this.lobArmed && this.players.some((h) => h.controller === "LOCAL_HUMAN" && h.team === p.team)) this.lobArmed = false;
     p.committedToBall = false;
