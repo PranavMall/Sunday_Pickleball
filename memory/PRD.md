@@ -97,3 +97,5 @@ Do NOT start Part B until the user approves.
 
 ## Milestone 2 Part B2 (2026-06) — DONE, awaiting phone test
 See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (singles menu/UI + AI profiles, asset step), M3 (onboarding, settings, analytics).
+
+## B3 (Pickleball authenticity) — DONE, awaiting phone test. Gameplay frozen after this. Commits d70f8df / a87bf13 / 0e65fee. 263/263 tests.

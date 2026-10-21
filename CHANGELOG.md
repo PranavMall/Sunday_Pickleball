@@ -327,3 +327,9 @@ Commits: 5a16ac2 (1) · e3f3ba6 (2) · b489fa3 (3) · f5d3158 (4) · 30480c1 (5)
 - **[rules bug fix]** a ball that bounced IN and ran past the 12 ft safety bound was scored as the hitter's OUT; now a winner for the hitter.
 - **[feel]** body lean + follow-through, ball squash/stretch (0.09 s), one contact-flash ring per real contact, winner hop / loser slump, serve aim marker. No new Skia paths/images.
 - **[pause]** no sim steps and no re-render while paused (was 60 renders/s), immersive nav bar re-asserted on resume, DEV perf probe; loading cover until the court image + first frame are ready.
+
+## Milestone 2 Part B3 — Pickleball authenticity (gameplay freeze)
+- d70f8df §1 two-bounce: return/third contact ≥ 0.1 s after the required bounce (human + AI; later-rally high-ball zero-reaction kept); human clear airborne volley within reach (> 0.25 s before bounce) → RuleManager TWO_BOUNCE; grace / out-of-reach swipes stay buffered.
+- a87bf13 §2 net transition: per-strike net read (kitchenAffinity + kitchenRush, soft/short +0.35, neutral +0.25); established line players hold; drop back only for lob / clearly deep ball; split-step mid-transition.
+- 0e65fee §3 kitchen footwork: ready 0.5 ft behind line, volley hold 0.4 ft; short bounced dink → step in (contact 2.0 ft behind contact point) → exit → re-establish; no auto-volley while geometrically in NVZ/on line; no steering into NVZ during momentum window.
+- Tests 263/263. Diagnostics: __tests__/b3Report.ts.
