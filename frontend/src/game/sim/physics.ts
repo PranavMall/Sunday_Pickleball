@@ -126,10 +126,12 @@ export function predictIntercept(
 }
 
 // Clamp a position to a team's legal movement region (their half + kitchen).
-export function clampToHalf(team: Team, x: number, y: number): { x: number; y: number } {
+// `behind` = ft a player may stand BEHIND their own baseline (rally retrieval
+// of deep balls); 0 keeps the old just-inside-the-baseline limit.
+export function clampToHalf(team: Team, x: number, y: number, behind = 0): { x: number; y: number } {
   const cx = Math.max(COURT.RADIUS_MARGIN, Math.min(x, COURT.WIDTH - COURT.RADIUS_MARGIN));
   let cy: number;
-  if (team === "near") cy = Math.max(COURT.NET_Y + 0.4, Math.min(y, COURT.LENGTH - 0.6));
-  else cy = Math.max(0.6, Math.min(y, COURT.NET_Y - 0.4));
+  if (team === "near") cy = Math.max(COURT.NET_Y + 0.4, Math.min(y, COURT.LENGTH - 0.6 + behind));
+  else cy = Math.max(0.6 - behind, Math.min(y, COURT.NET_Y - 0.4));
   return { x: cx, y: cy };
 }

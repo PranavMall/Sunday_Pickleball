@@ -40,14 +40,17 @@ const KitchenButton = memo(function KitchenButton(props: {
   return (
     <Pressable
       testID="kitchen-button"
-      accessibilityLabel={hold ? "Kitchen: holding the line. Tap to retreat" : "Kitchen: back. Tap to rush the line"}
+      accessibilityLabel={hold ? "At the net. Tap to move back" : "Back court. Tap to rush the net"}
       onPress={props.onPress}
       disabled={cooling}
-      style={[styles.kitchenBtn, { bottom: props.bottom }, hold ? styles.kitchenBtnHold : styles.kitchenBtnBack, cooling && styles.kitchenBtnCooling]}
+      style={[styles.kitchenBtn, { bottom: props.bottom }, hold ? styles.kitchenBtnBack : styles.kitchenBtnHold, cooling && styles.kitchenBtnCooling]}
     >
-      <Text style={[styles.kitchenBtnIcon, !hold && styles.kitchenBtnIconBack]}>{hold ? "▲" : "▼"}</Text>
-      <Text style={[styles.kitchenBtnText, !hold && styles.kitchenBtnTextBack]} testID="kitchen-button-state">
-        {hold ? "NET" : "BACK"}
+      {/* Shows the ACTION a tap performs; the small dot row shows where we are now. */}
+      <Text style={[styles.kitchenBtnText, hold && styles.kitchenBtnTextBack]} testID="kitchen-button-state">
+        {hold ? "BACK ▼" : "NET ▲"}
+      </Text>
+      <Text style={[styles.kitchenBtnNow, hold && styles.kitchenBtnTextBack]} testID="kitchen-button-now">
+        {hold ? "● at net" : "● back"}
       </Text>
       {cooling ? (
         <View style={styles.kitchenCdTrack}>
@@ -522,9 +525,8 @@ const useStyles = makeStyles((c) => ({
   kitchenBtnHold: { backgroundColor: "rgba(197,160,40,0.92)", borderColor: "#FBF6E9" },
   kitchenBtnBack: { backgroundColor: "rgba(46,61,42,0.82)", borderColor: "rgba(251,246,233,0.55)" },
   kitchenBtnCooling: { opacity: 0.6 },
-  kitchenBtnIcon: { color: "#1c2417", fontSize: 14, fontWeight: "900", lineHeight: 16 },
-  kitchenBtnIconBack: { color: c.onSurfaceInverse },
   kitchenBtnText: { color: "#1c2417", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
+  kitchenBtnNow: { color: "#1c2417", fontSize: 8, fontWeight: "700", opacity: 0.75, marginTop: 1 },
   kitchenBtnTextBack: { color: c.onSurfaceInverse },
   kitchenCdTrack: { position: "absolute", bottom: 9, left: 14, right: 14, height: 3, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.25)", overflow: "hidden" },
   kitchenCdFill: { height: 3, backgroundColor: "#FBF6E9" },

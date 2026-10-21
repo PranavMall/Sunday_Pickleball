@@ -1,6 +1,6 @@
 import { COURT, teamOfY } from "../config/court";
 import { PLAYER } from "../config/tuning";
-import { predictContact, predictIntercept, clampToHalf } from "./physics";
+import { predictContact, predictIntercept, clampToHalf, firstBouncePoint } from "./physics";
 import type { BallState, PlayerState, Team } from "./types";
 
 // Highest ball the strike-eligibility check accepts (keep in sync with
@@ -33,15 +33,24 @@ function sideCenterX(team: Team, side: "L" | "R"): number {
   return globalRight(team, side) ? COURT.WIDTH * 0.72 : COURT.WIDTH * 0.28;
 }
 
-function readyDepth(team: Team, atKitchen: boolean): number {
+function readyDepth(team: Team, atKitchen: boolean, retreat = false): number {
+  // Kitchen-button BACK uses its own deeper spot (just inside the baseline);
+  // the AI / automatic ready depth is unchanged.
+  const back = retreat ? PLAYER.RETREAT_DEPTH_BASELINE : PLAYER.RECOVER_DEPTH_BASELINE;
   if (team === "near") {
-    return atKitchen
-      ? COURT.NEAR_KITCHEN_Y + PLAYER.KITCHEN_LINE_STANDOFF
-      : COURT.LENGTH - PLAYER.RECOVER_DEPTH_BASELINE;
+    return atKitchen ? COURT.NEAR_KITCHEN_Y + PLAYER.KITCHEN_LINE_STANDOFF : COURT.LENGTH - back;
   }
-  return atKitchen
-    ? COURT.FAR_KITCHEN_Y - PLAYER.KITCHEN_LINE_STANDOFF
-    : PLAYER.RECOVER_DEPTH_BASELINE;
+  return atKitchen ? COURT.FAR_KITCHEN_Y - PLAYER.KITCHEN_LINE_STANDOFF : back;
+}
+
+// A not-yet-bounced ball whose first bounce is DEEP in this team's backcourt
+// (well behind the kitchen) — the human should position for the post-bounce
+// intercept rather than step in toward a volley point it then can't recover from.
+function deepUnbounced(ball: BallState, team: Team): boolean {
+  if (ball.bouncesSinceHit > 0) return false;
+  const fb = firstBouncePoint(ball);
+  if (!fb || teamOfY(fb.y) !== team) return false;
+  return team === "near" ? fb.y > COURT.NEAR_KITCHEN_Y + 7 : fb.y < COURT.FAR_KITCHEN_Y - 7;
 }
 
 export function updateMovement(
@@ -76,7 +85,15 @@ export function updateMovement(
 
     for (const p of mates) {
       const isServer = info.serverSlot === p.slot;
-      if (p === retriever && p.controller === "LOCAL_HUMAN" && pred.bounced && ball.bouncesSinceHit >= 1) {
+      const humanRetriever = p === retriever && p.controller === "LOCAL_HUMAN";
+      if (humanRetriever && !pred.bounced && deepUnbounced(ball, team)) {
+        // DEEP drive/drop: commit to the earliest reachable post-bounce point
+        // (may be a step behind the baseline) instead of the volley point.
+        const reach = PLAYER.REACH * PLAYER.REACH_MULT * p.stats.reach;
+        const ic = predictIntercept(ball, team, p.x, p.y, PLAYER.SPEED, reach * 0.6, HUMAN_MAX_Z);
+        p.targetX = ic ? ic.x : pred.x;
+        p.targetY = ic ? ic.y : pred.y;
+      } else if (humanRetriever && pred.bounced && ball.bouncesSinceHit >= 1) {
         // HUMAN post-bounce retrieval: INTERCEPT, DON'T CHASE. If the bounced
         // ball is already within comfortable reach, PLANT (hold position) so
         // the ball comes to the paddle; otherwise commit to the earliest
@@ -117,7 +134,7 @@ export function updateMovement(
         const singles = mates.length === 1;
         const coverX = singles ? COURT.CENTER_X : sideCenterX(p.team, p.courtSide);
         p.targetX = coverX;
-        p.targetY = readyDepth(team, atKitchen);
+        p.targetY = readyDepth(team, atKitchen, mode === "retreat");
         if (isServer && info.serving) {
           // Server walks BEHIND their baseline to serve (exempt from the clamp),
           // standing on their current service-court side.
@@ -142,7 +159,9 @@ export function updateMovement(
     for (const p of mates) {
       // The serving player may legally stand behind the baseline while waiting.
       if (info.serving && info.serverSlot === p.slot) continue;
-      const c = clampToHalf(team, p.x, p.y);
+      // During a rally a player may step a little behind their own baseline
+      // to retrieve a deep ball (ready spots are all inside the court).
+      const c = clampToHalf(team, p.x, p.y, info.serving ? 0 : PLAYER.RALLY_BEHIND_BASELINE);
       p.x = c.x;
       p.y = c.y;
     }

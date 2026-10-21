@@ -645,6 +645,15 @@ function retrievalTests() {
   ok(dr.contact && !dr.doubleBounce && !dr.expired, "0: deep ball bouncing near my baseline → contact before 2nd bounce");
   const dr2 = retrievalScenario({ ...deep, humanY: 35, swipeDelayAfterBounce: 0.1 });
   ok(dr2.contact && !dr2.doubleBounce, "0: deep bounced ball with me mid-court → I back up and make contact");
+  // B2 §1c: deep DRIVE bouncing near / just inside my baseline — I may step
+  // behind the baseline to retrieve it (contact before the 2nd bounce).
+  for (const ty of [38, 40, 42]) for (const hy of [41.5, 43]) {
+    const r = retrievalScenario({ humanX: 13, humanY: hy, fromX: 10, fromY: 8, targetX: 13, targetY: ty, shot: "drive", swipeDelayAfterBounce: 0.05 });
+    ok(r.contact && !r.doubleBounce && !r.expired, `1c: deep DRIVE to y=${ty} (me at y=${hy}) → contact before 2nd bounce (at y=${r.humanContactY?.toFixed(1)})`);
+  }
+  const behind = retrievalScenario({ humanX: 13, humanY: 41.5, fromX: 10, fromY: 8, targetX: 13, targetY: 42.5, shot: "drive", swipeDelayAfterBounce: 0.05 });
+  ok((behind.humanContactY ?? 0) > COURT.LENGTH - 0.6, "1c: retrieval of a very deep drive happens from BEHIND the baseline");
+  ok((behind.humanContactY ?? 99) <= COURT.LENGTH + PLAYER.RALLY_BEHIND_BASELINE, "1c: but never further back than the rally limit");
   // Out of reach: dink to the far sideline while I stand at the other sideline
   // and partner is parked deep — the human must NOT hit it.
   const far = retrievalScenario({ humanX: 1.5, humanY: 43, fromX: 18, fromY: 16, targetX: 19, targetY: 23.5, shot: "dink", swipeDelayAfterBounce: 0.0 });
@@ -671,6 +680,10 @@ function kitchenButtonTests() {
   ok(Math.abs(hold.me.targetY - (COURT.NEAR_KITCHEN_Y + PLAYER.KITCHEN_LINE_STANDOFF)) < 1e-6, `1: HOLD targets just behind the kitchen line (y=${hold.me.targetY})`);
   ok(hold.me.targetY > COURT.NEAR_KITCHEN_Y + KITCHEN.LINE_TOLERANCE, "1: HOLD never targets the line itself or the NVZ");
   ok(back.me.targetY > COURT.LENGTH - 8, `1: RETREAT targets toward the baseline (y=${back.me.targetY})`);
+  ok(Math.abs(back.me.targetY - (COURT.LENGTH - PLAYER.RETREAT_DEPTH_BASELINE)) < 1e-6, `1b: RETREAT uses its own depth ${PLAYER.RETREAT_DEPTH_BASELINE} ft inside the baseline`);
+  const auto = mk();
+  updateMovement([auto.me, auto.mate, auto.opp], b(), { ...moveInfo(6), affinityFor: () => 0.1 }, 1 / 60);
+  ok(Math.abs(auto.mate.targetY - (COURT.LENGTH - PLAYER.RECOVER_DEPTH_BASELINE)) < 1e-6, "1b: automatic/AI deep ready depth is unchanged (RECOVER_DEPTH_BASELINE)");
   ok(back.me.targetY - hold.me.targetY > 5, "1: HOLD vs RETREAT target positions clearly DIFFER (>5 ft)");
   ok(back.mate.targetY - hold.mate.targetY > 5, "1: the partner follows the kitchen mode too");
   // Two-bounce phase: HOLD does not rush before the rules allow (strike < 2).

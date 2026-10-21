@@ -27,6 +27,8 @@ export const PLAYER = {
   RECEIVE_DEPTH: 2.6, // ft in from baseline when positioned to RECEIVE a serve
   SERVE_STANDOFF: 1.6, // ft BEHIND the baseline the server stands to serve
   KITCHEN_LINE_STANDOFF: 1.2, // ft behind own kitchen line when playing net
+  RETREAT_DEPTH_BASELINE: 2.5, // ft in from baseline for the kitchen-button BACK (retreat) mode only
+  RALLY_BEHIND_BASELINE: 3.0, // ft a rally player may step BEHIND their own baseline to retrieve a deep ball
 } as const;
 
 // Flight times (seconds) and target depths per shot type. Depth is measured
