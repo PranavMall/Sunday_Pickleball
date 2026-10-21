@@ -1,5 +1,5 @@
 import { COURT, teamOfY } from "../config/court";
-import { PLAYER, TACTIC } from "../config/tuning";
+import { KITCHEN, PLAYER, TACTIC } from "../config/tuning";
 import { predictContact, predictIntercept, predictOverhead, clampToHalf, firstBouncePoint } from "./physics";
 import type { BallState, PlayerState, ShotType, Team } from "./types";
 
@@ -148,7 +148,7 @@ export function updateMovement(
         p.targetY = overhead!.y;
         // never step into the kitchen for an unbounced ball
         const kl = team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
-        const standoff = PLAYER.KITCHEN_LINE_STANDOFF * 0.6;
+        const standoff = PLAYER.VOLLEY_LINE_STANDOFF;
         if (team === "near") p.targetY = Math.max(p.targetY, kl + standoff);
         else p.targetY = Math.min(p.targetY, kl - standoff);
       } else if (humanRetriever && !pred.bounced && deepUnbounced(ball, team)) {
@@ -188,9 +188,16 @@ export function updateMovement(
         // Don't step INTO the kitchen to volley an un-bounced ball — hold
         // behind the line (legal net play). We only enter the NVZ for a ball
         // that has already bounced there (a dink).
-        if (!pred.bounced) {
-          const kl = team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
-          const standoff = PLAYER.KITCHEN_LINE_STANDOFF * 0.6;
+        const kl = team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+        const stepIn = shortDinkStepIn(p, ball, team, info, kl);
+        if (stepIn) {
+          // SHORT BOUNCED DINK (B3 §3): step into the kitchen to a realistic
+          // contact position behind the post-bounce contact point. Rules stay
+          // authoritative: an airborne volley from here is never auto-taken.
+          p.targetX = stepIn.x;
+          p.targetY = stepIn.y;
+        } else if (!pred.bounced) {
+          const standoff = PLAYER.VOLLEY_LINE_STANDOFF;
           if (team === "near") p.targetY = Math.max(p.targetY, kl + standoff);
           else p.targetY = Math.min(p.targetY, kl - standoff);
         }
@@ -235,6 +242,13 @@ export function updateMovement(
             team === "near" ? COURT.LENGTH - PLAYER.RECEIVE_DEPTH : PLAYER.RECEIVE_DEPTH;
         }
       }
+      // Volley MOMENTUM window: never steer a player into the NVZ / onto its
+      // line right after a volley (that would manufacture a momentum fault).
+      if (p.momentumTimer > 0) {
+        const kl = team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+        if (team === "near") p.targetY = Math.max(p.targetY, kl + PLAYER.VOLLEY_LINE_STANDOFF);
+        else p.targetY = Math.min(p.targetY, kl - PLAYER.VOLLEY_LINE_STANDOFF);
+      }
       moveToward(p, dt);
     }
 
@@ -250,6 +264,25 @@ export function updateMovement(
       p.y = c.y;
     }
   }
+}
+
+// A soft dink/drop whose bounce (already happened or predicted at the strike)
+// is in OUR kitchen and whose post-bounce contact point is genuinely short —
+// more than DINK_CONTACT_OFFSET minus the ready standoff inside the line — so
+// it is not naturally playable from outside. Returns the contact position
+// (DINK_CONTACT_OFFSET behind the contact point) or null. Never during a
+// volley momentum window (entering the NVZ then would be a fault).
+function shortDinkStepIn(p: PlayerState, ball: BallState, team: Team, info: MovementInfo, kl: number): { x: number; y: number } | null {
+  const ls = info.lastShot;
+  if (!ls || ls.miss || p.momentumTimer > 0 || (ls.type !== "dink" && ls.type !== "drop")) return null;
+  const landY = ball.bouncesSinceHit > 0 ? ball.lastBounce?.y ?? null : ls.landY;
+  if (landY == null || teamOfY(landY) !== team || Math.abs(landY - COURT.NET_Y) >= Math.abs(kl - COURT.NET_Y)) return null;
+  const c = predictContact(ball, team, true);
+  if (!c.reachable || teamOfY(c.y) !== team) return null;
+  const dir = team === "near" ? 1 : -1;
+  const y = c.y + dir * PLAYER.DINK_CONTACT_OFFSET;
+  const inside = team === "near" ? y < kl - KITCHEN.LINE_TOLERANCE : y > kl + KITCHEN.LINE_TOLERANCE;
+  return inside ? { x: c.x, y } : null;
 }
 
 function isApproaching(ball: BallState, team: Team): boolean {

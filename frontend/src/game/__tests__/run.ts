@@ -19,6 +19,7 @@ import { shotMix } from "./shotMix";
 import { humanLobOutcomes, humanSmashScenario, humanShotMixScript, lobClearTests } from "./humanTactics";
 import { twoBounceTests } from "./twoBounce";
 import { netTransitionTests } from "./netTransition";
+import { kitchenFootworkTests } from "./kitchenFootwork";
 
 let passed = 0;
 let failed = 0;
@@ -854,6 +855,11 @@ function b3NetTests() {
   for (const r of netTransitionTests()) { if (r.info) console.log(`  ${r.name}: ${r.info}`); ok(r.ok, r.name); }
 }
 
+function b3KitchenTests() {
+  console.log("\n[B3 §3 kitchen footwork]");
+  for (const r of kitchenFootworkTests()) { if (r.info) console.log(`  ${r.name}: ${r.info}`); ok(r.ok, r.name); }
+}
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -871,6 +877,7 @@ dinkTests();
 vocabularyTests();
 b3TwoBounceTests();
 b3NetTests();
+b3KitchenTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

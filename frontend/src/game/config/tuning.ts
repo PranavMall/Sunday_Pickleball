@@ -26,7 +26,9 @@ export const PLAYER = {
   RECOVER_DEPTH_BASELINE: 6.5, // ft in from baseline when recovering deep
   RECEIVE_DEPTH: 2.6, // ft in from baseline when positioned to RECEIVE a serve
   SERVE_STANDOFF: 1.6, // ft BEHIND the baseline the server stands to serve
-  KITCHEN_LINE_STANDOFF: 1.2, // ft behind own kitchen line when playing net
+  KITCHEN_LINE_STANDOFF: 0.5, // ft behind own kitchen line when playing net (B3: was 1.2; clear of the 0.25 ft line tolerance)
+  VOLLEY_LINE_STANDOFF: 0.4, // ft behind the line a player holds to volley an UNBOUNCED ball (B3: was 1.2 × 0.6 = 0.72)
+  DINK_CONTACT_OFFSET: 2.0, // ft a retriever stands behind a short BOUNCED dink's contact point (may be inside the kitchen)
   RETREAT_DEPTH_BASELINE: 2.5, // ft in from baseline for the kitchen-button BACK (retreat) mode only
   RALLY_BEHIND_BASELINE: 3.0, // ft a rally player may step BEHIND their own baseline to retrieve a deep ball
 } as const;

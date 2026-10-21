@@ -206,7 +206,11 @@ export const RuleManager = {
   eligibleForAirborneVolley(p: PlayerState, ball: BallState): boolean {
     const airborne = ball.bouncesSinceHit === 0 && ball.z > 0.05;
     if (!airborne) return true;
-    return !(p.wasInKitchen && !p.feetEstablished);
+    if (p.wasInKitchen && !p.feetEstablished) return false;
+    // Current GEOMETRY (flags refresh at the next step): a player whose feet
+    // are now in the NVZ or on its line is never auto-designated to volley.
+    const ownLineY = p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
+    return !isInKitchenZone(p.x, p.y) && Math.abs(p.y - ownLineY) > KITCHEN.LINE_TOLERANCE;
   },
 };
 
