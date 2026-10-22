@@ -5,11 +5,14 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
+import { initMeta } from "@/src/game/meta";
 import { queryClient } from "@/src/query-client";
 
 // Disable logbox errors etc so that users can see the app
 // and agent works as expected.
 LogBox.ignoreAllLogs(true);
+// APP START: load (or create) the one progression save.
+initMeta();
 
 export default function RootLayout() {
   // One app level ErrorBoundary; a render crash shows a reload screen

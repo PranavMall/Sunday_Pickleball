@@ -14,6 +14,8 @@ import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
+import { initMeta, meta } from "@/src/game/meta";
+import { newMatchId } from "@/src/game/meta/metaStore";
 import { getIdentity } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_LABEL_SECONDS, faultLabelFor } from "@/src/game/faultLabel";
@@ -84,12 +86,12 @@ const LobButton = memo(function LobButton(props: { armed: boolean; onPress: () =
   );
 });
 
-function buildMatch(difficulty: Difficulty, singles: boolean): { sim: GameSimulation; config: MatchConfig } {
+function buildMatch(difficulty: Difficulty, singles: boolean): { sim: GameSimulation; config: MatchConfig; matchId: string } {
   const seed = (Math.random() * 1e9) | 0;
   const config = singles ? devSinglesConfig(difficulty, seed) : quickMatchConfig(difficulty, seed);
   const sim = new GameSimulation(config);
   analytics.track("match_started", { difficulty, format: config.format });
-  return { sim, config };
+  return { sim, config, matchId: newMatchId(Date.now()) };
 }
 
 // Memoised HUD — only re-renders when these primitives change (not every frame).
@@ -152,6 +154,7 @@ export default function Match() {
   const [match, setMatch] = useState(() => buildMatch(difficulty, singles));
   const sim = match.sim;
   const config = match.config;
+  const matchId = match.matchId;
   const [, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -280,6 +283,8 @@ export default function Match() {
       if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
         logMatchResult(config, sim);
+        // Match end: the only meta save point for a match (idempotent by matchId).
+        initMeta().then(() => meta.completeMatch({ matchId, kind: "quick", won: sim.winner === "near" }, Date.now()));
         analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
       }
       setFrame((f) => (f + 1) % 1000000);
@@ -288,7 +293,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot]);
+  }, [sim, config, difficulty, humanSlot, matchId]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time

@@ -38,14 +38,20 @@ export const ScoreManager = {
     return teamScore % 2 === 0 ? "R" : "L";
   },
 
-  resolve(prev: ScoreState, rallyWinner: Team, format: MatchFormat = "doubles"): PointOutcome {
+  resolve(
+    prev: ScoreState,
+    rallyWinner: Team,
+    format: MatchFormat = "doubles",
+    pointsToWin: number = MATCH.POINTS_TO_WIN,
+    winBy: number = MATCH.WIN_BY,
+  ): PointOutcome {
     const score: ScoreState = { ...prev };
     const servingWon = rallyWinner === score.servingTeam;
 
     if (servingWon) {
       if (rallyWinner === "near") score.nearScore++;
       else score.farScore++;
-      const gameOver = this.isGameOver(score);
+      const gameOver = this.isGameOver(score, pointsToWin, winBy);
       return {
         score,
         event: gameOver ? "game_over" : "point",
@@ -77,7 +83,7 @@ export const ScoreManager = {
     return { score, event: "side_out", gameOver: false, winner: null, serverSwitchSides: false };
   },
 
-  isGameOver(score: ScoreState, pointsToWin = MATCH.POINTS_TO_WIN, winBy = MATCH.WIN_BY): boolean {
+  isGameOver(score: ScoreState, pointsToWin: number = MATCH.POINTS_TO_WIN, winBy: number = MATCH.WIN_BY): boolean {
     const hi = Math.max(score.nearScore, score.farScore);
     const diff = Math.abs(score.nearScore - score.farScore);
     return hi >= pointsToWin && diff >= winBy;

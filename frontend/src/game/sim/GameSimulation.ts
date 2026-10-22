@@ -1257,7 +1257,7 @@ export class GameSimulation {
     const rallyWinner: Team = fault.faultingTeam === "near" ? "far" : "near";
     this.lastPoint.time = this.time;
     this.lastPoint.winner = rallyWinner;
-    const outcome = ScoreManager.resolve(this.score, rallyWinner, this.format);
+    const outcome = ScoreManager.resolve(this.score, rallyWinner, this.format, this.pointsToWin, this.winBy);
     this.score = outcome.score;
 
     // Advance the SERVER (tracked as a real player), per doubles rules:

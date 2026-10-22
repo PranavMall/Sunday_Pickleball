@@ -1,0 +1,406 @@
+// METASTORE: the one in-memory owner of all progression state. It writes ONE
+// JSON document (schemaVersion) to storage, strictly sequentially (a write
+// chain of snapshots — no parallel read-modify-write anywhere). Identity stays
+// in the existing pw.playerName / pw.teamName / pw.identitySet keys.
+//
+// Every Coins / Gems / Fans / Growth / Chemistry change goes through applyLedger
+// (idempotent by rewardId; balances never negative; Fans never decrease).
+// Analytics are emitted at the mutation points. All functions take `now` (ms).
+// Nothing in src/game/sim imports this module.
+import { analytics } from "../services/analytics";
+import {
+  CAREER_MATCH_IDS,
+  CHEMISTRY_MAX,
+  FIRST_CAREER_MATCH_ID,
+  FIRST_SESSION_START,
+  FORM_START,
+  HOME_CITY,
+  LEDGER_KEEP,
+  META_STORAGE_KEY,
+  SCHEMA_VERSION,
+  STARTER_PARTNER_ID,
+  START_VALUES,
+  type Currency,
+} from "./economyConfig";
+
+export interface StorageAdapter {
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+}
+
+export interface PartnerState {
+  discovered: boolean;
+  signable: boolean;
+  signed: boolean;
+  growth: number;
+}
+
+export interface LedgerEntry {
+  rewardId: string;
+  currency: Currency;
+  target?: string; // partnerId (growth) or pairing key (chemistry)
+  valueBefore: number;
+  delta: number;
+  valueAfter: number;
+  sourceType: string;
+  sourceId: string;
+  timestamp: number;
+}
+
+export interface SaveDoc {
+  schemaVersion: number;
+  guestId: string;
+  homeCity: string;
+  firstSession: string;
+  coins: number;
+  gems: number;
+  fans: number;
+  form: string;
+  formStreak: number;
+  activePartnerId: string;
+  trainingPartnerId: string;
+  partners: Record<string, PartnerState>;
+  chemistryHalves: Record<string, number>; // pairing key → half points (0..200)
+  career: { cleared: string[]; nextMatchId: string; firstClearWins: number; firstClearLosses: number };
+  namedRivals: Record<string, boolean>;
+  milestones: Record<string, boolean>;
+  daily: { dayKey: string; training: number; scrimmage: number };
+  inboxRead: string[];
+  rewardIds: string[]; // every applied rewardId (idempotency)
+  ledger: LedgerEntry[]; // recent history (LEDGER_KEEP)
+}
+
+export type MatchKind = "career" | "training" | "scrimmage" | "quick";
+
+export interface Source {
+  sourceType: string;
+  sourceId: string;
+}
+
+export type LedgerResult =
+  | { ok: true; applied: boolean; entry?: LedgerEntry }
+  | { ok: false; reason: "insufficient" | "fans_never_decrease" | "invalid" };
+
+// Local calendar date, e.g. "2026-06-14" (zero-padded → string order = date order).
+export function dayKeyOf(now: number): string {
+  const d = new Date(now);
+  const p = (n: number) => (n < 10 ? "0" : "") + n;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// Unique per match without any storage write at match start.
+export function newMatchId(now: number, rand: () => number = Math.random): string {
+  return `${now.toString(36)}${Math.floor(rand() * 36 ** 6).toString(36).padStart(6, "0")}`;
+}
+
+export function pairingKey(partnerId: string): string {
+  return `player+${partnerId}`;
+}
+
+export function freshSave(now: number, rand: () => number = Math.random): SaveDoc {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    guestId: `g_${newMatchId(now, rand)}${Math.floor(rand() * 36 ** 6).toString(36)}`,
+    homeCity: HOME_CITY,
+    firstSession: FIRST_SESSION_START,
+    coins: START_VALUES.coins,
+    gems: START_VALUES.gems,
+    fans: START_VALUES.fans,
+    form: FORM_START,
+    formStreak: 0,
+    activePartnerId: STARTER_PARTNER_ID,
+    trainingPartnerId: STARTER_PARTNER_ID,
+    partners: { [STARTER_PARTNER_ID]: { discovered: true, signable: true, signed: true, growth: 0 } },
+    chemistryHalves: { [pairingKey(STARTER_PARTNER_ID)]: 0 },
+    career: { cleared: [], nextMatchId: FIRST_CAREER_MATCH_ID, firstClearWins: 0, firstClearLosses: 0 },
+    namedRivals: {},
+    milestones: {},
+    daily: { dayKey: dayKeyOf(now), training: 0, scrimmage: 0 },
+    inboxRead: [],
+    rewardIds: [],
+    ledger: [],
+  };
+}
+
+// Field-by-field sanitise onto a fresh save: a corrupt field falls back to its
+// default; unparseable / non-object data → a full fresh save. Never throws.
+export function sanitiseSave(raw: unknown, now: number, rand: () => number = Math.random): SaveDoc {
+  const base = freshSave(now, rand);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return base;
+  const r = raw as Record<string, any>;
+  if (typeof r.schemaVersion !== "number") return base;
+  const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : d);
+  const str = (v: unknown, d: string) => (typeof v === "string" && v ? v : d);
+  const strArr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
+  const boolMap = (v: unknown) => {
+    const out: Record<string, boolean> = {};
+    if (v && typeof v === "object") for (const [k, b] of Object.entries(v)) if (typeof b === "boolean") out[k] = b;
+    return out;
+  };
+  const partners: Record<string, PartnerState> = { ...base.partners };
+  if (r.partners && typeof r.partners === "object") {
+    for (const [id, p] of Object.entries<any>(r.partners)) {
+      if (!p || typeof p !== "object") continue;
+      partners[id] = { discovered: !!p.discovered, signable: !!p.signable, signed: !!p.signed, growth: num(p.growth, 0) };
+    }
+  }
+  const chemistryHalves: Record<string, number> = { ...base.chemistryHalves };
+  if (r.chemistryHalves && typeof r.chemistryHalves === "object") {
+    for (const [k, v] of Object.entries(r.chemistryHalves)) chemistryHalves[k] = Math.min(CHEMISTRY_MAX * 2, Math.round(num(v, 0)));
+  }
+  const c = r.career && typeof r.career === "object" ? r.career : {};
+  const dly = r.daily && typeof r.daily === "object" ? r.daily : {};
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    guestId: str(r.guestId, base.guestId),
+    homeCity: str(r.homeCity, base.homeCity),
+    firstSession: str(r.firstSession, base.firstSession),
+    coins: num(r.coins, base.coins),
+    gems: num(r.gems, base.gems),
+    fans: num(r.fans, base.fans),
+    form: str(r.form, base.form),
+    formStreak: typeof r.formStreak === "number" && Number.isFinite(r.formStreak) ? r.formStreak : 0,
+    activePartnerId: str(r.activePartnerId, base.activePartnerId),
+    trainingPartnerId: str(r.trainingPartnerId, base.trainingPartnerId),
+    partners,
+    chemistryHalves,
+    career: {
+      cleared: strArr(c.cleared).filter((id: string) => (CAREER_MATCH_IDS as readonly string[]).includes(id)),
+      nextMatchId: (CAREER_MATCH_IDS as readonly string[]).includes(c.nextMatchId) ? c.nextMatchId : base.career.nextMatchId,
+      firstClearWins: num(c.firstClearWins, 0),
+      firstClearLosses: num(c.firstClearLosses, 0),
+    },
+    namedRivals: boolMap(r.namedRivals),
+    milestones: boolMap(r.milestones),
+    daily: {
+      dayKey: typeof dly.dayKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dly.dayKey) ? dly.dayKey : base.daily.dayKey,
+      training: num(dly.training, 0),
+      scrimmage: num(dly.scrimmage, 0),
+    },
+    inboxRead: strArr(r.inboxRead),
+    rewardIds: strArr(r.rewardIds),
+    ledger: Array.isArray(r.ledger) ? r.ledger.slice(-LEDGER_KEEP) : [],
+  };
+}
+
+export class MetaStore {
+  private docState: SaveDoc | null = null;
+  private rewardSet = new Set<string>();
+  private writeChain: Promise<void> = Promise.resolve();
+  writes = 0; // completed writes (tests / diagnostics)
+
+  constructor(private storage: StorageAdapter, private rand: () => number = Math.random) {}
+
+  get loaded(): boolean {
+    return this.docState !== null;
+  }
+
+  // Read-only view of the current save (do not mutate).
+  get doc(): Readonly<SaveDoc> {
+    if (!this.docState) throw new Error("MetaStore not loaded");
+    return this.docState;
+  }
+
+  // APP START: read once; missing/corrupt → fresh starter save. Never throws.
+  async load(now: number): Promise<void> {
+    let raw: unknown = null;
+    try {
+      const s = await this.storage.getItem(META_STORAGE_KEY);
+      raw = s ? JSON.parse(s) : null;
+    } catch {
+      raw = null;
+    }
+    this.docState = sanitiseSave(raw, now, this.rand);
+    this.rewardSet = new Set(this.docState.rewardIds);
+    this.rollDay(now);
+    this.save();
+    await this.flush();
+  }
+
+  // Sequential write of a SNAPSHOT taken now.
+  save(): void {
+    if (!this.docState) return;
+    const json = JSON.stringify(this.docState);
+    this.writeChain = this.writeChain
+      .then(() => this.storage.setItem(META_STORAGE_KEY, json))
+      .then(() => {
+        this.writes++;
+      })
+      .catch((e) => console.warn("[meta] save failed", e));
+  }
+
+  flush(): Promise<void> {
+    return this.writeChain;
+  }
+
+  // ---- Day key / daily caps ---------------------------------------------
+  // A new LATER local date resets daily usage. A date that goes BACKWARDS keeps
+  // the last day key, so a clock change can never refresh a cap.
+  rollDay(now: number): void {
+    const d = this.doc as SaveDoc;
+    const k = dayKeyOf(now);
+    if (k > d.daily.dayKey) d.daily = { dayKey: k, training: 0, scrimmage: 0 };
+  }
+
+  dailyUsage(now: number): { training: number; scrimmage: number } {
+    this.rollDay(now);
+    return { training: this.doc.daily.training, scrimmage: this.doc.daily.scrimmage };
+  }
+
+  // ---- Ledger -----------------------------------------------------------
+  chemistry(partnerId: string): number {
+    return Math.floor((this.doc.chemistryHalves[pairingKey(partnerId)] ?? 0) / 2);
+  }
+
+  private read(currency: Currency, target?: string): number {
+    const d = this.doc;
+    switch (currency) {
+      case "coins": return d.coins;
+      case "gems": return d.gems;
+      case "fans": return d.fans;
+      case "growth": return d.partners[target ?? ""]?.growth ?? 0;
+      case "chemistry": return (d.chemistryHalves[target ?? ""] ?? 0) / 2;
+    }
+  }
+
+  private write(currency: Currency, value: number, target?: string) {
+    const d = this.docState!;
+    switch (currency) {
+      case "coins": d.coins = value; break;
+      case "gems": d.gems = value; break;
+      case "fans": d.fans = value; break;
+      case "growth": d.partners[target!].growth = value; break;
+      case "chemistry": d.chemistryHalves[target!] = Math.round(value * 2); break;
+    }
+  }
+
+  // The single mutation point. Idempotent by rewardId (a repeat is a no-op).
+  // Does NOT save — callers batch and save once.
+  private applyLedger(rewardId: string, currency: Currency, delta: number, src: Source, now: number, target?: string): LedgerResult {
+    if (this.rewardSet.has(rewardId)) return { ok: true, applied: false };
+    if (!Number.isFinite(delta)) return { ok: false, reason: "invalid" };
+    if (currency === "growth" && !this.doc.partners[target ?? ""]) return { ok: false, reason: "invalid" };
+    if (currency === "chemistry" && !target) return { ok: false, reason: "invalid" };
+    if (currency === "fans" && delta < 0) return { ok: false, reason: "fans_never_decrease" };
+    if (currency === "chemistry") delta = Math.round(delta * 2) / 2; // 0.5 steps
+    const before = this.read(currency, target);
+    let after = before + delta;
+    if (after < 0) return { ok: false, reason: "insufficient" };
+    if (currency === "chemistry") after = Math.min(CHEMISTRY_MAX, after);
+    this.write(currency, after, target);
+    const entry: LedgerEntry = {
+      rewardId, currency, target, valueBefore: before, delta: after - before, valueAfter: after,
+      sourceType: src.sourceType, sourceId: src.sourceId, timestamp: now,
+    };
+    const d = this.docState!;
+    this.rewardSet.add(rewardId);
+    d.rewardIds.push(rewardId);
+    d.ledger.push(entry);
+    if (d.ledger.length > LEDGER_KEEP) d.ledger.splice(0, d.ledger.length - LEDGER_KEEP);
+    if (delta < 0) analytics.track("economy_spend", { rewardId, currency, amount: -entry.delta, after, sourceType: src.sourceType, sourceId: src.sourceId });
+    else analytics.track("economy_reward_granted", { rewardId, currency, target, delta: entry.delta, after, sourceType: src.sourceType, sourceId: src.sourceId });
+    if (currency === "growth" || currency === "chemistry") {
+      analytics.track("partner_progress_changed", { partner: target, currency, before, after });
+    }
+    return { ok: true, applied: true, entry };
+  }
+
+  // Grant a positive amount (saved immediately).
+  grant(rewardId: string, currency: Currency, amount: number, src: Source, now: number, target?: string): LedgerResult {
+    if (!(amount >= 0)) return { ok: false, reason: "invalid" };
+    const r = this.applyLedger(rewardId, currency, amount, src, now, target);
+    if (r.ok && r.applied) this.save();
+    return r;
+  }
+
+  // Spend Coins or Gems. Fails cleanly (no change) when short.
+  spend(spendId: string, currency: "coins" | "gems", amount: number, src: Source, now: number): LedgerResult {
+    if (!(amount > 0)) return { ok: false, reason: "invalid" };
+    const r = this.applyLedger(spendId, currency, -amount, src, now);
+    if (r.ok && r.applied) this.save();
+    return r;
+  }
+
+  // MATCH END: apply every reward of one match (rewardIds derive from the
+  // matchId), update career / daily usage, emit the completion event, save
+  // ONCE. A repeated matchId is a no-op. A match that never reaches here (quit
+  // or app killed mid-match) grants and records nothing.
+  completeMatch(
+    m: {
+      matchId: string;
+      kind: MatchKind;
+      won: boolean;
+      careerMatchId?: string;
+      rewards?: { currency: Currency; amount: number; target?: string }[];
+    },
+    now: number,
+  ): { applied: boolean } {
+    const doneId = `${m.kind}:${m.matchId}:completed`;
+    if (this.rewardSet.has(doneId)) return { applied: false };
+    const d = this.docState!;
+    const src: Source = { sourceType: m.kind, sourceId: m.careerMatchId ?? m.matchId };
+    for (const rw of m.rewards ?? []) {
+      const id = `${m.kind}:${m.matchId}:${rw.currency}${rw.target ? ":" + rw.target : ""}`;
+      this.applyLedger(id, rw.currency, rw.amount, src, now, rw.target);
+    }
+    this.rewardSet.add(doneId);
+    d.rewardIds.push(doneId);
+    this.rollDay(now);
+    if (m.kind === "career" && m.careerMatchId) {
+      const firstAttempt = !d.career.cleared.includes(m.careerMatchId);
+      if (firstAttempt) {
+        if (m.won) d.career.firstClearWins++;
+        else d.career.firstClearLosses++;
+      }
+      if (m.won && firstAttempt) {
+        d.career.cleared.push(m.careerMatchId);
+        const next = CAREER_MATCH_IDS.find((id) => !d.career.cleared.includes(id));
+        if (next) d.career.nextMatchId = next;
+      }
+      analytics.track("career_match_completed", { matchId: m.matchId, careerMatchId: m.careerMatchId, won: m.won });
+    } else if (m.kind === "training") {
+      d.daily.training++;
+      analytics.track("training_completed", { matchId: m.matchId, won: m.won });
+    } else if (m.kind === "scrimmage") {
+      d.daily.scrimmage++;
+      analytics.track("scrimmage_completed", { matchId: m.matchId, won: m.won });
+    } else {
+      analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won });
+    }
+    this.save();
+    return { applied: true };
+  }
+
+  // ---- Partners / flags (each saves once) --------------------------------
+  signPartner(partnerId: string, now: number): boolean {
+    const p = this.docState!.partners[partnerId];
+    if (!p || !p.signable || p.signed) return false;
+    p.signed = true;
+    p.discovered = true;
+    analytics.track("partner_signed", { partner: partnerId, t: now });
+    this.save();
+    return true;
+  }
+
+  setActivePartner(partnerId: string): boolean {
+    const d = this.docState!;
+    if (!d.partners[partnerId]?.signed || d.activePartnerId === partnerId) return false;
+    const from = d.activePartnerId;
+    d.activePartnerId = partnerId;
+    analytics.track("active_partner_changed", { from, to: partnerId });
+    this.save();
+    return true;
+  }
+
+  // Milestone progress (flags only are persisted): completes once.
+  milestoneProgress(id: string, value: number, target: number): boolean {
+    const d = this.docState!;
+    if (d.milestones[id]) return false;
+    analytics.track("milestone_progress", { id, value, target });
+    if (value < target) return false;
+    d.milestones[id] = true;
+    analytics.track("milestone_completed", { id });
+    this.save();
+    return true;
+  }
+}
