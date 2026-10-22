@@ -67,6 +67,9 @@ export const INPUT = {
   // legally strike within it, the input EXPIRES so an early swipe can never
   // fire seconds later.
   SWIPE_BUFFER_TIME: 0.28, // s
+  // HUMAN-ONLY smash latch: a latched firm swipe still counts as a smash with
+  // the ball up to this much below SMASH_MIN_Z at contact (the AI never reads it).
+  SMASH_LATCH_Z_TOLERANCE: 0.6, // ft
 } as const;
 
 // HUMAN shot quality. Direction (full swipe vector) → aim, swipe length → power,

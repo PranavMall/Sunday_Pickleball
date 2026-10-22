@@ -387,7 +387,7 @@ export default function Match() {
   gameOverRef.current = gameOver;
   const nearWon = sim.winner === "near";
   const letBounceCue = !paused && !gameOver && sim.humanMustLetBounce();
-  const smashCue = !paused && !gameOver && !letBounceCue && sim.humanSmashCue();
+  const smashCue = !paused && !gameOver && !letBounceCue ? sim.humanSmashCuePhase() : null;
   const dinkCue = !paused && !gameOver && !letBounceCue && !smashCue && sim.humanInDinkRange();
   // Right after MY lob: pulse "BACK ▼" (a hint only — no automatic retreat).
   const lobBackPulse =
@@ -473,8 +473,12 @@ export default function Match() {
         </View>
       )}
       {smashCue && (
-        <View style={[styles.smashCue, { bottom: insets.bottom + PILL_BASE + 50 }]} pointerEvents="none" testID="smash-cue">
-          <Text style={styles.smashCueText}>SMASH!</Text>
+        <View
+          style={[styles.smashCue, smashCue === "ready" && styles.smashReady, { bottom: insets.bottom + PILL_BASE + 50 }]}
+          pointerEvents="none"
+          testID={smashCue === "ready" ? "smash-ready-cue" : "smash-cue"}
+        >
+          <Text style={styles.smashCueText}>{smashCue === "ready" ? "HIGH BALL — GET READY" : "SMASH"}</Text>
         </View>
       )}
       {faultLabel && (
@@ -657,6 +661,7 @@ const useStyles = makeStyles((c) => ({
   kitchenBtnPulse: { borderColor: c.accentGold, borderWidth: 4, transform: [{ scale: 1.08 }] },
   smashCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(214,96,60,0.95)", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 5 },
   smashCueText: { color: "#FBF6E9", fontSize: 13, fontWeight: "900", letterSpacing: 2 },
+  smashReady: { backgroundColor: "rgba(20,26,18,0.7)", borderWidth: 1.5, borderColor: "rgba(214,96,60,0.95)" },
   kitchenBtn: { width: KB_SIZE, height: KB_SIZE, borderRadius: KB_SIZE / 2, alignItems: "center", justifyContent: "center", borderWidth: 2 },
   kitchenBtnHold: { backgroundColor: "rgba(197,160,40,0.92)", borderColor: "#FBF6E9" },
   kitchenBtnBack: { backgroundColor: "rgba(46,61,42,0.82)", borderColor: "rgba(251,246,233,0.55)" },

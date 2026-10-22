@@ -13,7 +13,7 @@ import { updateMovement, STRIKE_MAX_Z, type MovementInfo } from "./movement";
 import { RuleManager, type ServeContext } from "./rules";
 import { ScoreManager } from "./score";
 import { solveShot } from "./shots";
-import { firstBouncePoint } from "./physics";
+import { firstBouncePoint, predictOverhead } from "./physics";
 import type {
   BallState,
   BounceEvent,
@@ -151,6 +151,13 @@ export class GameSimulation {
   // A human swipe read as a clear airborne volley in the two-bounce phase;
   // executed (and faulted by RuleManager) on the next step.
   private volleyAttempt = false;
+  // SMASH CUE + LATCH (human only). smashPredicted is computed ONCE per
+  // opponent strike (predictOverhead); smashLatched = a firm swipe made while
+  // the cue showed — it is not expired by SWIPE_BUFFER_TIME and clears on
+  // contact, bounce, any strike or point end. All-AI matches never set either.
+  private humanSlot = -1;
+  private smashPredicted = false;
+  smashLatched = false;
 
   constructor(cfg: MatchConfig | SimOptions) {
     const config = isMatchConfig(cfg) ? cfg : optionsToConfig(cfg);
@@ -199,6 +206,7 @@ export class GameSimulation {
 
     this.players = [...makePlayers(config.near.players, "near"), ...makePlayers(config.far.players, "far")];
     this.controllers = this.players.map((p) => p.controller);
+    this.humanSlot = this.controllers.findIndex((c) => c === "LOCAL_HUMAN");
     if (this.players.some((p) => p.team === "near" && p.controller === "LOCAL_HUMAN")) this.kitchenMode = "hold";
     this.personalities = this.players.map((p) => p.personality);
     // Nominal match difficulty (the opponents') for the overlay / analytics.
@@ -325,6 +333,7 @@ export class GameSimulation {
     this.pushTrace("received", input, this.strikerSlot);
     this.maybeWindUp(input);
     this.volleyAttempt = this.isClearAirborneVolley(input);
+    this.smashLatched = this.latchWorthy(input);
   }
 
   // Finger-DOWN path (low latency): arm ONE swipe for the gesture as soon as it
@@ -339,6 +348,23 @@ export class GameSimulation {
     this.pushTrace("buffered", input, this.strikerSlot);
     this.maybeWindUp(input);
     this.volleyAttempt = this.isClearAirborneVolley(input);
+    this.smashLatched = this.latchWorthy(input);
+  }
+
+  // A FIRM swipe (fast or power ≥ DRIVE_POWER_MIN) made while either smash
+  // cue phase shows latches (human only).
+  private latchWorthy(input: SwipeInput): boolean {
+    if (input.tap || this.humanSlot < 0) return false;
+    const firm = (input.speed ?? 0) >= INPUT.DRIVE_SPEED_MIN || input.power >= INPUT.DRIVE_POWER_MIN;
+    return firm && this.humanSmashCuePhase() !== null;
+  }
+
+  // Drop a latched swipe (bounce / strike / point end): the latch and its
+  // pending swipe clear together, and the held gesture can't re-arm it.
+  private clearSmashLatch() {
+    this.smashLatched = false;
+    this.pendingInput = null;
+    this.armHeld = false;
   }
 
   // TWO-BOUNCE (human, serve return / third shot only): is this fresh swipe a
@@ -366,6 +392,7 @@ export class GameSimulation {
     this.pendingInput.dy = input.dy;
     this.pendingInput.power = input.power;
     this.pendingInput.speed = input.speed;
+    if (!this.smashLatched) this.smashLatched = this.latchWorthy(this.pendingInput);
   }
 
   // Finger-up: finalise the armed snapshot and start the deterministic buffer
@@ -375,6 +402,7 @@ export class GameSimulation {
     this.pendingInput = input;
     this.pendingInputTime = this.time;
     this.armHeld = false;
+    if (!this.smashLatched) this.smashLatched = this.latchWorthy(input);
   }
 
   private maybeWindUp(input: SwipeInput) {
@@ -474,6 +502,20 @@ export class GameSimulation {
     if (!smashPositionOk(h)) return false;
     return this.humanStrikeLegal(h);
   }
+  // TWO-PHASE SMASH CUE (human only, display + latch gate):
+  //   "smash" — the existing smash window is open (humanSmashWindow()).
+  //   "ready" — the opponents' high ball was predicted (once, at their strike)
+  //             to come down through smash height in my strike zone, it has
+  //             not bounced, and I'm within SMASH_MAX_NET_DIST of the net.
+  humanSmashCuePhase(): "ready" | "smash" | null {
+    if (this.humanSmashWindow()) return "smash";
+    if (!this.smashPredicted || this.phase !== "rally" || this.lobArmed || this.ball.bouncesSinceHit > 0) return null;
+    // Once the ball has dropped below smash height, the READY phase is over.
+    if (this.ball.vz < 0 && this.ball.z < TACTIC.SMASH_MIN_Z) return null;
+    const h = this.players[this.humanSlot];
+    if (!smashPositionOk(h)) return null;
+    return "ready";
+  }
   // A genuinely HIGH ball: at smash height and descending from a high arc.
   highBall(): boolean {
     return this.ball.bouncesSinceHit === 0 && this.ball.z >= TACTIC.SMASH_MIN_Z && this.ball.vz < 0 && this.apexSinceHit >= TACTIC.SMASH_MIN_APEX;
@@ -514,6 +556,7 @@ export class GameSimulation {
       this.pendingInput &&
       !this.armHeld &&
       this.time - this.pendingInputTime > INPUT.SWIPE_BUFFER_TIME &&
+      !this.smashLatched &&
       !(this.phase === "rally" && this.humanCanHit() && this.humanStrikeLegal(this.players[this.strikerSlot!]))
     ) {
       this.pushTrace("expired", this.pendingInput, this.strikerSlot);
@@ -815,6 +858,8 @@ export class GameSimulation {
       b.bounceSideCount++;
       b.lastBounce = { x: b.x, y: b.y, side: teamOfY(b.y) };
       this.lastBounceAt = this.time;
+      this.smashPredicted = false;
+      if (this.smashLatched) this.clearSmashLatch();
 
       // Authoritative BOUNCE event (one per court contact), separate from
       // CONTACT. Never inferred from shot type.
@@ -942,7 +987,14 @@ export class GameSimulation {
 
   private executeHumanHit(p: PlayerState, input: SwipeInput, lateness: number) {
     const power = input.power;
-    const shotType = classifyHumanShot(p, input, this.highBall() && smashPositionOk(p), this.lobArmed);
+    // HUMAN-ONLY latch tolerance: a latched firm swipe still smashes a ball
+    // slightly (≤ SMASH_LATCH_Z_TOLERANCE) below SMASH_MIN_Z.
+    const latchHigh =
+      this.smashLatched &&
+      this.ball.bouncesSinceHit === 0 &&
+      this.ball.z >= TACTIC.SMASH_MIN_Z - INPUT.SMASH_LATCH_Z_TOLERANCE &&
+      this.apexSinceHit >= TACTIC.SMASH_MIN_APEX;
+    const shotType = classifyHumanShot(p, input, (this.highBall() || latchHigh) && smashPositionOk(p), this.lobArmed);
 
     // Aim from the FULL swipe vector: lateral from dx, depth from power & shot
     // type. A downward/backward swipe (dy > 0) is a mishit — it overcooks the
@@ -1139,6 +1191,10 @@ export class GameSimulation {
     this.rallyStrikeCount++;
     this.stats.rallyCount = this.rallyStrikeCount;
     this.bounceCueSpot = this.rallyStrikeCount <= 2 && !miss ? firstBouncePoint(b) : null;
+    // Smash cue/latch (human only): any strike clears the latch; an opponent
+    // strike predicts ONCE whether its high ball comes down to me.
+    if (this.smashLatched) this.clearSmashLatch();
+    this.smashPredicted = this.humanSlot >= 0 && !isServe && this.predictSmashForHuman(p);
     if (this.rallyStrikeCount > this.stats.longestRally) this.stats.longestRally = this.rallyStrikeCount;
     if (shotType === "dink" && !miss) {
       this.stats.dinks++;
@@ -1172,9 +1228,23 @@ export class GameSimulation {
     }
   }
 
+  // Will this opponent strike's ball come down through smash height (from a
+  // high arc) in MY strike zone, at a point where my volley is legal (strike
+  // 4+)? "Mine" = I'm at least as close to the spot as my partner. Pure.
+  private predictSmashForHuman(striker: PlayerState): boolean {
+    const h = this.players[this.humanSlot];
+    if (striker.team === h.team || this.rallyStrikeCount < 3) return false;
+    const o = predictOverhead(this.ball, h.team, this.ball.z, TACTIC.SMASH_MIN_APEX, TACTIC.SMASH_MIN_Z);
+    if (!o || !smashPositionOk(o)) return false;
+    const mate = this.players[this.partnerSlot(h.slot)];
+    return mate === h || Math.hypot(o.x - h.x, o.y - h.y) <= Math.hypot(o.x - mate.x, o.y - mate.y);
+  }
+
   // ---- Fault / scoring -----------------------------------------------------
   private registerFault(fault: FaultEvent) {
     this.lastFault = fault;
+    this.smashPredicted = false;
+    if (this.smashLatched) this.clearSmashLatch();
     this.lobArmed = false; // point end clears an armed lob
     this.ball.inPlay = false;
     this.phase = "point_over";
