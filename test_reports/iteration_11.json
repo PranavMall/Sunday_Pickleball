@@ -1,0 +1,35 @@
+{
+  "summary": "Phase 1A Session A (Commits 0-2) verification PASS. (A) Headless suites from /app/frontend: `npx tsx src/game/__tests__/run.ts` -> === RESULT: 263 passed, 0 failed === (human smash: good 15/15 in, mistimed/extreme 9/10 out; cue probe old median 83ms -> new median 917ms). `npx tsx src/game/__tests__/phase1a.ts` -> === PHASE 1A RESULT: 110 passed, 0 failed === (covers Commit 0 fault label, Commit 1 smash cue + latch, Commit 2a first-to-7 scoring, Commit 2b/2c MetaStore + ledger, Commit 2d engine chemistry isolation). `bash scripts/regress1a.sh` -> b3Report: BYTE-IDENTICAL vs /tmp/base, shotMix: BYTE-IDENTICAL vs /tmp/base, stepBench best=2.16us median=2.19us. (B) Web preview 390x844 on https://pickleball-b3.preview.emergentagent.com: Home shows 'Pickle-Ballers' title (not Picklewood); identity-prompt team placeholder is 'Pickle-Ballers'; after Skip home chip reads 'Team Pickle-Ballers'. (C) Migration verified: localStorage pw.teamName='Picklewood' + pw.identitySet='1' + reload -> pw.teamName becomes 'Baseline Bandits' (one of the 30-name pool), chip shows 'Team Baseline Bandits', no longer Picklewood; setting pw.teamName='My Squad' then reload preserves 'My Squad' unchanged. (D) MetaStore: localStorage key 'pb.meta' present after app start, valid JSON with coins=300, gems=0, fans=0, activePartnerId='anli', guestId is a string; guestId stable across reload (g_mvjvwnsrr6clsequ08ky identical before and after reload). Corrupt case: setting pb.meta='{bad' then reload -> app does not crash, main-menu-screen still visible, pb.meta rewritten to valid JSON with coins=300. (E) Match flow: PLAY -> CLUB difficulty -> loading cover 'PICKLE-BALLERS' briefly observed before match-screen loads; HUD advances (0-0-2 -> 5-0-1, Rally 7 after ~45s of AI/swipe play); fault-label pill (testID 'fault-label') observed appearing briefly after point ends: 'OUT' at t=1.6s, 'MISSED' at t=6.4s, 'DIDN'T CROSS' at t=30.3s, 'MISSED' at t=34.8s — all match the allowed label set and each disappeared well before the next point ended (~1.2s expected visibility). (F) Pause/resume/quit: pause-button opens pause-overlay; fault-label is NOT visible while paused (verified across 2s observation window); resume-button closes overlay and resumes play; quit-button navigates back to home (main-menu-screen). (G) No pageerror events, no red error screen, no crashes across all tests. Smash cue (smash-ready-cue/smash-cue) timing cannot be reliably triggered on web preview — covered by headless phase1a.ts per agent-to-agent note; not flagged as a failure.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "pointerEvents prop", "issue": "Non-blocking carryover: 'props.pointerEvents is deprecated. Use style.pointerEvents.' Reference: /app/frontend/app/match.tsx (bounceCue/dinkCue/smashCue/shotLabel/hint)."},
+      {"component": "shadow* style props (web)", "issue": "Non-blocking carryover: 'shadow*' style props deprecated for web; use 'boxShadow'. Reference: /app/frontend/app/index.tsx (play button)."},
+      {"component": "textShadow* style props", "issue": "Non-blocking carryover: 'textShadow*' style props deprecated; use 'textShadow'. Reference: /app/frontend/app/index.tsx (title/kicker)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/frontend/src/game/__tests__/run.ts (263 passed, 0 failed)",
+    "/app/frontend/src/game/__tests__/phase1a.ts (110 passed, 0 failed)",
+    "/app/frontend/scripts/regress1a.sh (byte-identical b3Report + shotMix vs /tmp/base)"
+  ],
+  "action_items": [
+    "No action required for Phase 1A Session A scope — all three headless suites pass, web preview flows verified (rename, migration, MetaStore load/corrupt-recovery/stable guestId, fault-label pill, pause hides label, quit).",
+    "Optional carryover (non-blocking, unchanged for 8+ iterations): migrate props.pointerEvents to style.pointerEvents, shadow* to boxShadow (web), textShadow* to textShadow (web)."
+  ],
+  "critical_code_review_comments": [
+    "profile.ts migrateLegacyTeamName — correctly scoped: only EXACT 'Picklewood' is replaced from the 30-name pool; any other saved team name (including 'My Squad') is preserved. Called from app/index.tsx useEffect before refreshIdentity, so Home chip reflects the new pool name on first mount.",
+    "metaStore.ts load/sanitiseSave — field-by-field sanitise onto a fresh save with graceful fallback for unparseable JSON. Verified empirically: corrupt '{bad' payload -> coins restored to 300 (START_VALUES), activePartnerId -> 'anli' (STARTER_PARTNER_ID), guestId regenerated. On a non-corrupt reload, guestId is preserved exactly. Writes are serialised via writeChain (no parallel read-modify-write).",
+    "faultLabel.ts — pure display mapping with no sim coupling; the observed labels 'OUT', 'MISSED', \"DIDN'T CROSS\" on web match the FaultEvent -> label table (OUT, DOUBLE_BOUNCE mine->MISSED, OWN_COURT->DIDN'T CROSS).",
+    "match.tsx — fault-label pill is correctly hidden while paused (verified live) and auto-dismisses within the 1.2s window; no console errors, no red-box across the 45s observation window."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (client-only)", "frontend": "100% — run.ts 263/0, phase1a.ts 110/0, b3Report+shotMix byte-identical, web preview smoke clean, 4 distinct fault-label pills observed on CLUB match"},
+  "seed_data_creation": "Seeded localStorage with pw.playerName=TestPlayer, pw.teamName=My Squad, pw.identitySet=1 for match-flow run; cleared and re-seeded with pw.teamName=Picklewood + identitySet=1 for the migration test; cleared and re-seeded with pw.teamName=My Squad for the preservation test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Portrait 390x844. Public URL: https://pickleball-b3.preview.emergentagent.com. Phase 1A entry points: `cd /app/frontend && npx tsx src/game/__tests__/run.ts` (expect 263/0), `cd /app/frontend && npx tsx src/game/__tests__/phase1a.ts` (expect 110/0), `cd /app/frontend && bash scripts/regress1a.sh` (expect byte-identical b3Report & shotMix). Web keys: localStorage 'pb.meta' (MetaStore doc), 'pw.playerName', 'pw.teamName', 'pw.identitySet'. Migration triggers ONLY when pw.teamName is EXACTLY 'Picklewood'. Fault-label testID 'fault-label' shows ~1.2s after point ends, hidden while paused. Smash cue testIDs 'smash-ready-cue'/'smash-cue' are not reliably observable on web preview (per agent-to-agent note) — covered by headless suite instead. Match testIDs: match-screen, pause-button, pause-overlay, resume-button, quit-button, menu-quick-match, home-team-name, home-player-name, identity-prompt, main-menu-screen."
+}

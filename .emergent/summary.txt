@@ -1,34 +1,38 @@
-<analysis>**original_problem_statement**: 
-PROJECT: PICKLEWOOD – a 2v2 pickleball game for mobile. 
-Recent requirements focused on Milestone 2 Part B2 (Game Feel & Shot Vocabulary): B1 fixes (kitchen button labels, retreat depth, deep retrieval behind baseline), AI shot rebalancing (dink/drop/drive mix), adding LOB and SMASH shots with a new tactical button, adding game feel primitives (squash/stretch, contact flashes, follow-through, reactions), and diagnosing/fixing a performance drop after pausing and resuming the game.
+<analysis>Here is the handover summary for the next agent:
+
+**original_problem_statement**: 
+MILESTONE 2 PART B3: PICKLEBALL AUTHENTICITY. Final gameplay pass before freezing gameplay logic. 
+Requires three specific updates to gameplay simulation without breaking existing mechanics or causing regressions:
+1. Visible + Enforceable Two-Bounce Rule (Delaying serve return/3rd shot slightly for visible bounce, handling human two-bounce faults with a grace window).
+2. Realistic Transition to the Net (Non-hitting partners hold the line, teams advance based on opportunity/difficulty/personality, lobs force retreat).
+3. Real Kitchen Footwork (Moving ready position to 0.4-0.6 ft behind the NVZ line, allowing legal bounced dink retrieval inside the kitchen without shrinking reach boxes or causing unavoidable faults).
 
 PRODUCT REQUIREMENTS:
 - Fast, arcade-style gameplay with authentic pickleball fundamentals.
-- Fully deterministic fixed-timestep engine for identical headless/native logic.
-- Immersive, edge-to-edge UI.
-- No new image assets or render-loop rewrites yet (must keep allocations low).
+- Fully deterministic fixed-timestep engine.
+- No retuning of B2 features (forgiveness, player speed, swipe arming, lob/smash logic).
 
 **User's preferred language**: English (INSTRUCT next agent to respond in English)
 
 **what currently exists?** 
-A highly performant React Native Skia pickleball simulation. Milestone 2 Part B2 is fully implemented and tested. This includes the new shot vocabulary (Dink, Drop, Drive, Lob, Smash), a LOB tactical arm button, AI context-gated shot logic, game feel elements (squash/stretch, reactions, contact flashes), and fixed pause/resume performance (preventing React re-renders while the engine is paused). The deterministic test suite now spans 236 tests, ensuring strict rule simulation and gameplay fairness.
+A highly performant React Native Skia pickleball simulation. Milestone 2 Part B3 (Pickleball Authenticity) is fully implemented and tested. The engine now enforces a visible two-bounce rule (with human fault handling and grace windows), realistic net transitions (holding the line and moving as a team based on difficulty/opportunity), and authentic kitchen footwork (0.5ft ready stance behind the line and legal inside-kitchen retrieval for bounced dinks). The deterministic test suite now spans 263 tests, ensuring strict rule simulation without regressions.
 
 **Last working item**:
-- Last item agent was working: Milestone 2 Part B2 (B1 Fixes, Shot Vocabulary, Game Feel, Pause/Resume fixes).
+- Last item agent was working: Milestone 2 Part B3 (Two-Bounce rule, Net Transition, Kitchen footwork).
 - Status: USER VERIFICATION PENDING
 - Agent Testing Done: Y
-- Which testing method agent to use?: NA (Testing agent ran 10/10 successful frontend verification checks; headless engine parity tests passed 236/236).
-- User Testing Done: N (User must test the new B2 build natively on their device to verify performance, pause/resume behavior, and the feel of the new Lob/Smash gestures).
+- Which testing method agent to use?: NA (Testing agent ran and confirmed 263/263 deterministic tests passing).
+- User Testing Done: N (User explicitly requested a hand-off to test the B3 build natively on their device before proceeding to any new phases).
 
 **All Pending/In progress Issue list**: 
-None currently active. Waiting for user's approval on the B2 build.
+None currently active. Awaiting user's approval on the B3 build.
 
 **In progress Task List**: 
 None currently active.
 
 **Upcoming and Future Tasks**:
 Upcoming Tasks:
-- **Milestone 2 - It feels great (Part C)** (P1): *(CRITICAL: DO NOT START until user explicitly approves the current Part B2 feel & performance).*
+- **Milestone 2 - It feels great (Part C)** (P1): *(CRITICAL: DO NOT START until user explicitly approves the current Part B3 feel & performance on their device).*
   - Singles menu/UI and new AI profiles.
   - Asset step (sprites, music, full render-loop rewrite if needed for performance).
 - **Milestone 3 - Ready for beta** (P2): 
@@ -39,15 +43,15 @@ Future Tasks:
 - Online multiplayer architecture, cosmetic store.
 
 **Completed work in this session**:
-- Commit 1: B1 fixes — Kitchen button ACTION labels (BACK/NET), separate 2.5ft retreat depth for the button, and deep-ball retrieval up to 3ft behind the baseline (DONE).
-- Commit 2: AI shot balance — Adjusted dink/drop/drive mix, softened dink-exchange boosts, added transition drives, added My Dinks stat to HUD (DONE).
-- Commit 3: Shot vocabulary & Lob/Smash — 900 px/s drive threshold, LOB tactical button (arms next strike), contextual SMASH for high descending balls, AI context-gated lob/smash + blocks, and bounce-in/run-out logic fix (DONE).
-- Commit 4: Game feel — Added body lean/follow-through, ball squash/stretch at contact, contact flash ring, point reactions (winners hop, losers slump), and serve aim helper without new Skia allocations (DONE).
-- Commit 5: Pause/resume + loading — Diagnosed and fixed the post-resume slowdown by halting React  re-renders while paused. Added a loading court cover (DONE).
-- Documentation: Updated  and  with B2 specs and test reports (DONE).
+- Commit 1 (Two-Bounce): Serve return/third shot never struck on the bounce frame (contact delayed ≥ 0.1s post-bounce). Clear human airborne volley within reach (> 0.25s before bounce) triggers TWO_BOUNCE. In-grace / out-of-reach swipes remain buffered (DONE).
+- Commit 2 (Net Transition): Established non-hitting partner holds the line. Teams advance dynamically based on difficulty and personality . Lobs over the line force players to drop back (DONE).
+- Commit 3 (Kitchen Footwork): Net ready spot moved to 0.5ft behind the NVZ line. Short bounced dink retrieval allows AI/players to step into the kitchen and play the bounced ball legally without generating faults (DONE).
+- Added focused deterministic tests: , , ,  (DONE).
+- Documentation: Updated  and  (DONE).
 
 **Earlier issues found/mentioned but not fixed**:
-- Singles performance is marginally slower than doubles gameplay on device due to increased court coverage and pacing differences (step=1.8µs vs 2.3µs). Awaiting the Milestone 2 Part C asset/performance step to evaluate any render-loop rewrites.
+- Singles performance is marginally slower than doubles gameplay on device due to increased court coverage and pacing differences. Awaiting the Milestone 2 Part C asset/performance step to evaluate any render-loop rewrites.
+- Non-blocking technical debt from React Native Skia: Deprecation warnings for SkPath mutators (migrate to ),  prop (move to ), and  (move to ). Deferring to UI/Asset phases.
 
 **Known issue recurrence from previous fork**:
 - Issue recurrence in previous fork: NA
@@ -58,7 +62,7 @@ Future Tasks:
 
 
 **Key Technical Concepts**:
-React Native Skia, Deterministic Fixed-Timestep Simulation, Seeded RNG, Swipe Gesture Arming (), Frame Memoization, Immersive UI (), Config-driven UI flags, React state optimization (avoiding re-renders in ).
+React Native Skia, Deterministic Fixed-Timestep Simulation, Seeded RNG, Swipe Gesture Arming, Frame Memoization, Config-driven UI flags, Zero-allocation gameplay loop optimization.
 
 **key DB schema**:
 - Local  /  only (Identities, Match Results).
@@ -67,42 +71,39 @@ React Native Skia, Deterministic Fixed-Timestep Simulation, Seeded RNG, Swipe Ge
 - NA
 
 **All files of reference**:
-1. , , : Core simulation. Updated for deep retrieval, Lob/Smash logic, and AI balancing.
-2. : Match UI, now containing the Lob tactical button and loading cover.
-3. , , : Render layer updated for squash/stretch, point reactions, and pause-state optimization.
-4. : Contains 236 deterministic tests. **Must be run for any engine edits.**
-5. , , : New diagnostics for verifying AI balance and human shot outcomes.
+1. , , , : Core simulation. Updated heavily for B3 rules (two-bounce logic, movement affinities, kitchen reach).
+2. : Tuning constants (e.g.,  changed to 0.5).
+3. : Contains 263 deterministic tests. **Must be run for any engine edits.**
+4. , , , : B3 specific test suites.
 
 **Areas that need refactoring**:
--  reveals slight pace drops in singles gameplay. Deferring any render-loop refactoring until Part C.
+-  reveals slight pace drops in singles gameplay. Deferring render-loop refactoring until Milestone 2 Part C.
 
 **key api endpoints**:
 - NA.
 
 **Critical Info for New Agent**:
-- **AWAITING USER NATIVE TEST:** DO NOT START Milestone 2 Part C. The user must test the current build natively on their device to approve the pause/resume performance fix, the new Lob/Smash shot gestures, and the game feel primitives.
+- **AWAITING USER NATIVE TEST:** DO NOT START Milestone 2 Part C (Phase 1A). The user explicitly requested to freeze gameplay and test the B3 build natively on their device. Await their prompt.
 - **Parity / Determinism:** NEVER use . Any engine changes must pass the  check () to ensure the existing game balance and rule simulation aren't broken.
-- **Game Feel Limits:** All game feel enhancements were strictly built using existing primitives (ovals, numeric props) to avoid new per-frame allocations. Respect this rule.
 
 **documents and test reports created in this job**:
 - /app/CHANGELOG.md
 - /app/memory/PRD.md
-- /app/frontend/src/game/__tests__/shotMix.ts
-- /app/frontend/src/game/__tests__/lobSmashReport.ts
-- /app/frontend/src/game/__tests__/humanTactics.ts
-- /app/test_reports/iteration_9.json
+- /app/frontend/src/game/__tests__/twoBounce.ts
+- /app/frontend/src/game/__tests__/netTransition.ts
+- /app/frontend/src/game/__tests__/kitchenFootwork.ts
+- /app/frontend/src/game/__tests__/b3Report.ts
 
 **Last 10 User Messages and any pending HUMAN messages**:
 - *User*: Supplied handoff summary.
-- *Agent*: Explored context, requested confirmation via ask_human.
-- *User*: Directed agent to execute Milestone 2 Part B2 (5 strict commits: B1 fixes, AI balance, Shot vocab/Lob/Smash, Game Feel, Pause/resume fixes). Emphasized maintaining current feel and avoiding performance drops.
-- *Agent*: Addressed Commit 1 (B1 fixes: deep retrieval, kitchen button labels).
-- *Agent*: Addressed Commit 2 (AI shot balance: dialed back dinks, re-introduced drives, updated HUD).
-- *Agent*: Addressed Commit 3 (Shot vocab: LOB tactical button, contextual SMASH, AI usage).
-- *Agent*: Addressed Commit 4 (Game feel: lean, follow-through, squash/stretch, contact flashes, reactions).
-- *Agent*: Addressed Commit 5 (Pause/resume fix: halted 60fps re-renders during pause, added loading state).
-- *Agent*: Verified via testing_agent (10/10) and headless test suite (236/236). Updated PRD/CHANGELOG and Finished.
-*(Pending Human message: Awaiting user to test the B2 build natively on their device and provide the next prompt).*
+- *User*: Provided prompt for Milestone 2 Part B3 (Commit 1: Two-Bounce, Commit 2: Net Transition, Commit 3: Kitchen Footwork). Explicitly told agent to STOP after handoff and not start Phase 1A.
+- *User*: System reminder to run  for reported bugs.
+- *Agent*: Implemented Commit 1 (Two-Bounce) and resolved test regressions.
+- *Agent*: Implemented Commit 2 (Net Transition) and tuned movement arrays.
+- *Agent*: Implemented Commit 3 (Kitchen Footwork) and fixed unavoidable fault regressions.
+- *Agent*: Ran 263 passing headless tests and successfully verified with the .
+- *Agent*: Updated PRD/CHANGELOG and Finished.
+*(Pending Human message: Awaiting user to natively test B3 on their device and provide the next prompt for Milestone 2 Part C).*
 
 **Project Health Check**:
 - Broken: None. 
@@ -114,14 +115,14 @@ React Native Skia, Deterministic Fixed-Timestep Simulation, Seeded RNG, Swipe Ge
 **Testing status**:
 - Testing agent used after significant changes: YES
 - Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: , , .
+- Test files created: , , , .
 - Known regressions: None.
 
 **Credentials to test flow**:
 - NA
 
 **What agent forgot to execute**:
-- Nothing. All 5 requested commits were completely and successfully implemented and verified with exhaustive test coverage.
+- Nothing. All requirements and specific metrics requested by the user were successfully implemented, extracted, and output to the terminal/finish summary.
 
 **Debugging checklist for current issue**
     No active issues. Await user feedback.
