@@ -99,3 +99,10 @@ Do NOT start Part B until the user approves.
 See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (singles menu/UI + AI profiles, asset step), M3 (onboarding, settings, analytics).
 
 ## B3 (Pickleball authenticity) — DONE, awaiting phone test. Gameplay frozen after this. Commits d70f8df / a87bf13 / 0e65fee. 263/263 tests.
+
+## Phase 1A Session A (Commits 0–2) — DONE, awaiting phone check (smash timing + fault labels)
+- C0 f8bbeb2: rename to Pickle-Ballers (legacy "Picklewood" team → random pool name) + point-end fault label pill.
+- C1 7d3ba5f: two-phase smash cue (HIGH BALL — GET READY → SMASH) + human-only smash latch (0.6 ft tolerance). AI untouched.
+- C2 728582f: first-to-N scoring fix; src/game/meta (MetaStore single JSON save `pb.meta`, idempotent ledger, analytics, economyConfig with 10 Career IDs).
+- Gate: run.ts 263/263 (output identical to fbb61cc), b3Report/shotMix byte-identical, phase1a.ts 110/110, step bench ~2.15µs both.
+- Next: Session B (screens, Career, Team) only after user approval.
