@@ -16,6 +16,7 @@ import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
 import { getIdentity } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
+import { FAULT_LABEL_SECONDS, faultLabelFor } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
 
 // Reserve a small edge margin from game swipe input. (The focused back handler
@@ -393,6 +394,12 @@ export default function Match() {
     !paused && !gameOver && sim.kitchenMode === "hold" && sim.lastHumanShot?.type === "lob" && sim.time - sim.lastHumanShot.time < 1.4
       ? Math.floor(sim.time * 5) % 2 === 0
       : false;
+  // FAULT LABEL: 1.2 s (sim time, so it freezes while paused) after each point
+  // end; display only. lastPoint.time is set by the one point-ending path.
+  const faultLabel =
+    !paused && !gameOver && sim.time - sim.lastPoint.time < FAULT_LABEL_SECONDS
+      ? faultLabelFor(sim.lastFault, sim.players[humanSlot]?.team ?? "near")
+      : null;
   const shotLabel =
     !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
       ? sim.lastHumanShot.type.toUpperCase()
@@ -470,6 +477,15 @@ export default function Match() {
           <Text style={styles.smashCueText}>SMASH!</Text>
         </View>
       )}
+      {faultLabel && (
+        <View
+          style={[styles.bounceCue, faultLabel.mine ? styles.faultMine : styles.faultRivals, { bottom: insets.bottom + PILL_BASE + 50 }]}
+          pointerEvents="none"
+          testID="fault-label"
+        >
+          <Text style={styles.bounceCueText}>{faultLabel.text}</Text>
+        </View>
+      )}
       {shotLabel && (
         <View style={[styles.shotLabel, { bottom: insets.bottom + PILL_BASE + 84 }]} pointerEvents="none">
           <Text style={styles.shotLabelText}>{shotLabel}</Text>
@@ -508,7 +524,7 @@ export default function Match() {
 
       {!ready && (
         <View style={styles.loadingCover} testID="loading-cover">
-          <Text style={styles.loadingTitle}>PICKLEWOOD</Text>
+          <Text style={styles.loadingTitle}>PICKLE-BALLERS</Text>
           <ActivityIndicator color="#FBF6E9" style={{ marginTop: 16 }} />
         </View>
       )}
@@ -568,7 +584,7 @@ export default function Match() {
                 onPress={() => {
                   analytics.track("share_clicked", { difficulty });
                   Share.share({
-                    message: `I ${nearWon ? "won" : "lost"} ${sim.score.nearScore}-${sim.score.farScore} on ${difficulty} in Picklewood! 🥒`,
+                    message: `I ${nearWon ? "won" : "lost"} ${sim.score.nearScore}-${sim.score.farScore} on ${difficulty} in Pickle-Ballers! 🥒`,
                   });
                 }}
               >
@@ -608,6 +624,8 @@ const useStyles = makeStyles((c) => ({
   dinkCueText: { color: "#1c2417", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   bounceCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.62)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: "rgba(197,160,40,0.8)" },
   bounceCueText: { color: c.accentGold, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
+  faultMine: { borderColor: "rgba(214,72,60,0.95)", borderWidth: 1.5 },
+  faultRivals: { borderColor: "rgba(197,160,40,0.95)", borderWidth: 1.5 },
   shotLabel: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.6)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4 },
   shotLabelText: { color: c.accentGold, fontSize: 12, fontWeight: "800", letterSpacing: 2 },
   hint: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(46,61,42,0.78)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 9 },

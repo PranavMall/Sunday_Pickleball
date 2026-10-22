@@ -57,7 +57,7 @@ export function IdentityEditor({ initialPlayer, initialTeam, submitLabel, onSubm
           setTeam(v);
           setError(null);
         }}
-        placeholder="Picklewood"
+        placeholder="Pickle-Ballers"
         placeholderTextColor={colors.muted}
         maxLength={NAME_MAX}
         autoCapitalize="words"

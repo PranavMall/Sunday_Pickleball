@@ -8,7 +8,18 @@ const TEAM_KEY = "pw.teamName";
 const SET_KEY = "pw.identitySet"; // "1" once the user has set or skipped names
 
 export const DEFAULT_PLAYER = "Player";
-export const DEFAULT_TEAM = "Picklewood";
+export const DEFAULT_TEAM = "Pickle-Ballers";
+// The pre-rename default. A saved team name EXACTLY equal to this is replaced
+// once (at app start) by a random name from TEAM_NAME_POOL.
+const LEGACY_DEFAULT_TEAM = "Picklewood";
+export const TEAM_NAME_POOL = [
+  "Bandra Aces", "Harbour Hawks", "Monsoon Smash", "Gully Rockets", "Coastal Kings",
+  "City Spinners", "Metro Mavericks", "Sunset Strikers", "Sea Link Slammers", "Court Cobras",
+  "Rally Royals", "Dink Dynasty", "Paddle Pirates", "Smash Squad", "Net Ninjas",
+  "Spin Society", "Lob Legends", "Baseline Bandits", "Kitchen Kings", "Volley Vibes",
+  "Street Aces", "Island Bounce", "Harbour Heat", "Monsoon Masters", "City Cyclones",
+  "Coastal Crew", "Metro Magic", "Gully Giants", "Rally Riders", "Court Comets",
+];
 export const NAME_MIN = 2;
 export const NAME_MAX = 16;
 
@@ -74,6 +85,19 @@ export async function saveIdentity(playerName: string, teamName: string): Promis
     await AsyncStorage.multiSet([[PLAYER_KEY, pv], [TEAM_KEY, tv], [SET_KEY, "1"]]);
   } catch (e) {
     console.warn("[profile] save failed", e);
+  }
+}
+
+// Rename migration (app start): replace ONLY the exact old default team name.
+// Returns the new name, or null when nothing changed. Never throws.
+export async function migrateLegacyTeamName(pick: () => number = Math.random): Promise<string | null> {
+  try {
+    if ((await AsyncStorage.getItem(TEAM_KEY)) !== LEGACY_DEFAULT_TEAM) return null;
+    const name = TEAM_NAME_POOL[Math.floor(pick() * TEAM_NAME_POOL.length) % TEAM_NAME_POOL.length];
+    await AsyncStorage.setItem(TEAM_KEY, name);
+    return name;
+  } catch {
+    return null;
   }
 }
 

@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { IdentityEditor } from "@/src/components/identity-editor";
 import { SHOW_COMING_SOON } from "@/src/game/config/features";
-import { DEFAULT_PLAYER, DEFAULT_TEAM, getIdentity, hasIdentity, saveIdentity, skipIdentity } from "@/src/game/services/profile";
+import { DEFAULT_PLAYER, DEFAULT_TEAM, getIdentity, hasIdentity, migrateLegacyTeamName, saveIdentity, skipIdentity } from "@/src/game/services/profile";
 import { makeStyles, useTheme } from "@/src/theme";
 
 type LockedItem = { key: string; title: string; icon: IoniconName; testID: string };
@@ -37,6 +37,7 @@ export default function MainMenu() {
 
   useEffect(() => {
     (async () => {
+      await migrateLegacyTeamName();
       const seen = await hasIdentity();
       refreshIdentity();
       if (!seen) setPromptOpen(true);
@@ -91,7 +92,7 @@ export default function MainMenu() {
       </View>
 
       <View style={styles.titleWrap} pointerEvents="none">
-        <Text style={styles.title}>Picklewood</Text>
+        <Text style={styles.title}>Pickle-Ballers</Text>
         <Text style={styles.kicker}>GARDEN COURT DOUBLES</Text>
       </View>
 
