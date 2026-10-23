@@ -22,7 +22,14 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <KeyboardProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+            {/* Destinations switch instantly (replace, no cross-fade) so only
+                one full-screen background is ever mounted. */}
+            <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+              <Stack.Screen name="index" options={{ animation: "none" }} />
+              <Stack.Screen name="career" options={{ animation: "none" }} />
+              <Stack.Screen name="team" options={{ animation: "none" }} />
+              <Stack.Screen name="training" options={{ animation: "none" }} />
+            </Stack>
           </GestureHandlerRootView>
         </KeyboardProvider>
       </QueryClientProvider>

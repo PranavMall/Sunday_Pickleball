@@ -8,3 +8,4 @@ cmp -s /tmp/base/b3.txt /tmp/cur_b3.txt && echo "b3Report: BYTE-IDENTICAL" || { 
 cmp -s /tmp/base/shotmix.txt /tmp/cur_shotmix.txt && echo "shotMix: BYTE-IDENTICAL" || { echo "shotMix: DIFF"; diff /tmp/base/shotmix.txt /tmp/cur_shotmix.txt; }
 npx tsx src/game/__tests__/phase1a.ts 2>&1 | grep -E "FAIL|RESULT"
 npx tsx src/game/__tests__/stepBench.ts 7
+npx tsx src/game/__tests__/phase1b.ts 2>&1 | grep -E "FAIL|RESULT"

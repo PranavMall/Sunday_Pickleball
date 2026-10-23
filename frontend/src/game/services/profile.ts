@@ -21,7 +21,7 @@ export const TEAM_NAME_POOL = [
   "Coastal Crew", "Metro Magic", "Gully Giants", "Rally Riders", "Court Comets",
 ];
 export const NAME_MIN = 2;
-export const NAME_MAX = 16;
+export const NAME_MAX = 18; // fits every Appendix A pool name ("Sea Link Slammers" = 17)
 
 // Small family-friendly profanity screen (substring, case-insensitive). Not
 // exhaustive — just blocks the obvious ones for a local display name.
@@ -101,11 +101,27 @@ export async function migrateLegacyTeamName(pick: () => number = Math.random): P
   }
 }
 
-// Skip the first-time prompt: use friendly defaults, mark as set.
-export async function skipIdentity(): Promise<void> {
-  try {
-    await AsyncStorage.multiSet([[PLAYER_KEY, DEFAULT_PLAYER], [TEAM_KEY, DEFAULT_TEAM], [SET_KEY, "1"]]);
-  } catch (e) {
-    console.warn("[profile] skip failed", e);
-  }
+export const PLAYER_NAME_POOL = [
+  "Chintu", "Bunny", "Kaki", "Anu", "Diku", "Pinky", "Golu", "Bablu", "Tinku", "Sonu", "Monu",
+  "Guddu", "Cheeku", "Dolly", "Bittu", "Laddoo", "Jalebi", "Rinku", "Pinku", "Gudiya", "Sweety",
+  "Bubbly", "Lucky", "Happy", "Honey", "Tuktuk", "Chunnu", "Dabbu", "Kittu", "Mittu", "Nonu", "Babli", "Titu",
+];
+
+function pickFrom(pool: string[], pick: () => number): string {
+  return pool[Math.floor(pick() * pool.length) % pool.length];
+}
+
+// Skip the first-time prompt: one random player name + one random team name,
+// saved immediately (and used thereafter; the identity editor still edits them).
+export async function skipIdentity(pick: () => number = Math.random): Promise<Identity> {
+  const id = { playerName: pickFrom(PLAYER_NAME_POOL, pick), teamName: pickFrom(TEAM_NAME_POOL, pick) };
+  await saveIdentity(id.playerName, id.teamName);
+  return id;
+}
+
+// Scoreboard team code: letters/digits only, uppercase, first 3. Fewer than 2
+// left, or equal to the current rival's code → "YOU".
+export function teamCode(teamName: string, rivalCode: string): string {
+  const code = (teamName ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 3);
+  return code.length < 2 || code === rivalCode.toUpperCase() ? "YOU" : code;
 }

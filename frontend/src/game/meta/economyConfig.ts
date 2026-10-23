@@ -19,8 +19,37 @@ export const START_VALUES = {
 } as const;
 
 // Partners. Anli is the starter partner (signed, active, training partner).
+// Every partner plays at the existing partner difficulty (Club, PARTNER_DIFFICULTY);
+// "Rookie" is a tier LABEL only. Personality = their engine personality.
 export const STARTER_PARTNER_ID = "anli";
-export const PARTNER_IDS = [STARTER_PARTNER_ID] as const;
+export const PARTNER_IDS = [STARTER_PARTNER_ID, "upsi", "matz"] as const;
+export type PartnerId = (typeof PARTNER_IDS)[number];
+export interface PartnerDef {
+  id: PartnerId;
+  name: string;
+  archetype: string;
+  personality: "DEFENSIVE" | "KITCHEN" | "AGGRESSIVE";
+  color: string; // monogram badge
+  tier: string; // label only
+  reserveName?: string; // name used if the recruit's slot must be filled by someone else
+}
+export const PARTNERS: Record<PartnerId, PartnerDef> = {
+  anli: { id: "anli", name: "Anli", archetype: "Defender", personality: "DEFENSIVE", color: "#2E7D4F", tier: "Rookie" },
+  upsi: { id: "upsi", name: "Upsi", archetype: "Dinker", personality: "KITCHEN", color: "#2F6FB8", tier: "Rookie", reserveName: "Kiran" },
+  matz: { id: "matz", name: "Matz", archetype: "Banger", personality: "AGGRESSIVE", color: "#C77D2E", tier: "Rookie", reserveName: "Vikram" },
+};
+export const PLAYER_BADGE_COLOR = "#C9483B";
+
+// Courts (config.court ids → display names).
+export type CourtId = "bandra_garden" | "mumbai_local";
+export const COURT_NAMES: Record<CourtId, string> = {
+  bandra_garden: "Bandra Garden",
+  mumbai_local: "Mumbai Local",
+};
+export const QUICK_PLAY_COURT: CourtId = "bandra_garden";
+
+// Quick Play pays Coins only (wired in Session C).
+export const QUICK_PLAY_REWARDS = { winCoins: 40, lossCoins: 20 } as const;
 
 // Chemistry: 0–100, stored in HALF points (0.5 steps), displayed rounded down.
 // Meta-only: it never reaches MatchConfig (engine chemistry stays 1.0).
@@ -40,6 +69,16 @@ export const CAREER_MATCH_IDS = [
   "mumbai.district.10",
 ] as const;
 export const FIRST_CAREER_MATCH_ID = CAREER_MATCH_IDS[0];
+
+// Stage display names, keyed by the middle segment of a Career ID.
+export const STAGE_NAMES: Record<string, string> = {
+  community: "Community Cup",
+  local: "Mumbai Local Series",
+  district: "District Championship",
+};
+export function stageNameOf(careerMatchId: string): string {
+  return STAGE_NAMES[careerMatchId.split(".")[1]] ?? STAGE_NAMES.community;
+}
 
 // Ledger history kept in the save (idempotency uses the full rewardId set).
 export const LEDGER_KEEP = 200;

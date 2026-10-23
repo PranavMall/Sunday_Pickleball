@@ -7,7 +7,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { GameSimulation, MATCH, quickMatchConfig, devSinglesConfig, type Difficulty, type MatchConfig } from "@/src/game";
+import { GameSimulation, MATCH, type MatchConfig } from "@/src/game";
+import { buildSetup, type LaunchParams, type MatchSetup } from "@/src/game/meta/matchSetup";
 import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
@@ -86,12 +87,13 @@ const LobButton = memo(function LobButton(props: { armed: boolean; onPress: () =
   );
 });
 
-function buildMatch(difficulty: Difficulty, singles: boolean): { sim: GameSimulation; config: MatchConfig; matchId: string } {
+function buildMatch(p: LaunchParams): { sim: GameSimulation; config: MatchConfig; matchId: string; setup: MatchSetup } {
   const seed = (Math.random() * 1e9) | 0;
-  const config = singles ? devSinglesConfig(difficulty, seed) : quickMatchConfig(difficulty, seed);
+  const setup = buildSetup(p, seed, meta.loaded ? meta.doc : null);
+  const config = setup.config;
   const sim = new GameSimulation(config);
-  analytics.track("match_started", { difficulty, format: config.format });
-  return { sim, config, matchId: newMatchId(Date.now()) };
+  analytics.track("match_started", { mode: setup.mode, difficulty: setup.label, format: config.format, court: config.court });
+  return { sim, config, matchId: newMatchId(Date.now()), setup };
 }
 
 // Memoised HUD — only re-renders when these primitives change (not every frame).
@@ -142,19 +144,23 @@ const Hud = memo(function Hud(props: {
 });
 
 export default function Match() {
-  const params = useLocalSearchParams<{ difficulty?: string; singles?: string }>();
-  const difficulty = (params.difficulty as Difficulty) || "CLUB";
-  const singles = params.singles === "1";
+  const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string }>();
+  const launch = useMemo<LaunchParams>(
+    () => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   const router = useRouter();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
 
-  const [match, setMatch] = useState(() => buildMatch(difficulty, singles));
+  const [match, setMatch] = useState(() => buildMatch(launch));
   const sim = match.sim;
   const config = match.config;
   const matchId = match.matchId;
+  const difficulty = match.setup.label;
   const [, setFrame] = useState(0);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -284,7 +290,8 @@ export default function Match() {
         loggedRef.current = true;
         logMatchResult(config, sim);
         // Match end: the only meta save point for a match (idempotent by matchId).
-        initMeta().then(() => meta.completeMatch({ matchId, kind: "quick", won: sim.winner === "near" }, Date.now()));
+        // Career / Training / Scrimmage progression is wired in Session C.
+        if (match.setup.mode === "quick") initMeta().then(() => meta.completeMatch({ matchId, kind: "quick", won: sim.winner === "near" }, Date.now()));
         analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
       }
       setFrame((f) => (f + 1) % 1000000);
@@ -293,7 +300,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, matchId]);
+  }, [sim, config, difficulty, humanSlot, matchId, match.setup.mode]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time
@@ -371,7 +378,7 @@ export default function Match() {
     analytics.track("rematch_selected", { difficulty });
     loggedRef.current = false;
     armedRef.current = false;
-    setMatch(buildMatch(difficulty, singles));
+    setMatch(buildMatch(launch));
     setPaused(false);
   };
   // Re-assert immersive mode on resume (a system-bar reveal during pause is
@@ -379,7 +386,8 @@ export default function Match() {
   useEffect(() => {
     if (!paused && Platform.OS === "android") NavigationBar.setVisibilityAsync("hidden").catch(() => {});
   }, [paused]);
-  const goMenu = () => router.replace("/");
+  // Back to the destination the match was launched from (bottom of the stack).
+  const goMenu = () => (router.canDismiss() ? router.dismissAll() : router.replace("/"));
   const toggleKitchen = useCallback(() => {
     if (!pausedRef.current) sim.toggleKitchenMode();
   }, [sim]);

@@ -1,139 +1,124 @@
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
-import React, { useCallback, useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, Text, View } from "react-native";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Fullscreen } from "@/src/components/fullscreen";
 import { IdentityEditor } from "@/src/components/identity-editor";
-import { SHOW_COMING_SOON } from "@/src/game/config/features";
-import { DEFAULT_PLAYER, DEFAULT_TEAM, getIdentity, hasIdentity, migrateLegacyTeamName, saveIdentity, skipIdentity } from "@/src/game/services/profile";
-import { makeStyles, useTheme } from "@/src/theme";
+import { PLAYER_BADGE_COLOR, stageNameOf } from "@/src/game/meta/economyConfig";
+import { hasIdentity, migrateLegacyTeamName, saveIdentity, skipIdentity } from "@/src/game/services/profile";
+import { DestinationBar } from "@/src/ui/DestinationBar";
+import { HeaderActions } from "@/src/ui/HeaderActions";
+import { Badge, Card, Coin, GoldButton, Kicker, ScreenBg, SERIF, UI } from "@/src/ui/kit";
+import { formLabel, useSave } from "@/src/ui/useSave";
 
-type LockedItem = { key: string; title: string; icon: IoniconName; testID: string };
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+const BG = require("@/assets/images/bg_home.webp");
+const LOGO = require("@/assets/images/logo_pickleballers.webp");
+const TROPHY = require("@/assets/images/trophy_mumbai.webp");
+const ART_QP = require("@/assets/images/art_quickplay.webp");
 
-const LOCKED: LockedItem[] = [
-  { key: "career", title: "Career", icon: "briefcase-outline", testID: "menu-career" },
-  { key: "training", title: "Training", icon: "fitness-outline", testID: "menu-training" },
-  { key: "passport", title: "Passport", icon: "airplane-outline", testID: "menu-passport" },
-  { key: "trophy", title: "Trophies", icon: "trophy-outline", testID: "menu-trophy" },
-];
-
-export default function MainMenu() {
+export default function Home() {
   const router = useRouter();
-  const styles = useStyles();
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-
-  const [identity, setIdentity] = useState({ playerName: DEFAULT_PLAYER, teamName: DEFAULT_TEAM });
+  const { height } = useWindowDimensions();
+  const compact = height < 740;
+  const { save, identity, refresh } = useSave();
   const [promptOpen, setPromptOpen] = useState(false);
-
-  const refreshIdentity = useCallback(() => {
-    getIdentity().then(setIdentity);
-  }, []);
 
   useEffect(() => {
     (async () => {
       await migrateLegacyTeamName();
-      const seen = await hasIdentity();
-      refreshIdentity();
-      if (!seen) setPromptOpen(true);
+      if (!(await hasIdentity())) setPromptOpen(true);
+      refresh();
     })();
-  }, [refreshIdentity]);
-
-  // Pick up edits made on the Profile screen when we return here.
-  useFocusEffect(refreshIdentity);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onSaveIdentity = async (p: string, t: string) => {
     await saveIdentity(p, t);
     setPromptOpen(false);
-    refreshIdentity();
+    refresh();
   };
   const onSkipIdentity = async () => {
     await skipIdentity();
     setPromptOpen(false);
-    refreshIdentity();
+    refresh();
   };
 
-  const initial = identity.playerName.trim().charAt(0).toUpperCase() || "P";
+  const fresh = !save || (save.career.cleared.length === 0 && save.career.firstClearLosses === 0);
+  const stage = stageNameOf(save?.career.nextMatchId ?? "mumbai.community.01");
+  const playerName = identity?.playerName ?? "";
 
   return (
     <View style={styles.root} testID="main-menu-screen">
       <Fullscreen />
-      <Image source={require("@/assets/images/court_background.webp")} style={styles.bg} contentFit="cover" />
-      {/* Light top/bottom gradients only, so the artwork stays the hero. */}
-      <LinearGradient colors={["rgba(20,26,18,0.55)", "rgba(20,26,18,0)"]} style={[styles.topShade, { height: insets.top + 150 }]} pointerEvents="none" />
-      <LinearGradient colors={["rgba(20,26,18,0)", "rgba(20,26,18,0.7)"]} style={[styles.bottomShade, { height: insets.bottom + 260 }]} pointerEvents="none" />
+      <ScreenBg source={BG} />
 
-      {/* TOP: profile chip + small round secondary actions */}
-      <View style={[styles.topBar, { paddingTop: insets.top + 12, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }]}>
+      <View style={[styles.top, { paddingTop: insets.top + (compact ? 6 : 12) }]}>
+        <View style={styles.header}>
+          <Image source={LOGO} style={[styles.logo, compact && { height: 52 }]} contentFit="contain" contentPosition="left" accessibilityLabel="Pickle-Ballers" />
+          <HeaderActions save={save} />
+        </View>
+
+        <Card style={[styles.status, compact && { paddingVertical: 8 }]} testID="status-row">
+          <StatusCell icon={<Coin size={34} />} label="Coins" value={save ? String(save.coins) : "–"} testID="status-coins" />
+          <View style={styles.divider} />
+          <StatusCell icon={<Ionicons name="people" size={32} color={UI.fans} />} label="Fans" value={save ? String(save.fans) : "–"} testID="status-fans" />
+          <View style={styles.divider} />
+          <StatusCell icon={<Ionicons name="footsteps" size={28} color={UI.green} />} label="Form" value={formLabel(save?.form)} testID="status-form" />
+        </Card>
+
         <Pressable
           testID="menu-profile"
           accessibilityRole="button"
-          accessibilityLabel={`Profile: ${identity.playerName}, Team ${identity.teamName}`}
-          style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+          accessibilityLabel={`Profile: ${playerName}, Team ${identity?.teamName ?? ""}`}
+          style={({ pressed }) => [styles.chip, pressed && { opacity: 0.85 }]}
           onPress={() => router.push("/profile")}
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
-          </View>
-          <View style={styles.chipText}>
-            <Text style={styles.chipName} numberOfLines={1} testID="home-player-name">{identity.playerName}</Text>
-            <Text style={styles.chipTeam} numberOfLines={1} testID="home-team-name">Team {identity.teamName}</Text>
+          <Badge name={playerName || "P"} color={PLAYER_BADGE_COLOR} size={compact ? 56 : 66} ring />
+          <View style={styles.chipBody}>
+            <Text style={styles.chipName} numberOfLines={1} testID="home-player-name">{playerName}</Text>
+            <Text style={styles.chipTeam} numberOfLines={1} testID="home-team-name">Team {identity?.teamName ?? ""}</Text>
           </View>
         </Pressable>
-        <View style={styles.topIcons}>
-          <RoundIcon testID="menu-history" icon="stats-chart" label="Match History" onPress={() => router.push("/history")} color={colors.onSurface} />
-          <RoundIcon testID="menu-settings" icon="settings-sharp" label="Profile and settings" onPress={() => router.push("/profile")} color={colors.onSurface} />
-        </View>
-      </View>
-
-      <View style={styles.titleWrap} pointerEvents="none">
-        <Text style={styles.title}>Pickle-Ballers</Text>
-        <Text style={styles.kicker}>GARDEN COURT DOUBLES</Text>
       </View>
 
       <View style={styles.spacer} />
 
-      {/* LOWER: one dominant PLAY + locked future modes */}
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + 20, paddingLeft: insets.left + 24, paddingRight: insets.right + 24 }]}>
-        <Pressable
-          testID="menu-quick-match"
-          accessibilityRole="button"
-          accessibilityLabel="Play quick match"
-          style={({ pressed }) => [styles.play, pressed && styles.playPressed]}
-          onPress={() => router.push("/difficulty")}
-        >
-          <Ionicons name="play" size={28} color={colors.onBrandPrimary} />
-          <Text style={styles.playText}>PLAY</Text>
-        </Pressable>
-
-        {SHOW_COMING_SOON ? (
-          <View style={styles.lockedRow} testID="coming-soon-row">
-            {LOCKED.map((it) => (
-              <View
-                key={it.key}
-                testID={it.testID}
-                style={styles.lockedItem}
-                accessible
-                accessibilityLabel={`${it.title}, coming soon`}
-                accessibilityState={{ disabled: true }}
-              >
-                <View style={styles.lockedCircle}>
-                  <Ionicons name={it.icon} size={20} color={colors.onSurfaceInverse} />
-                  <View style={styles.lockBadge}>
-                    <Ionicons name="lock-closed" size={10} color={colors.onSurface} />
-                  </View>
-                </View>
-                <Text style={styles.lockedLabel} numberOfLines={1}>{it.title}</Text>
-              </View>
-            ))}
+      <View style={styles.cards}>
+        <Card style={[styles.careerCard, compact && { paddingVertical: 10 }]} testID="career-card">
+          <View style={styles.careerTop}>
+            <View style={{ flex: 1 }}>
+              <Kicker>CAREER</Kicker>
+              <Text style={[styles.careerStage, compact && { fontSize: 26 }]} numberOfLines={1} adjustsFontSizeToFit testID="career-card-stage">{stage}</Text>
+              <Text style={styles.careerSub} numberOfLines={1}>Continue your journey in Mumbai</Text>
+            </View>
+            <Image source={TROPHY} style={[styles.trophy, compact && { width: 74, height: 74 }]} contentFit="contain" />
           </View>
-        ) : null}
+          <GoldButton
+            big={!compact}
+            testID="menu-career"
+            label={fresh ? "START CAREER" : "CONTINUE CAREER"}
+            onPress={() => router.replace("/career")}
+            style={{ marginTop: compact ? 6 : 10 }}
+          />
+        </Card>
+
+        <Pressable testID="menu-quick-match" accessibilityRole="button" accessibilityLabel="Quick Play" onPress={() => router.push("/quickplay")} style={({ pressed }) => [pressed && { transform: [{ scale: 0.98 }] }]}>
+          <Card style={[styles.qpCard, compact && { minHeight: 76 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.qpTitle}>QUICK PLAY</Text>
+              <Text style={styles.qpSub} numberOfLines={2}>Jump into a match{"\n"}anytime</Text>
+            </View>
+            <Image source={ART_QP} style={[styles.qpArt, compact && { height: 64, width: 114 }]} contentFit="contain" />
+            <Ionicons name="chevron-forward" size={26} color={UI.ink} />
+          </Card>
+        </Pressable>
       </View>
+
+      <DestinationBar active="home" />
 
       {promptOpen ? (
         <View style={styles.modalWrap} testID="identity-prompt">
@@ -142,13 +127,7 @@ export default function MainMenu() {
               <Text style={styles.modalKicker}>WELCOME</Text>
               <Text style={styles.modalTitle}>What should we call you?</Text>
               <Text style={styles.modalSub}>Pick a player and team name. You can change these anytime.</Text>
-              <IdentityEditor
-                initialPlayer=""
-                initialTeam=""
-                submitLabel="Let's play"
-                onSubmit={onSaveIdentity}
-                onSkip={onSkipIdentity}
-              />
+              <IdentityEditor initialPlayer="" initialTeam="" submitLabel="Let's play" onSubmit={onSaveIdentity} onSkip={onSkipIdentity} />
             </View>
           </KeyboardAvoidingView>
         </View>
@@ -157,75 +136,47 @@ export default function MainMenu() {
   );
 }
 
-function RoundIcon(props: { testID: string; icon: IoniconName; label: string; color: string; onPress: () => void }) {
-  const styles = useStyles();
+function StatusCell({ icon, label, value, testID }: { icon: React.ReactNode; label: string; value: string; testID: string }) {
   return (
-    <Pressable
-      testID={props.testID}
-      accessibilityRole="button"
-      accessibilityLabel={props.label}
-      hitSlop={6}
-      style={({ pressed }) => [styles.roundIcon, pressed && styles.pressed]}
-      onPress={props.onPress}
-    >
-      <Ionicons name={props.icon} size={20} color={props.color} />
-    </Pressable>
+    <View style={styles.cell} testID={testID}>
+      {icon}
+      <View style={{ marginLeft: 8 }}>
+        <Text style={styles.cellLabel}>{label}</Text>
+        <Text style={styles.cellValue} numberOfLines={1}>{value}</Text>
+      </View>
+    </View>
   );
 }
 
-const useStyles = makeStyles((c) => ({
-  root: { flex: 1, backgroundColor: c.surfaceInverse },
-  bg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  topShade: { position: "absolute", top: 0, left: 0, right: 0 },
-  bottomShade: { position: "absolute", bottom: 0, left: 0, right: 0 },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  chip: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(251,246,233,0.92)", borderRadius: 26, paddingVertical: 5, paddingLeft: 5, paddingRight: 14, maxWidth: "62%", minHeight: 48 },
-  avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: c.brandPrimary, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: c.onBrandPrimary, fontSize: 17, fontWeight: "800" },
-  chipText: { marginLeft: 9, flexShrink: 1 },
-  chipName: { color: c.onSurface, fontSize: 15, fontWeight: "800" },
-  chipTeam: { color: c.muted, fontSize: 11, fontWeight: "700" },
-  topIcons: { flexDirection: "row", gap: 10 },
-  roundIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(251,246,233,0.92)", alignItems: "center", justifyContent: "center" },
-  pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
-  titleWrap: { alignItems: "center", marginTop: 18 },
-  title: { color: c.onSurfaceInverse, fontSize: 30, fontWeight: "800", letterSpacing: -0.5, textShadowColor: "rgba(0,0,0,0.35)", textShadowRadius: 6, textShadowOffset: { width: 0, height: 2 } },
-  kicker: { color: c.onSurfaceInverse, fontSize: 10, fontWeight: "800", letterSpacing: 3, marginTop: 2, textShadowColor: "rgba(0,0,0,0.6)", textShadowRadius: 4 },
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#2E3D2A" },
+  top: { paddingHorizontal: 16, gap: 10 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  logo: { flex: 1, height: 64, marginRight: 12 },
+  status: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 10 },
+  cell: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  cellLabel: { color: UI.inkSoft, fontSize: 13 },
+  cellValue: { color: UI.ink, fontSize: 22, fontWeight: "800" },
+  divider: { width: 1, alignSelf: "stretch", backgroundColor: UI.line },
+  chip: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", maxWidth: "78%" },
+  chipBody: { backgroundColor: "rgba(251,244,226,0.95)", borderTopRightRadius: 14, borderBottomRightRadius: 14, paddingLeft: 16, paddingRight: 18, paddingVertical: 7, marginLeft: -10, zIndex: -1, borderWidth: 1, borderColor: UI.line, flexShrink: 1 },
+  chipName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 21 },
+  chipTeam: { color: UI.inkSoft, fontSize: 13 },
   spacer: { flex: 1 },
-  bottom: { alignItems: "center", gap: 18 },
-  play: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: c.brandPrimary,
-    borderRadius: 36,
-    height: 72,
-    width: "100%",
-    maxWidth: 340,
-    borderWidth: 3,
-    borderColor: "rgba(251,246,233,0.9)",
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  playPressed: { transform: [{ scale: 0.97 }], opacity: 0.95 },
-  playText: { color: c.onBrandPrimary, fontSize: 26, fontWeight: "900", letterSpacing: 4 },
-  lockedRow: { flexDirection: "row", justifyContent: "center", gap: 18 },
-  lockedItem: { alignItems: "center", width: 62, opacity: 0.7 },
-  lockedCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(20,26,18,0.55)", borderWidth: 1, borderColor: "rgba(251,246,233,0.4)", alignItems: "center", justifyContent: "center" },
-  lockBadge: { position: "absolute", right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: c.surfaceTertiary, alignItems: "center", justifyContent: "center" },
-  lockedLabel: { color: c.onSurfaceInverse, fontSize: 10, fontWeight: "700", marginTop: 4 },
-  modalWrap: { ...StyleSheet_abs(), backgroundColor: "rgba(20,26,18,0.78)" },
+  cards: { paddingHorizontal: 16, gap: 12, paddingBottom: 12 },
+  careerCard: { paddingHorizontal: 16, paddingVertical: 14 },
+  careerTop: { flexDirection: "row", alignItems: "center" },
+  careerStage: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 30, marginTop: 4 },
+  careerSub: { color: UI.inkSoft, fontSize: 15, marginTop: 2 },
+  trophy: { width: 96, height: 96, marginLeft: 6 },
+  qpCard: { flexDirection: "row", alignItems: "center", minHeight: 86, paddingVertical: 8, paddingLeft: 18, backgroundColor: "rgba(232,240,246,0.93)" },
+  qpTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 22 },
+  qpSub: { color: UI.inkSoft, fontSize: 14, marginTop: 2 },
+  qpArt: { width: 132, height: 74 },
+  modalWrap: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(20,26,18,0.78)" },
   modalCenter: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
-  modal: { backgroundColor: c.surface, borderRadius: 24, padding: 22, width: "100%", maxWidth: 420, alignSelf: "center" },
-  modalKicker: { color: c.accentGold, fontSize: 12, fontWeight: "800", letterSpacing: 3 },
-  modalTitle: { color: c.onSurface, fontSize: 24, fontWeight: "800", marginTop: 4 },
-  modalSub: { color: c.muted, fontSize: 14, marginTop: 6, lineHeight: 20 },
-}));
-
-function StyleSheet_abs() {
-  return { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0 };
-}
+  modal: { backgroundColor: UI.cream, borderRadius: 24, padding: 22, width: "100%", maxWidth: 420, alignSelf: "center" },
+  modalKicker: { color: UI.goldDeep, fontSize: 12, fontWeight: "800", letterSpacing: 3 },
+  modalTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 24, marginTop: 4 },
+  modalSub: { color: UI.muted, fontSize: 14, marginTop: 6, lineHeight: 20 },
+});
