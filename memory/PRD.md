@@ -113,3 +113,10 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - 3c: render/courts.ts (court image, edge fill, scoreboard text area per court), painted scoreboard in match.tsx, old HUD panel removed; dev Mumbai court button on Quick Play (__DEV__).
 - Session C NEXT (only after user approval): rewards, career clearing, signing spend, training counters/growth.
 - Tests: src/game/__tests__/phase1b.ts (53), scripts/regress1a.sh; baselines from fbb61cc worktree at /tmp/base.
+
+## Commit 3d (d338a10) — UI polish after phone check — USER CHECK PENDING
+- src/ui/Text.tsx = the app's only Text/TextInput (allowFontScaling=false; numberOfLines ⇒ shrink-to-fit 0.75, max 2 lines, clip, never "…"). All app/ & src/ui & components import Text from "@/src/ui/Text".
+- Titles removed on Career/Team/Training; sizes per brief (max 24pt on destinations); cards rgba cream 0.9 (UI.cardBg).
+- src/ui/DestinationBackdrop.tsx in root layout behind Stack (NAV_THEME transparent background); destinations draw no bg; 150ms content FadeIn; Image.prefetch both bgs.
+- PickleballIcon (Views) in DestinationBar for Training.
+- STOP: Session C not started.
