@@ -55,14 +55,14 @@ export const QUICK_PLAY_REWARDS = { winCoins: 40, lossCoins: 20 } as const;
 // Meta-only: it never reaches MatchConfig (engine chemistry stays 1.0).
 export const CHEMISTRY_MAX = 100;
 
-// Career (Mumbai). Assumption: 01–05 Community, 06–10 District.
+// Career (Mumbai): 10 stable IDs (Community 01–03 · Local 04–06 · District 07–10).
 export const CAREER_MATCH_IDS = [
   "mumbai.community.01",
   "mumbai.community.02",
   "mumbai.community.03",
-  "mumbai.community.04",
-  "mumbai.community.05",
-  "mumbai.district.06",
+  "mumbai.local.04",
+  "mumbai.local.05",
+  "mumbai.local.06",
   "mumbai.district.07",
   "mumbai.district.08",
   "mumbai.district.09",
@@ -79,6 +79,83 @@ export const STAGE_NAMES: Record<string, string> = {
 export function stageNameOf(careerMatchId: string): string {
   return STAGE_NAMES[careerMatchId.split(".")[1]] ?? STAGE_NAMES.community;
 }
+export const CAREER_CITY_LABEL = "Mumbai Gully";
+
+type AiDiff = "ROOKIE" | "CLUB" | "PRO";
+type AiPers = "DEFENSIVE" | "AGGRESSIVE" | "KITCHEN" | "TACTICAL";
+export interface CareerMatchDef {
+  id: (typeof CAREER_MATCH_IDS)[number];
+  number: number; // 1..10
+  stageKey: "community" | "local" | "district";
+  round: "" | "FINAL" | "SEMIFINAL";
+  rival: string;
+  code: string; // scoreboard code
+  color: string; // rival badge colour
+  namedRival: boolean;
+  ai: [AiDiff, AiDiff]; // per-slot difficulty (existing levels only)
+  personalities: [AiPers, AiPers];
+  court: CourtId | null; // null = no court yet
+  enabled: boolean;
+  recruit?: { slot: 0 | 1; partnerId: PartnerId }; // that AI slot IS the recruit
+}
+const M = (
+  n: number, round: CareerMatchDef["round"], rival: string, code: string, color: string, namedRival: boolean,
+  ai: [AiDiff, AiDiff], personalities: [AiPers, AiPers], court: CourtId | null, recruit?: CareerMatchDef["recruit"],
+): CareerMatchDef => {
+  const id = CAREER_MATCH_IDS[n - 1];
+  return { id, number: n, stageKey: id.split(".")[1] as CareerMatchDef["stageKey"], round, rival, code, color, namedRival, ai, personalities, court, enabled: n <= 5, recruit };
+};
+export const CAREER_MATCHES: CareerMatchDef[] = [
+  M(1, "", "Bandra Gully Smashers", "BGS", "#3E7CB1", false, ["ROOKIE", "ROOKIE"], ["DEFENSIVE", "TACTICAL"], "bandra_garden"),
+  M(2, "", "Dadar Dinkers", "DAD", "#8E5BA8", false, ["ROOKIE", "ROOKIE"], ["KITCHEN", "TACTICAL"], "bandra_garden", { slot: 0, partnerId: "upsi" }),
+  M(3, "FINAL", "Colaba Causeway Kings", "CCK", "#2F5DA8", true, ["ROOKIE", "ROOKIE"], ["AGGRESSIVE", "KITCHEN"], "bandra_garden"),
+  M(4, "", "Andheri Local Express", "ALX", "#C77D2E", false, ["ROOKIE", "CLUB"], ["DEFENSIVE", "TACTICAL"], "mumbai_local"),
+  M(5, "", "Juhu Beach Bouncers", "JBB", "#2A9D8F", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "KITCHEN"], "mumbai_local", { slot: 0, partnerId: "matz" }),
+  M(6, "FINAL", "Worli Sea Face Strikers", "WSF", "#B23A48", true, ["CLUB", "CLUB"], ["AGGRESSIVE", "AGGRESSIVE"], "mumbai_local"),
+  M(7, "", "Powai Lake Lobbers", "PLL", "#5B8C3A", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "TACTICAL"], null),
+  M(8, "", "Marine Drive Volleyers", "MDV", "#4A6FA5", false, ["CLUB", "CLUB"], ["TACTICAL", "KITCHEN"], null),
+  M(9, "SEMIFINAL", "Malabar Hill Masters", "MHM", "#7A5230", false, ["CLUB", "PRO"], ["DEFENSIVE", "TACTICAL"], null),
+  M(10, "FINAL", "Gateway Champions", "GWC", "#B08D2F", true, ["PRO", "PRO"], ["AGGRESSIVE", "TACTICAL"], null),
+];
+export function careerMatch(id: string | undefined): CareerMatchDef {
+  return CAREER_MATCHES.find((m) => m.id === id) ?? CAREER_MATCHES[0];
+}
+
+// Career reward COMPONENTS (previews always sum these; never typed totals).
+// Applied in Session C. Milestone I = clearing the Community Cup Final.
+export const CAREER_REWARDS = {
+  win: { coins: 100, fans: 20 },
+  namedRival: { coins: 75, fans: 25 },
+  milestones: { "mumbai.community.03": { id: "milestone.1", label: "Milestone I", coins: 100 } } as Record<string, { id: string; label: string; coins: number }>,
+};
+export function careerRewardPreview(m: CareerMatchDef): { coins: number; fans: number; coinParts: string[]; fanParts: string[] } {
+  const coinParts = ["Win"];
+  const fanParts = ["Win"];
+  let coins = CAREER_REWARDS.win.coins;
+  let fans = CAREER_REWARDS.win.fans;
+  if (m.namedRival) {
+    coins += CAREER_REWARDS.namedRival.coins;
+    fans += CAREER_REWARDS.namedRival.fans;
+    coinParts.push("Rival");
+    fanParts.push("Rival");
+  }
+  const ms = CAREER_REWARDS.milestones[m.id];
+  if (ms) {
+    coins += ms.coins;
+    coinParts.push(ms.label);
+  }
+  return { coins, fans, coinParts, fanParts };
+}
+
+// Partner signing (spend wired in Session C).
+export const SIGN_COST: Partial<Record<PartnerId, number>> = { upsi: 750 };
+
+// Training (progression wired in Session C). First to 7, win by 2.
+export const TRAINING_MODES = {
+  training: { growth: 20, chemistry: 2, dailyCap: 2, vs: "drill pair", code: "DRL", ai: ["ROOKIE", "ROOKIE"] as [AiDiff, AiDiff], personalities: ["DEFENSIVE", "KITCHEN"] as [AiPers, AiPers] },
+  scrimmage: { growth: 10, chemistry: 1, dailyCap: 3, vs: "sparring pair", code: "SPR", ai: ["CLUB", "CLUB"] as [AiDiff, AiDiff], personalities: ["AGGRESSIVE", "TACTICAL"] as [AiPers, AiPers] },
+} as const;
+export const SHORT_FORMAT = { pointsToWin: 7, winBy: 2 } as const;
 
 // Ledger history kept in the save (idempotency uses the full rewardId set).
 export const LEDGER_KEEP = 200;

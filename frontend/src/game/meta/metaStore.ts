@@ -382,6 +382,25 @@ export class MetaStore {
     return true;
   }
 
+  // Training partner is separate from the Career active partner (never changes it).
+  setTrainingPartner(partnerId: string): boolean {
+    const d = this.docState!;
+    if (!d.partners[partnerId]?.signed || d.trainingPartnerId === partnerId) return false;
+    d.trainingPartnerId = partnerId;
+    this.save();
+    return true;
+  }
+
+  // Inbox: only READ ids are stored (messages are derived from save flags).
+  markInboxRead(ids: string[]): boolean {
+    const d = this.docState!;
+    const add = ids.filter((id) => !d.inboxRead.includes(id));
+    if (!add.length) return false;
+    d.inboxRead.push(...add);
+    this.save();
+    return true;
+  }
+
   setActivePartner(partnerId: string): boolean {
     const d = this.docState!;
     if (!d.partners[partnerId]?.signed || d.activePartnerId === partnerId) return false;

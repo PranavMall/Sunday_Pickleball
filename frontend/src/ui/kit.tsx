@@ -149,8 +149,8 @@ export function ScreenBg({ source, dim = false }: { source: ImageSource | number
 // Big serif screen title with a yellow brush underline (Training / Team).
 export function ScreenTitle({ title, small = false }: { title: string; small?: boolean }) {
   return (
-    <View>
-      <Text style={[kit.title, small && { fontSize: 34 }]} numberOfLines={1}>
+    <View style={{ flexShrink: 1, marginRight: 8 }}>
+      <Text style={[kit.title, small && { fontSize: 34 }]} numberOfLines={1} adjustsFontSizeToFit>
         {title}
       </Text>
       <View style={kit.underline} />
