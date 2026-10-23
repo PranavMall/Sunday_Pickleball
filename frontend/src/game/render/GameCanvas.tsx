@@ -8,9 +8,8 @@ import { COURT, netHeightAt } from "../config/court";
 import type { GameSimulation } from "../sim/GameSimulation";
 import { IMAGE_H, IMAGE_W, type Projector } from "../render/perspective";
 import { Character, type CharacterColors, type CharacterView } from "./character";
+import { courtVisual } from "./courts";
 import { useTheme } from "@/src/theme";
-
-const courtImg = require("@/assets/images/court_gameplay.webp");
 
 interface Props {
   sim: GameSimulation;
@@ -18,6 +17,7 @@ interface Props {
   width: number;
   height: number;
   frame: number; // bump to force re-render each simulation tick
+  court?: string; // config.court → painted court image + edge fill
   onReady?: () => void; // fired once the court image has loaded
 }
 
@@ -25,8 +25,9 @@ interface Props {
 // court. Code-drawn lines/kitchen/net sit at the OFFICIAL projected positions
 // so what the player sees always matches RuleManager. z (height) reads as a
 // depth-scaled screen offset so the ball and its shadow separate as it rises.
-export function GameCanvas({ sim, projector, width, height, onReady }: Props) {
+export function GameCanvas({ sim, projector, width, height, court, onReady }: Props) {
   const { colors } = useTheme();
+  const cv = courtVisual(court);
 
   const seg = (
     pts: [number, number][],
@@ -221,11 +222,10 @@ export function GameCanvas({ sim, projector, width, height, onReady }: Props) {
 
   return (
     <View style={{ width, height }}>
-      {/* Letterbox fill (static, drawn once): the artwork's own top/bottom edge
+      {/* Edge fill (static, per court): the artwork's own top/bottom edge
           tones, visible only where the court-fit leaves spare space. */}
       <LinearGradient
-        colors={["#D8D27D", "#BFD07A", "#D9C766", "#E3C852"]}
-        locations={[0, 0.45, 0.55, 1]}
+        colors={[cv.edgeTop, cv.edgeBottom]}
         style={{ position: "absolute", left: 0, top: 0, width, height }}
       />
       {/* Painted court as a background layer (expo-image reliably decodes the
@@ -233,7 +233,7 @@ export function GameCanvas({ sim, projector, width, height, onReady }: Props) {
           SAME projector scale/offset so it stays pixel-aligned with the
           code-drawn lines rendered by the transparent Skia canvas above. */}
       <Image
-        source={courtImg}
+        source={cv.image}
         style={{
           position: "absolute",
           left: projector.offsetX,

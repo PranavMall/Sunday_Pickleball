@@ -12,12 +12,13 @@ import { buildSetup, type LaunchParams, type MatchSetup } from "@/src/game/meta/
 import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
+import { courtVisual } from "@/src/game/render/courts";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
 import { initMeta, meta } from "@/src/game/meta";
 import { newMatchId } from "@/src/game/meta/metaStore";
-import { getIdentity } from "@/src/game/services/profile";
+import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_LABEL_SECONDS, faultLabelFor } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
@@ -96,50 +97,55 @@ function buildMatch(p: LaunchParams): { sim: GameSimulation; config: MatchConfig
   return { sim, config, matchId: newMatchId(Date.now()), setup };
 }
 
-// Memoised HUD — only re-renders when these primitives change (not every frame).
-const Hud = memo(function Hud(props: {
-  serving: number;
-  recv: number;
-  serverNumber: number;
-  doubles: boolean;
-  near: number;
-  far: number;
-  rally: number;
-  servingNear: boolean;
-  paused: boolean;
+// PAINTED SCOREBOARD: live text inside the court's painted face, placed with
+// exactly the court image's scale/offset. Memoised on primitives, so it only
+// re-renders when a score / serve / rally value changes (not every frame).
+const Scoreboard = memo(function Scoreboard(props: {
+  left: number;
   top: number;
-  playerName: string | null; // null = identity not loaded yet
-  onPause: () => void;
+  width: number;
+  height: number;
+  topCode: string;
+  topScore: number;
+  bottomCode: string;
+  bottomScore: number;
+  servingTop: boolean;
+  serverNumber: number; // 0 = singles (marker only)
+  rally: number;
 }) {
   const styles = useStyles();
+  const row = (code: string, score: number, serving: boolean, testID: string) => (
+    <View style={styles.sbRow} testID={testID}>
+      <Text style={styles.sbServe}>{serving ? "●" : " "}</Text>
+      <Text style={styles.sbCode} numberOfLines={1}>{code}</Text>
+      <Text style={styles.sbScore}>{score}</Text>
+      <Text style={styles.sbServer}>{serving && props.serverNumber ? props.serverNumber : " "}</Text>
+    </View>
+  );
   return (
-    <View style={[styles.hud, { top: props.top + 8 }]} pointerEvents="box-none">
-      <View style={styles.scorePanel}>
-        <Text style={styles.scoreText} testID="score-display">
-          {props.serving}
-          <Text style={styles.scoreDim}> – </Text>
-          {props.recv}
-          {props.doubles ? (
-            <>
-              <Text style={styles.scoreDim}> – </Text>
-              {props.serverNumber}
-            </>
-          ) : null}
-        </Text>
-        {props.playerName !== null ? (
-          <Text style={styles.serveLabel} numberOfLines={1} testID="serve-label">
-            {props.servingNear ? `${props.playerName} serves` : "Rival serves"} · {props.playerName} {props.near} · Rival {props.far}
-            {props.doubles ? "" : "  · Singles"}
-          </Text>
-        ) : null}
+    <View
+      style={[styles.sb, { left: props.left, top: props.top, width: props.width, height: props.height }]}
+      pointerEvents="none"
+      testID="score-display"
+    >
+      <View style={styles.sbRows}>
+        {row(props.topCode, props.topScore, props.servingTop, "score-row-top")}
+        {row(props.bottomCode, props.bottomScore, !props.servingTop, "score-row-bottom")}
       </View>
-      <View style={styles.hudRight}>
-        <Text style={styles.rally}>Rally {props.rally}</Text>
-        <Pressable testID="pause-button" style={styles.iconBtn} onPress={props.onPause}>
-          <Text style={styles.iconText}>{props.paused ? "▶" : "⏸"}</Text>
-        </Pressable>
+      <View style={styles.sbRally}>
+        <Text style={styles.sbRallyLabel}>RALLY</Text>
+        <Text style={styles.sbRallyNum} testID="score-rally">{props.rally}</Text>
       </View>
     </View>
+  );
+});
+
+const PauseButton = memo(function PauseButton(props: { paused: boolean; top: number; onPause: () => void }) {
+  const styles = useStyles();
+  return (
+    <Pressable testID="pause-button" accessibilityLabel={props.paused ? "Resume" : "Pause"} style={[styles.iconBtn, styles.pauseAbs, { top: props.top + 8 }]} onPress={props.onPause} hitSlop={6}>
+      <Text style={styles.iconText}>{props.paused ? "▶" : "⏸"}</Text>
+    </Pressable>
   );
 });
 
@@ -193,6 +199,14 @@ export default function Match() {
     perf.current.projBuilds++;
     return makeProjector(width, height);
   }, [width, height]);
+  // Live scoreboard rect = the court's text area through the SAME scale/offset
+  // as the court image (computed once per size/court, never per frame).
+  const sbRect = useMemo(() => {
+    const a = courtVisual(config.court).scoreArea;
+    const s = projector.scale;
+    return { left: projector.offsetX + a.x0 * s, top: projector.offsetY + a.y0 * s, width: (a.x1 - a.x0) * s, height: (a.y1 - a.y0) * s };
+  }, [projector, config.court]);
+  const togglePause = useCallback(() => setPaused((p) => !p), []);
   if (perf.current.lastW !== width || perf.current.lastH !== height) {
     if (perf.current.lastW !== 0) perf.current.sizeChanges++;
     perf.current.lastW = width;
@@ -417,9 +431,9 @@ export default function Match() {
     !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
       ? sim.lastHumanShot.type.toUpperCase()
       : null;
-  const servingScore = sim.score.servingTeam === "near" ? sim.score.nearScore : sim.score.farScore;
-  const recvScore = sim.score.servingTeam === "near" ? sim.score.farScore : sim.score.nearScore;
   const doubles = config.format === "doubles";
+  // Scoreboard: team code from the player's team name; never equal to the rival's.
+  const myCode = identity ? teamCode(identity.teamName, match.setup.rivalCode) : "YOU";
   const serveHint = sim.humanIsServer()
     ? "Your serve — swipe up to serve"
     : sim.phase === "waiting_serve"
@@ -444,24 +458,24 @@ export default function Match() {
       <Fullscreen />
       <GestureDetector gesture={pan}>
         <View style={styles.canvasWrap}>
-          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} onReady={onCourtReady} />
+          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} court={config.court} onReady={onCourtReady} />
         </View>
       </GestureDetector>
 
-      <Hud
-        serving={servingScore}
-        recv={recvScore}
-        serverNumber={sim.score.serverNumber}
-        doubles={doubles}
-        near={sim.score.nearScore}
-        far={sim.score.farScore}
+      <Scoreboard
+        left={sbRect.left}
+        top={sbRect.top}
+        width={sbRect.width}
+        height={sbRect.height}
+        topCode={myCode}
+        topScore={sim.score.nearScore}
+        bottomCode={match.setup.rivalCode}
+        bottomScore={sim.score.farScore}
+        servingTop={sim.score.servingTeam === "near"}
+        serverNumber={doubles ? sim.score.serverNumber : 0}
         rally={sim.stats.rallyCount}
-        servingNear={sim.score.servingTeam === "near"}
-        paused={paused}
-        top={insets.top}
-        playerName={identity?.playerName ?? null}
-        onPause={() => setPaused((p) => !p)}
       />
+      <PauseButton paused={paused} top={insets.top} onPause={togglePause} />
 
       {!gameOver && (
         <View style={[styles.tacticalRow, { bottom: insets.bottom + KB_BOTTOM }]} testID="tactical-row">
@@ -628,15 +642,20 @@ function Stat({ label, value }: { label: string; value: number }) {
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.surfaceInverse },
   canvasWrap: { ...abs() },
-  hud: { position: "absolute", left: 12, right: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  scorePanel: { backgroundColor: "rgba(46,61,42,0.72)", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
-  scoreText: { color: c.accentGold, fontSize: 22, fontWeight: "800" },
-  scoreDim: { color: c.onSurfaceInverse, opacity: 0.55, fontSize: 18 },
-  serveLabel: { color: c.onSurfaceInverse, opacity: 0.85, fontSize: 11, marginTop: 2 },
-  hudRight: { alignItems: "flex-end", gap: 8 },
-  rally: { color: c.onSurfaceInverse, backgroundColor: "rgba(46,61,42,0.72)", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, fontSize: 12, fontWeight: "600", overflow: "hidden" },
-  iconBtn: { backgroundColor: "rgba(46,61,42,0.72)", width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  iconBtn: { backgroundColor: "rgba(46,61,42,0.72)", width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  pauseAbs: { position: "absolute", right: 12 },
   iconText: { color: c.onSurfaceInverse, fontSize: 18 },
+  // Painted scoreboard text: dark ink on the cream face.
+  sb: { position: "absolute", flexDirection: "row", alignItems: "stretch" },
+  sbRows: { flex: 1, justifyContent: "space-evenly" },
+  sbRow: { flexDirection: "row", alignItems: "center" },
+  sbServe: { color: "#C9483B", fontSize: 11, width: 14, textAlign: "center" },
+  sbCode: { color: "#1F2A22", fontSize: 14, fontWeight: "800", letterSpacing: 1, width: 44 },
+  sbScore: { color: "#1F2A22", fontSize: 20, fontWeight: "900", minWidth: 26, textAlign: "right", fontVariant: ["tabular-nums"] },
+  sbServer: { color: "#1F2A22", fontSize: 12, fontWeight: "800", width: 16, textAlign: "center" },
+  sbRally: { width: 46, borderLeftWidth: 1, borderLeftColor: "rgba(31,42,34,0.35)", alignItems: "center", justifyContent: "center" },
+  sbRallyLabel: { color: "#1F2A22", fontSize: 9, fontWeight: "800", letterSpacing: 1, opacity: 0.8 },
+  sbRallyNum: { color: "#1F2A22", fontSize: 18, fontWeight: "900", fontVariant: ["tabular-nums"] },
   dinkCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(197,160,40,0.9)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
   dinkCueText: { color: "#1c2417", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   bounceCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.62)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: "rgba(197,160,40,0.8)" },

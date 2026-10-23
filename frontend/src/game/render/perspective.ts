@@ -7,10 +7,11 @@ import { COURT } from "../config/court";
 // the homography from the four painted court corners (measured from the
 // 1024x1536 artwork), then apply a cover-fit image->screen transform.
 //
-// GAMEPLAY court = court_gameplay.webp (LINE-FREE painted blue surface). The
+// GAMEPLAY courts = court_bandra_garden.webp / court_mumbai_local.webp
+// (LINE-FREE painted surfaces, same 1024x1536 framing; see render/courts.ts). The
 // code-drawn geometry (sidelines, baselines, kitchen/NVZ lines, centre lines,
 // net, posts) is authoritative and drawn on top at the projected OFFICIAL
-// positions. court_background.webp remains the MAIN-MENU background only.
+// positions.
 //
 // IMPORTANT: in/out and kitchen decisions NEVER use these pixels. This file is
 // visual-only. The logical 20x44 ft court is authoritative.
@@ -18,7 +19,7 @@ import { COURT } from "../config/court";
 export const IMAGE_W = 1024;
 export const IMAGE_H = 1536;
 
-// Painted blue-court corners in image pixels (court_gameplay.webp).
+// Painted blue-court corners in image pixels (shared by both court images).
 // Logical unit-square corners map as: (u,v) with u=x/WIDTH, v=y/LENGTH.
 //   (0,0) far-left, (1,0) far-right, (1,1) near-right, (0,1) near-left
 const DST = [

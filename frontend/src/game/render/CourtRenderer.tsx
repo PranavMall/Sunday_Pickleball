@@ -10,6 +10,7 @@ export interface CourtRendererProps {
   width: number;
   height: number;
   frame: number;
+  court?: string; // config.court (selects the painted court)
   onReady?: () => void; // court image decoded (first frame can be shown)
 }
 
