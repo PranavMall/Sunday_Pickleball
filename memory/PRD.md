@@ -106,3 +106,10 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - C2 728582f: first-to-N scoring fix; src/game/meta (MetaStore single JSON save `pb.meta`, idempotent ledger, analytics, economyConfig with 10 Career IDs).
 - Gate: run.ts 263/263 (output identical to fbb61cc), b3Report/shotMix byte-identical, phase1a.ts 110/110, step bench ~2.15µs both.
 - Next: Session B (screens, Career, Team) only after user approval.
+
+## Phase 1A Session B — App shell (2026-06, commits 261e5a3 / 6f9edbb / c048949) — USER CHECK PENDING
+- 3a: wooden destination bar (Home/Career/Team/Locker locked/Training; replace-nav, animation none, one bg mounted via focus-gated ScreenBg); new Home; Quick Play (app/quickplay.tsx) replaces difficulty.tsx; Skip → random Appendix A names (NAME_MAX raised 16→18 for "Sea Link Slammers"); teamCode(); monogram badges; 11 assets in assets/images.
+- 3b: economyConfig Career table (10 IDs community.01-03/local.04-06/district.07-10), PARTNERS (Anli/Upsi/Matz), reward components (win 100c/20f, named rival 75c/25f, Milestone I 100c → Match 3 = 275/45), SIGN_COST upsi 750, TRAINING_MODES (drill pair ROOKIE DEF/KIT, sparring pair CLUB AGG/TAC — assumptions), Career/Team/Training screens, Inbox (src/game/meta/inbox.ts) + Stats overlays, MetaStore.setTrainingPartner/markInboxRead, matchSetup.ts (quick/career/training builders).
+- 3c: render/courts.ts (court image, edge fill, scoreboard text area per court), painted scoreboard in match.tsx, old HUD panel removed; dev Mumbai court button on Quick Play (__DEV__).
+- Session C NEXT (only after user approval): rewards, career clearing, signing spend, training counters/growth.
+- Tests: src/game/__tests__/phase1b.ts (53), scripts/regress1a.sh; baselines from fbb61cc worktree at /tmp/base.
