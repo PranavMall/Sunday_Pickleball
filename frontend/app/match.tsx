@@ -1,6 +1,7 @@
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, Platform, Pressable, Share, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, BackHandler, Platform, Pressable, Share, useWindowDimensions, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -433,7 +434,7 @@ export default function Match() {
       : null;
   const doubles = config.format === "doubles";
   // Scoreboard: team code from the player's team name; never equal to the rival's.
-  const myCode = identity ? teamCode(identity.teamName, match.setup.rivalCode) : "YOU";
+  const myCode = useMemo(() => (identity ? teamCode(identity.teamName, match.setup.rivalCode) : "YOU"), [identity, match.setup.rivalCode]);
   const serveHint = sim.humanIsServer()
     ? "Your serve — swipe up to serve"
     : sim.phase === "waiting_serve"
@@ -586,10 +587,10 @@ export default function Match() {
         <View style={styles.modalWrap} testID="result-overlay">
           <View style={styles.modal}>
             <Text style={styles.resultKicker}>{nearWon ? "VICTORY" : "DEFEAT"}</Text>
-            <Text style={styles.modalTitle} numberOfLines={1} ellipsizeMode="tail" testID="result-title">
+            <Text style={styles.modalTitle} numberOfLines={1} testID="result-title">
               {nearWon ? `${identity?.playerName ?? "You"} wins!` : "Rivals win"}
             </Text>
-            <Text style={styles.teamName} numberOfLines={1} ellipsizeMode="tail" testID="result-team-name">
+            <Text style={styles.teamName} numberOfLines={1} testID="result-team-name">
               Team {identity?.teamName ?? ""}
             </Text>
             <Text style={styles.finalScore} testID="final-score">

@@ -2,7 +2,8 @@
 // their overlays (no animation, no server).
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { meta } from "@/src/game/meta";
@@ -111,7 +112,7 @@ export function Overlay({ visible, title, onClose, children, testID }: { visible
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={[styles.scrim, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]} onPress={onClose}>
         <Pressable style={styles.sheetWrap} onPress={() => {}}>
-          <Card style={styles.sheet} testID={testID}>
+          <Card style={[styles.sheet, { backgroundColor: UI.cream }]} testID={testID}>
             <View style={styles.sheetHead}>
               <Text style={styles.sheetTitle}>{title}</Text>
               <Pressable testID="overlay-close" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
@@ -134,7 +135,7 @@ const styles = StyleSheet.create({
   sheetWrap: { width: "100%", maxWidth: 420, alignSelf: "center", maxHeight: "100%" },
   sheet: { padding: 18, maxHeight: "100%" },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  sheetTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 26 },
+  sheetTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 24 },
   close: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   closeText: { color: UI.inkSoft, fontSize: 20, fontWeight: "700" },
   empty: { color: UI.muted, fontSize: 15, paddingVertical: 12, lineHeight: 21 },

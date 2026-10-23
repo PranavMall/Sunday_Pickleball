@@ -1,5 +1,6 @@
 import React from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 
 import type { GameSimulation } from "../sim/GameSimulation";
 import type { Projector } from "./perspective";

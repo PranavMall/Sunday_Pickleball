@@ -2,15 +2,16 @@ import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { QUICK_PLAY_REWARDS } from "@/src/game/meta/economyConfig";
-import { Badge, Card, Coin, IconSquare, ScreenBg, SERIF, UI } from "@/src/ui/kit";
+import { DIM } from "@/src/ui/DestinationScreen";
+import { Badge, Card, Coin, IconSquare, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
-const BG = require("@/assets/images/bg_home.webp");
 
 const LEVELS = [
   { key: "ROOKIE", title: "ROOKIE", blurb: "Makes obvious mistakes. A gentle warm-up.", icon: require("@/assets/images/icon_rookie.webp") },
@@ -32,7 +33,7 @@ export default function QuickPlay() {
 
   return (
     <View style={styles.root} testID="quickplay-screen">
-      <ScreenBg source={BG} dim />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} pointerEvents="none" />
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headRow}>
           <IconSquare testID="back-button" icon="chevron-back" label="Back" onPress={() => router.back()} size={48} />
@@ -106,7 +107,7 @@ export default function QuickPlay() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#2E3D2A" },
+  root: { flex: 1, backgroundColor: "transparent" },
   content: { paddingHorizontal: 18, alignItems: "stretch" },
   headRow: { flexDirection: "row" },
   title: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 46, textAlign: "center", textShadowColor: "rgba(255,255,255,0.7)", textShadowRadius: 8 },

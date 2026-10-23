@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Text, TextInput } from "@/src/ui/Text";
 
 import { NAME_MAX, validateName } from "@/src/game/services/profile";
 import { makeStyles, useTheme } from "@/src/theme";

@@ -1,14 +1,15 @@
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 
 import { meta } from "@/src/game/meta";
 import { PARTNERS, type PartnerId } from "@/src/game/meta/economyConfig";
 import { discoveredPartners, rosterStatus, type RosterStatus } from "@/src/game/meta/team";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions, Overlay } from "@/src/ui/HeaderActions";
-import { Badge, Card, Coin, Kicker, MeterRow, ScreenTitle, SERIF, UI } from "@/src/ui/kit";
+import { Badge, Card, Coin, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
 export default function Team() {
@@ -28,11 +29,9 @@ export default function Team() {
   return (
     <DestinationScreen
       active="team"
-      bg={require("@/assets/images/bg_career_mumbai.webp")}
       testID="team-screen"
       header={
         <>
-          <ScreenTitle title="Team" small />
           <View style={styles.headRight}>
             <View style={styles.coinChip} testID="team-coins">
               <Coin size={26} />
@@ -43,7 +42,7 @@ export default function Team() {
         </>
       }
     >
-      <Card style={{ padding: 12 }} testID="roster">
+      <Card style={{ padding: 12, alignSelf: "stretch" }} testID="roster">
         <Kicker style={{ color: "#1E4D33", marginBottom: 4 }}>YOUR TEAM</Kicker>
         {ids.map((id, i) => {
           const p = PARTNERS[id];
@@ -51,9 +50,9 @@ export default function Team() {
           return (
             <View key={id} style={[styles.row, i > 0 && styles.rowDivider, highlight === id && styles.rowHi]} testID={`roster-${id}`}>
               <View style={styles.rowTop}>
-                <Badge name={p.name} color={p.color} size={58} />
+                <Badge name={p.name} color={p.color} size={52} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.name}>{p.name}</Text>
+                  <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Text style={styles.arch}>{p.archetype}</Text>
                     <View style={styles.tier}>
@@ -140,13 +139,13 @@ function StatusPill({ st, onPress, testID }: { st: RosterStatus; onPress: () => 
 
 const styles = StyleSheet.create({
   headRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  coinChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: UI.cream, borderRadius: 14, paddingHorizontal: 10, height: 50, borderWidth: 1, borderColor: UI.line },
+  coinChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: UI.cardBg, borderRadius: 14, paddingHorizontal: 10, height: 50, borderWidth: 1, borderColor: UI.line },
   coinText: { color: UI.ink, fontSize: 18, fontWeight: "800" },
   row: { paddingVertical: 12, paddingHorizontal: 4, borderRadius: 12 },
   rowDivider: { borderTopWidth: 1, borderTopColor: UI.line },
   rowHi: { backgroundColor: "rgba(246,201,74,0.18)", borderWidth: 2, borderColor: UI.gold },
   rowTop: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  name: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 24 },
+  name: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 20 },
   arch: { color: UI.inkSoft, fontSize: 14 },
   tier: { backgroundColor: UI.creamDeep, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 1 },
   tierText: { color: UI.inkSoft, fontSize: 11 },

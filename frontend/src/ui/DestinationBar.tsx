@@ -5,7 +5,8 @@ import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
+import { BackHandler, Pressable, StyleSheet, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { UI, type IoniconName } from "./kit";
@@ -17,7 +18,7 @@ const ITEMS: { key: Destination; label: string; icon: IoniconName; path?: "/" | 
   { key: "career", label: "Career", icon: "trophy", path: "/career" },
   { key: "team", label: "Team", icon: "people", path: "/team" },
   { key: "locker", label: "Locker", icon: "lock-closed" },
-  { key: "training", label: "Training", icon: "tennisball", path: "/training" },
+  { key: "training", label: "Training", icon: "tennisball", path: "/training" }, // icon drawn by PickleballIcon
 ];
 
 export const BAR_HEIGHT = 74;
@@ -70,7 +71,7 @@ export function DestinationBar({ active }: { active: Destination }) {
                 if (!sel && it.path) router.replace(it.path);
               }}
             >
-              <Ionicons name={it.icon} size={26} color={color} />
+              {it.key === "training" ? <PickleballIcon size={26} color={color} /> : <Ionicons name={it.icon} size={26} color={color} />}
               <Text style={[styles.label, { color }]} numberOfLines={1}>
                 {it.label}
               </Text>
@@ -79,6 +80,27 @@ export function DestinationBar({ active }: { active: Destination }) {
           );
         })}
       </LinearGradient>
+    </View>
+  );
+}
+
+// Code-drawn pickleball icon: a small paddle plus a ball with 3 holes (Views only).
+function PickleballIcon({ size, color }: { size: number; color: string }) {
+  const u = size / 26;
+  const hole = { position: "absolute" as const, width: 2.4 * u, height: 2.4 * u, borderRadius: 1.2 * u, backgroundColor: UI.woodDark };
+  return (
+    <View style={{ width: size, height: size }} testID="icon-pickleball">
+      {/* paddle: rounded face + handle, tilted */}
+      <View style={{ position: "absolute", left: 1 * u, top: 0, width: 14 * u, height: 22 * u, alignItems: "center", transform: [{ rotate: "-30deg" }] }}>
+        <View style={{ width: 13 * u, height: 14 * u, borderRadius: 6.5 * u, backgroundColor: color }} />
+        <View style={{ width: 4 * u, height: 8 * u, borderRadius: 1.5 * u, backgroundColor: color, marginTop: -0.5 * u }} />
+      </View>
+      {/* ball with 3 holes, clear of the paddle */}
+      <View style={{ position: "absolute", right: 0, bottom: 0, width: 11 * u, height: 11 * u, borderRadius: 5.5 * u, backgroundColor: color, borderWidth: 1.5 * u, borderColor: UI.woodDark }}>
+        <View style={[hole, { left: 1.4 * u, top: 1.6 * u }]} />
+        <View style={[hole, { left: 4.8 * u, top: 1.2 * u }]} />
+        <View style={[hole, { left: 3 * u, top: 4.6 * u }]} />
+      </View>
     </View>
   );
 }

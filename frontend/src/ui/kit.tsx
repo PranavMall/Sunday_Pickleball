@@ -1,10 +1,9 @@
 // Shared code-drawn UI kit for the destination screens (Phase 1A Session B).
 // Everything here is drawn by code: badges, buttons, cards, chips, icons.
 import { Ionicons } from "@react-native-vector-icons/ionicons";
-import { Image, type ImageSource } from "expo-image";
-import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import React from "react";
+import { Platform, Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { Text } from "@/src/ui/Text";
 
 export type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -16,6 +15,7 @@ export const UI = {
   inkSoft: "#4A4534",
   muted: "#7C735E",
   cream: "#FBF4E2",
+  cardBg: "rgba(251,244,226,0.9)", // cards: same cream at 90%, painting shows through
   creamDeep: "#F1E6CB",
   line: "#E2D3AE",
   gold: "#F6C94A",
@@ -127,40 +127,9 @@ export function MeterRow({ icon, label, value, color, testID }: { icon: IoniconN
   );
 }
 
-// Full-screen destination background. Mounted ONLY while the screen is
-// focused, so exactly one full-screen background is decoded at a time.
-export function ScreenBg({ source, dim = false }: { source: ImageSource | number; dim?: boolean }) {
-  const [focused, setFocused] = useState(true);
-  useFocusEffect(
-    useCallback(() => {
-      setFocused(true);
-      return () => setFocused(false);
-    }, []),
-  );
-  if (!focused) return null;
-  return (
-    <>
-      <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" />
-      {dim ? <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(251,244,226,0.28)" }]} pointerEvents="none" /> : null}
-    </>
-  );
-}
-
-// Big serif screen title with a yellow brush underline (Training / Team).
-export function ScreenTitle({ title, small = false }: { title: string; small?: boolean }) {
-  return (
-    <View style={{ flexShrink: 1, marginRight: 8 }}>
-      <Text style={[kit.title, small && { fontSize: 34 }]} numberOfLines={1} adjustsFontSizeToFit>
-        {title}
-      </Text>
-      <View style={kit.underline} />
-    </View>
-  );
-}
-
 export const kit = StyleSheet.create({
   card: {
-    backgroundColor: UI.cream,
+    backgroundColor: UI.cardBg,
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
@@ -169,7 +138,6 @@ export const kit = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
   },
   kicker: { color: "#1E4D33", fontSize: 12, fontWeight: "800", letterSpacing: 2.5 },
   gold: {
@@ -213,6 +181,4 @@ export const kit = StyleSheet.create({
   meterTrack: { flex: 1, height: 10, borderRadius: 5, backgroundColor: UI.track, overflow: "hidden" },
   meterFill: { height: 10, borderRadius: 5 },
   meterNum: { color: UI.ink, fontSize: 13, fontWeight: "700", width: 62, textAlign: "right" },
-  title: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 40, letterSpacing: -0.5, textShadowColor: "rgba(255,255,255,0.6)", textShadowRadius: 6 },
-  underline: { height: 5, width: "78%", backgroundColor: UI.gold, borderRadius: 3, marginTop: -2, transform: [{ rotate: "-1.5deg" }] },
 });

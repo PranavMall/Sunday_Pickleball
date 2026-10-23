@@ -2,14 +2,15 @@ import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 
 import { meta } from "@/src/game/meta";
 import { PARTNER_IDS, PARTNERS, TRAINING_MODES } from "@/src/game/meta/economyConfig";
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions, Overlay } from "@/src/ui/HeaderActions";
-import { Badge, Card, GoldButton, Kicker, ScreenTitle, SERIF, UI } from "@/src/ui/kit";
+import { Badge, Card, GoldButton, Kicker, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
 const ART = { training: require("@/assets/images/art_quickplay.webp"), scrimmage: require("@/assets/images/icon_scrimmage.webp") };
@@ -27,12 +28,10 @@ export default function Training() {
   return (
     <DestinationScreen
       active="training"
-      bg={require("@/assets/images/bg_home.webp")}
       dim
       testID="training-screen"
       header={
         <>
-          <ScreenTitle title="Training" />
           <HeaderActions save={save} onChange={refresh} />
         </>
       }
@@ -40,9 +39,9 @@ export default function Training() {
       <Card style={{ padding: 12 }} testID="training-with">
         <Kicker style={{ fontSize: 11 }}>TRAINING WITH</Kicker>
         <View style={styles.withRow}>
-          <Badge name={tp.name} color={tp.color} size={54} />
+          <Badge name={tp.name} color={tp.color} size={52} />
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.name} testID="training-partner-name">{tp.name}</Text>
+            <Text style={styles.name} numberOfLines={1} testID="training-partner-name">{tp.name}</Text>
             <Text style={styles.arch}>{tp.archetype}</Text>
           </View>
           <Pressable testID="training-change" accessibilityRole="button" onPress={() => setPicker(true)} style={({ pressed }) => [styles.change, pressed && { opacity: 0.8 }]}>
@@ -63,11 +62,11 @@ export default function Training() {
               <Text style={styles.modeTitle}>{mode.toUpperCase()}</Text>
               <View style={styles.gains}>
                 <Ionicons name="star" size={15} color={UI.growth} />
-                <Text style={styles.gainText}>
+                <Text style={styles.gainText} numberOfLines={1}>
                   <Text style={{ fontWeight: "800" }}>+{t.growth}</Text> Growth ·{" "}
                 </Text>
                 <Ionicons name="heart" size={15} color={UI.chem} />
-                <Text style={styles.gainText}>
+                <Text style={styles.gainText} numberOfLines={1}>
                   <Text style={{ fontWeight: "800" }}>+{t.chemistry}</Text> Chemistry
                 </Text>
               </View>
@@ -115,19 +114,19 @@ export default function Training() {
 
 const styles = StyleSheet.create({
   withRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
-  name: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 24 },
+  name: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 20 },
   arch: { color: UI.inkSoft, fontSize: 14 },
   change: { flexDirection: "row", alignItems: "center", gap: 2, borderWidth: 1, borderColor: UI.line, backgroundColor: "#fff", borderRadius: 10, paddingHorizontal: 12, minHeight: 44 },
   changeText: { color: UI.ink, fontSize: 15, fontWeight: "700" },
   modeCard: { flexDirection: "row", alignItems: "center", padding: 12 },
-  art: { width: 96, height: 96 },
+  art: { width: 84, height: 84 },
   modeDivider: { width: 1, alignSelf: "stretch", backgroundColor: UI.line, marginHorizontal: 10 },
-  modeTitle: { color: "#1E4D33", fontFamily: SERIF, fontWeight: "700", fontSize: 22 },
-  gains: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2, flexWrap: "wrap" },
-  gainText: { color: UI.ink, fontSize: 14 },
+  modeTitle: { color: "#1E4D33", fontFamily: SERIF, fontWeight: "700", fontSize: 18 },
+  gains: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
+  gainText: { color: UI.ink, fontSize: 13, flexShrink: 1 },
   vs: { color: UI.inkSoft, fontSize: 14, marginTop: 3 },
   left: { color: UI.inkSoft, fontSize: 12, marginTop: 3 },
-  note: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(232,240,236,0.92)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, alignSelf: "stretch" },
+  note: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(232,240,236,0.9)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, alignSelf: "stretch" },
   noteText: { color: UI.ink, fontSize: 13, flexShrink: 1 },
   pickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: UI.line },
   pickName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 18 },

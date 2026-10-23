@@ -2,10 +2,10 @@ import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Text } from "@/src/ui/Text";
 
 import {
-  CAREER_CITY_LABEL,
   CAREER_MATCHES,
   COURT_NAMES,
   PLAYER_BADGE_COLOR,
@@ -44,18 +44,8 @@ export default function Career() {
   return (
     <DestinationScreen
       active="career"
-      bg={require("@/assets/images/bg_career_mumbai.webp")}
       testID="career-screen"
-      header={
-        <>
-          <View style={{ flex: 1 }}>
-            <Kicker style={styles.glow}>CAREER</Kicker>
-            <Text style={styles.title} numberOfLines={1} testID="career-stage">{stage}</Text>
-            <Text style={styles.city}>{CAREER_CITY_LABEL}</Text>
-          </View>
-          <HeaderActions save={save} onChange={refresh} />
-        </>
-      }
+      header={<HeaderActions save={save} onChange={refresh} />}
     >
       <Card style={styles.pad} testID="career-progress">
         <Kicker style={{ fontSize: 11 }}>TOURNAMENT PROGRESS</Kicker>
@@ -67,7 +57,7 @@ export default function Career() {
               <View key={g.key} style={[styles.group, { flex: g.nums.length }, gi > 0 && styles.groupDivider]}>
                 <View style={styles.groupHead}>
                   {locked ? <Ionicons name="lock-closed" size={11} color={UI.muted} /> : null}
-                  <Text style={[styles.groupName, activeGroup && { color: "#1E4D33", fontWeight: "800" }, locked && { color: UI.muted }]} numberOfLines={1} adjustsFontSizeToFit>
+                  <Text style={[styles.groupName, activeGroup && { color: "#1E4D33", fontWeight: "800" }, locked && { color: UI.muted }]} numberOfLines={1}>
                     {g.key === "district" ? "District Champ." : STAGE_NAMES[g.key].replace(" Series", "")}
                   </Text>
                 </View>
@@ -109,15 +99,15 @@ export default function Career() {
             </View>
           ) : null}
           <View style={{ flex: 1 }} />
-          <Text style={styles.nmStage} numberOfLines={1}>{stage}</Text>
+          <Text style={styles.nmStage} numberOfLines={1} testID="nm-stage">{stage}</Text>
         </View>
         <View style={styles.nmBody}>
           <View style={{ flex: 1 }}>
             <View style={styles.vsRow}>
               <View style={styles.side}>
                 <Badge name={identity?.playerName ?? "P"} color={PLAYER_BADGE_COLOR} size={50} />
-                <Text style={styles.sideName} numberOfLines={1}>{identity?.playerName ?? ""}</Text>
-                <Text style={styles.sideSub} numberOfLines={1}>Team {identity?.teamName ?? ""}</Text>
+                <Text style={styles.sideName} numberOfLines={2} testID="nm-player-name">{identity?.playerName ?? ""}</Text>
+                <Text style={styles.sideName} numberOfLines={2} testID="nm-team-name">Team {identity?.teamName ?? ""}</Text>
               </View>
               <Text style={styles.vs}>VS</Text>
               <View style={styles.side}>
@@ -167,7 +157,7 @@ export default function Career() {
       <Card style={styles.pad} testID="partner-block">
         <Kicker style={{ color: UI.ink }}>YOUR PARTNER</Kicker>
         <View style={styles.partnerRow}>
-          <Badge name={partner.name} color={partner.color} size={54} />
+          <Badge name={partner.name} color={partner.color} size={52} />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Text style={styles.partnerName}>{partner.name}</Text>
@@ -196,7 +186,8 @@ export default function Career() {
 // Thumbnail cropped from the match's OWN court image (its upper scenery band).
 const CROP = { x: 112, y: 0, w: 800, h: 560 };
 function CourtThumb({ court }: { court: keyof typeof COURT_IMG }) {
-  const W = 118;
+  const { width } = useWindowDimensions();
+  const W = width < 385 ? 96 : 118; // narrow phones: leave the names room
   const s = W / CROP.w;
   return (
     <View style={[styles.thumb, { width: W, height: CROP.h * s }]} testID="court-thumb">
@@ -206,9 +197,6 @@ function CourtThumb({ court }: { court: keyof typeof COURT_IMG }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 30, lineHeight: 38, marginTop: 4, textShadowColor: "rgba(255,255,255,0.7)", textShadowRadius: 8 },
-  city: { color: UI.ink, fontSize: 15, fontWeight: "600", textShadowColor: "rgba(255,255,255,0.8)", textShadowRadius: 6 },
-  glow: { textShadowColor: "rgba(255,255,255,0.95)", textShadowRadius: 6 },
   pad: { padding: 12 },
   groups: { flexDirection: "row", marginTop: 8 },
   group: { paddingHorizontal: 4 },
@@ -231,7 +219,7 @@ const styles = StyleSheet.create({
   nmBody: { flexDirection: "row", marginTop: 8 },
   vsRow: { flexDirection: "row", alignItems: "flex-start" },
   side: { flex: 1, alignItems: "center" },
-  sideName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 14, marginTop: 4, textAlign: "center" },
+  sideName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 15, marginTop: 4, textAlign: "center" },
   sideSub: { color: UI.inkSoft, fontSize: 12, textAlign: "center" },
   vs: { color: UI.inkSoft, fontFamily: SERIF, fontWeight: "700", fontSize: 16, marginTop: 16, marginHorizontal: 2 },
   rivalTag: { backgroundColor: "#7C8EA3", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginTop: 3 },
@@ -244,7 +232,7 @@ const styles = StyleSheet.create({
   courtName: { color: UI.inkSoft, fontSize: 11, marginTop: 3, fontWeight: "600" },
   arch: { color: UI.inkSoft, fontSize: 14 },
   partnerRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
-  partnerName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 22 },
+  partnerName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 20 },
   activeChip: { backgroundColor: UI.green, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   activeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
   viewBtn: { borderRadius: 10, backgroundColor: "#fff", borderWidth: 1, borderColor: UI.line, minHeight: 44, justifyContent: "center" },
