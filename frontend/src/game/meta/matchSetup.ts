@@ -63,8 +63,8 @@ export function parseDifficulty(d: string | undefined): Difficulty {
 }
 
 // Route params → setup. Partners come from the save (read once at match build).
-export function buildSetup(p: LaunchParams, seed: number, save: { activePartnerId: string; trainingPartnerId: string } | null): MatchSetup {
-  if (p.mode === "career") return careerSetup(careerMatch(p.careerId), save?.activePartnerId ?? STARTER_PARTNER_ID, seed);
+export function buildSetup(p: LaunchParams, seed: number, save: { activePartnerId: string; trainingPartnerId: string; partners?: Record<string, { signed: boolean }> } | null): MatchSetup {
+  if (p.mode === "career") return careerSetup(careerMatch(p.careerId), save?.activePartnerId ?? STARTER_PARTNER_ID, seed, (id) => !!save?.partners?.[id]?.signed);
   if (p.mode === "training" || p.mode === "scrimmage") return trainingSetup(p.mode, save?.trainingPartnerId ?? STARTER_PARTNER_ID, seed);
   const devCourt = __DEV__ && p.court === "mumbai_local" ? ("mumbai_local" as CourtId) : undefined;
   return quickPlaySetup(parseDifficulty(p.difficulty), p.singles === "1", save?.activePartnerId ?? STARTER_PARTNER_ID, seed, devCourt);
@@ -81,9 +81,15 @@ function nearTeam(partnerId: string) {
 }
 
 // Career: per-slot difficulty + existing personalities; the recruit's slot is
-// named after the recruit. One game to 11, win by 2.
-export function careerSetup(m: CareerMatchDef, partnerId: string, seed: number): MatchSetup {
-  const names = [0, 1].map((i) => (m.recruit?.slot === i ? PARTNERS[m.recruit.partnerId].name : `${m.rival} ${i + 1}`));
+// named after the recruit — unless that recruit is already signed (active or
+// benched), when the reserve plays the slot (same difficulty / personality),
+// so a signed partner never appears on both teams. One game to 11, win by 2.
+export function careerSetup(m: CareerMatchDef, partnerId: string, seed: number, signed: (id: string) => boolean = () => false): MatchSetup {
+  const names = [0, 1].map((i) => {
+    if (m.recruit?.slot !== i) return `${m.rival} ${i + 1}`;
+    const r = PARTNERS[m.recruit.partnerId];
+    return signed(r.id) ? r.reserveName ?? r.name : r.name;
+  });
   const config = buildMatchConfig({
     seed,
     format: "doubles",

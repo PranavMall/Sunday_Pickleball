@@ -83,9 +83,13 @@ export default function Team() {
                 testID="sign-dialog-yes"
                 style={styles.dBtn}
                 onPress={() => {
-                  // Session C wires the spend + signing; here the flow only advances.
-                  if (signing.step === 1) setSigning({ id: signing.id, step: 2 });
-                  else {
+                  // Step 1: the one serialized signing transaction (spends once).
+                  // Step 2: offer to make the new partner active.
+                  if (signing.step === 1) {
+                    const signed = meta.signPartner(signing.id, Date.now());
+                    refresh();
+                    setSigning(signed ? { id: signing.id, step: 2 } : null);
+                  } else {
                     if (meta.setActivePartner(signing.id)) refresh();
                     setSigning(null);
                   }

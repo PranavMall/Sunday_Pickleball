@@ -97,13 +97,60 @@ async function commit4() {
   ok(c.doc.partners.anli.growth === 100 && c.doc.chemistryHalves["player+anli"] === 101 && c.chemistry("anli") === 50, "growth stops at 100; chemistry +1 halved to +0.5 above 50, shown rounded down");
 }
 
+async function commit5() {
+  const { s } = await fresh();
+  // Upsi not signable before Match 3.
+  for (let n = 1; n <= 2; n++) career(s, n, true);
+  (s.doc as any).coins = 5000;
+  ok(!s.signPartner("upsi", T0) && !s.doc.partners.upsi.signed, "Upsi not signable before winning Match 3");
+  (s.doc as any).coins = 500;
+  career(s, 3, true); // 500 + 275 = 775
+  ok(s.doc.coins === 775, "775 before signing");
+  ok(s.signPartner("upsi", T0) && s.doc.coins === 25 && s.doc.partners.upsi.signed, "sign Upsi: 775 → 25");
+  ok(!s.signPartner("upsi", T0) && s.doc.coins === 25 && s.doc.ledger.filter((e) => e.rewardId === "sign:upsi").length === 1, "750 spent exactly once");
+  ok(s.doc.activePartnerId === "anli", "signing does not change the active partner by itself");
+  ok(!s.signPartner("matz", T0), "Matz not signable in 1A");
+  {
+    const { s: poor } = await fresh();
+    for (let n = 1; n <= 3; n++) career(poor, n, true);
+    (poor.doc as any).coins = 749;
+    ok(!poor.signPartner("upsi", T0) && poor.doc.coins === 749 && !poor.doc.partners.upsi.signed, "short of 750 → no change");
+  }
+
+  // Substitution with Upsi benched, then active.
+  const far = (p: object) => buildSetup({ mode: "career", careerId: CAREER_MATCH_IDS[1], ...p }, 1, s.doc).config.far.players;
+  ok(far({})[0].name === "Kiran" && far({})[0].personality === "KITCHEN" && far({})[0].profileId === "ROOKIE", "Upsi benched: Kiran plays her slot (same level / personality)");
+  ok(s.setActivePartner("upsi") && s.doc.activePartnerId === "upsi", "SET ACTIVE → Upsi");
+  const cfg2 = buildSetup({ mode: "career", careerId: CAREER_MATCH_IDS[1] }, 1, s.doc).config;
+  ok(cfg2.far.players[0].name === "Kiran" && cfg2.near.players[1].name === "Upsi" && cfg2.near.players[1].personality === "KITCHEN", "Upsi active: on my side, Kiran on theirs");
+  ok(!s.setActivePartner("upsi") && s.setActivePartner("anli") && s.doc.activePartnerId === "anli", "exactly one active partner");
+  {
+    const { s: f } = await fresh();
+    ok(buildSetup({ mode: "career", careerId: CAREER_MATCH_IDS[1] }, 1, f.doc).config.far.players[0].name === "Upsi", "unsigned: Upsi plays her own slot");
+  }
+
+  // Training / Scrimmage with Upsi while Anli stays active.
+  ok(s.setTrainingPartner("upsi") && s.doc.activePartnerId === "anli", "training partner Upsi, Anli still active");
+  const tr = (kind: "training" | "scrimmage", at = T0) => s.completeMatch({ matchId: `${kind}${++seq}`, kind, won: seq % 2 === 0, partnerId: s.doc.trainingPartnerId }, at);
+  const c0 = s.doc.coins, f0 = s.doc.fans, ag = s.doc.partners.anli.growth;
+  eq(tr("training").lines, ["Upsi +20 Growth · +2 Chemistry"], "Training grants +20 / +2 to the training partner");
+  ok(s.doc.partners.upsi.growth === 20 && s.chemistry("upsi") === 2, "Upsi 20 / 2");
+  eq(tr("scrimmage").lines, ["Upsi +10 Growth · +1 Chemistry"], "Scrimmage +10 / +1");
+  tr("training");
+  eq(s.dailyUsage(T0), { training: 2, scrimmage: 1 }, "counts used");
+  const capped = tr("training");
+  ok(capped.capped === true && capped.lines.join() === "Progress used today — play for fun" && s.doc.partners.upsi.growth === 50, "after cap: plays, grants nothing");
+  tr("scrimmage");
+  tr("scrimmage");
+  ok(tr("scrimmage").capped === true && s.doc.partners.upsi.growth === 70, "scrimmage cap 3");
+  ok(s.doc.coins === c0 && s.doc.fans === f0 && s.doc.partners.anli.growth === ag, "Training/Scrimmage never pay Coins / Fans, active partner untouched");
+  ok(tr("training", T0 - 2 * DAY).capped === true, "clock moved back: cap still holds");
+  ok(!tr("training", T0 + DAY).capped && s.doc.daily.training === 1, "next local day: fresh cap");
+}
+
 (async () => {
   await commit4();
-  if (typeof commit5 === "function") await commit5();
+  await commit5();
   console.log(`=== PHASE 1C RESULT: ${pass} passed, ${fail} failed ===`);
   if (fail) process.exitCode = 1;
 })();
-
-// eslint-disable-next-line no-var
-var commit5: undefined | (() => Promise<void>);
-void DAY;

@@ -17,6 +17,8 @@ import {
   GROWTH_MAX,
   PARTNERS,
   QUICK_PLAY_REWARDS,
+  SIGN_COST,
+  TRAINING_MODES,
   careerMatch,
   milestoneFor,
   type PartnerId,
@@ -431,12 +433,18 @@ export class MetaStore {
       const pr = m.won ? R.partnerWin : R.partnerLoss;
       partnerLine(m.partnerId ?? d.activePartnerId, pr.growth, pr.chemistry);
       analytics.track("career_match_completed", { matchId: m.matchId, careerMatchId: id, won: m.won, replay: !firstAttempt });
-    } else if (m.kind === "training") {
-      d.daily.training++;
-      analytics.track("training_completed", { matchId: m.matchId, won: m.won });
-    } else if (m.kind === "scrimmage") {
-      d.daily.scrimmage++;
-      analytics.track("scrimmage_completed", { matchId: m.matchId, won: m.won });
+    } else if (m.kind === "training" || m.kind === "scrimmage") {
+      // Daily cap by local day key (rollDay above never moves backwards).
+      // After the cap the match still counts and grants nothing. Never Coins/Fans.
+      const t = TRAINING_MODES[m.kind];
+      const used = d.daily[m.kind];
+      d.daily[m.kind] = used + 1;
+      if (used < t.dailyCap) partnerLine(m.partnerId ?? d.trainingPartnerId, t.growth, t.chemistry);
+      else {
+        out.capped = true;
+        out.lines.push("Progress used today — play for fun");
+      }
+      analytics.track(m.kind === "training" ? "training_completed" : "scrimmage_completed", { matchId: m.matchId, won: m.won, capped: !!out.capped });
     } else {
       coinsLine("coins", m.won ? QUICK_PLAY_REWARDS.winCoins : QUICK_PLAY_REWARDS.lossCoins);
       analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won });
@@ -446,13 +454,20 @@ export class MetaStore {
   }
 
   // ---- Partners / flags (each saves once) --------------------------------
+  // SIGN: one serialized transaction — check Coins ≥ cost → subtract once
+  // (stable spend id, so never twice) → mark signed → save → emit.
   signPartner(partnerId: string, now: number): boolean {
-    const p = this.docState!.partners[partnerId];
-    if (!p || !p.signable || p.signed) return false;
+    const d = this.docState!;
+    const p = d.partners[partnerId];
+    const cost = SIGN_COST[partnerId as PartnerId];
+    if (!p || !p.signable || p.signed || cost === undefined || d.coins < cost) return false;
+    const r = this.applyLedger(`sign:${partnerId}`, "coins", -cost, { sourceType: "sign", sourceId: partnerId }, now);
+    if (!r.ok || !r.applied) return false;
     p.signed = true;
     p.discovered = true;
-    analytics.track("partner_signed", { partner: partnerId, t: now });
+    d.chemistryHalves[pairingKey(partnerId)] ??= 0;
     this.save();
+    analytics.track("partner_signed", { partner: partnerId, cost, t: now });
     return true;
   }
 

@@ -1,4 +1,4 @@
-// TEAM roster rules (display only; the Sign spend is wired in Session C).
+// TEAM roster rules (display; signing goes through MetaStore.signPartner).
 import { PARTNER_IDS, SIGN_COST, type PartnerId } from "./economyConfig";
 import type { SaveDoc } from "./metaStore";
 
