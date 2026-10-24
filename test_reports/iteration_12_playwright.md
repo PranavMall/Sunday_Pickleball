@@ -1,6 +1,6 @@
 # iteration_12 — Phase 1A Session B Commit 3 (3a/3b/3c) Playwright verification
 
-Public URL: https://pickleball-phase-1a.preview.emergentagent.com
+Public URL: https://pickle-career.preview.emergentagent.com
 
 ## Executed flows (390x844 unless noted)
 1. Fresh save: `localStorage.clear()` → identity-prompt visible → identity-skip-button

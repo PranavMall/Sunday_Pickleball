@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only test of Phase 1A Session C (Commits 4-5), run on the Expo web preview at 375x667 and 390x844 (public URL). Every requested flow passed. Fresh install: Home shows only Coins 300 / Fans 0, there is no Form anywhere and the Stats overlay has no Form cell. Career fresh state: Match 1, +100, PLAY MATCH, nodes 2-10 disabled. Team signing: Anli 24/100 Growth and 3/100 Chem, Upsi 'SIGN 750 COINS'; Sign takes coins 775 to 25 with a single ledger entry; the dialog then asks 'Make Upsi your active partner?' and Yes makes Upsi ACTIVE; SET ACTIVE switches back; coins are still 25 after reload. Replay on node-1: REPLAY / REPLAY MATCH / +40 / +0 Fans; node-4 goes back to NEXT MATCH Match 4 on Mumbai Local, and the match really loads the Mumbai Local court. Seeded cleared 1-5: Match 6 FINAL shows COMING SOON (play-match-locked) and no play-match. Training: '2 of 2' and '3 of 3'; picker lists Anli and Upsi; picking Upsi changes the training partner and persists, while the Career partner block stays on Anli. Capped daily state shows 'Progress used today — play for fun' on both cards and START still opens /match?mode=training. Pause, Resume and Quit to Menu work for Career, Quick Play CLUB doubles and Training, and quitting grants nothing (coins, ledger, rewardIds and daily unchanged). Four matches were played to the end with real mouse swipes: (1) Quick Play ROOKIE singles DEFEAT 0-11 gives +20 Coins, a next-goal line, REMATCH/HOME/Share, all inside 375x667 (lowest button bottom at 492px), and coins 300 to 320 in pb.meta. (2) Training DEFEAT 1-7 at 390x844 gives 'Anli +20 Growth · +2 Chemistry', PLAY AGAIN/BACK/Share, no Coins, and 'training-left' drops to '1 of 2'. (3) Career Match 1 DEFEAT 7-11 gives +35 Coins and 'Anli +5 Growth · +1 Chemistry', next-goal, TRY AGAIN/Career/Share; firstClearLosses becomes 1, nextMatchId stays on Match 1 and Home switches to CONTINUE CAREER. Extra checks: discovered-but-not-signable Upsi shows 'UNLOCKS AFTER COMMUNITY CUP FINAL' (no dialog); coins 500 shows 'NEED 250 MORE COINS' (no dialog); Matz shows COMING SOON; Cancel spends nothing; a past dayKey resets the counters and a future dayKey keeps them; a corrupt pb.meta falls back to a fresh save without crashing; VIEW IN TEAM goes to /team?highlight=upsi. No page errors in any run. Not verified: a WIN result overlay, i.e. the VICTORY path and the Career NEXT MATCH button (the automation cannot win a match). Win reward math is covered by the headless phase1c tests. No deprecated Expo packages (expo-av, expo-barcode-scanner, expo-background-fetch) and no SafeAreaView imported from react-native.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Sign dialog two-step", "issue": "Step 2 'Yes' sits exactly where step 1 'Sign' was, so a double-tap on Sign both signs Upsi (correctly spends once) and accepts 'Make Upsi your active partner?' by accident. Observed: after a dblclick, activePartnerId was 'upsi' and the dialog was closed. Consider a short input lock or moving the buttons between steps. Reference: app/team.tsx:82-99", "testID": "sign-dialog-yes", "priority": "low"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Result overlay", "issues": ["The DEFEAT kicker is gold/orange on cream, which is low contrast (about 2:1).", "The final score stays green on DEFEAT.", "The secondary button label is mixed case 'Career' while the other modes use 'HOME'/'BACK' (match.tsx:646).", "At 375 the team line 'Team Kitchen Kings vs Bandra Gully Smash…' is truncated."]},
+      {"screen": "Career next-match card (375 wide)", "issues": ["The reward sub-label 'Coins (Win + Rival + Milesto…' is truncated on Match 6.", "The full reward preview is shown even though the match is COMING SOON, which may mislead."]},
+      {"screen": "Team", "issues": ["The locked pills 'NEED 250 MORE COINS' and 'UNLOCKS AFTER COMMUNITY CUP FINAL' use 10px muted text on creamDeep: very small and low contrast."]},
+      {"screen": "Match (web dev)", "issues": ["The __DEV__ 'DEV' toggle shows on the match screen in the preview. It is __DEV__-gated, so it is expected not to appear in release builds."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_13.json"],
+  "action_items": [
+    "(Low) Guard the two-step sign dialog against a double-tap auto-confirming 'set active' (team.tsx:82-99).",
+    "(Low) Result overlay polish: raise the contrast of the DEFEAT colour, use a neutral score colour on a loss, make the 'Career' secondary label uppercase to match the other modes.",
+    "(Low) Increase the font size and contrast of the Team locked/need pills; fix the truncated reward sub-label on the Career card at 375 width.",
+    "(Design question) Each loss on an uncleared Career match pays +35 Coins every time (metaStore.ts firstAttempt branch). Repeated losses therefore pay more than a Quick Play loss (+20) and close to a Quick Play win (+40). Confirm this is intended."
+  ],
+  "critical_code_review_comments": [
+    "metaStore.load replaces a corrupt pb.meta with a fresh save and writes it immediately, with no backup of the corrupt blob. Acceptable, but progress cannot be recovered.",
+    "completeMatch is idempotent per matchId and Rematch/Try Again builds a new matchId, so rewards are granted once per completed match. Quit grants nothing (verified).",
+    "No deprecated Expo packages and no react-native SafeAreaView imports found."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100% of requested flows (the VICTORY overlay was not reachable via automation)"},
+  "seed_data_creation": "Seeded only through localStorage pb.meta in throwaway Playwright browser contexts; nothing persistent.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Each browser_automation call is a NEW browser context with empty localStorage. Seed by waiting for pb.meta to exist, parsing it, mutating it, calling setItem, then reload. Matches can be finished on web by doing a mouse swipe up (from about y=560 to y=360 at 375 wide) whenever the match-screen text contains 'swipe up to serve', then idling. The player loses: Quick Play singles to 11 in about 60s, Training to 7 in about 45s, Career doubles in about 150s. New testIDs seen: try-again-button, play-again-button, next-match-button, back-career-button, reward-line-N, event-line-N, next-goal, result-title, final-score, play-match-locked, status-upsi, status-matz, sign-dialog, sign-dialog-text, sign-dialog-yes, sign-dialog-no, pick-upsi, roster-upsi.",
+  "rca_of_issue": ""
+}

@@ -1,31 +1,28 @@
 <analysis>**original_problem_statement**: 
-Milestone 2 Phase 1A, Session A: Foundations (Commits 0–2). Build the smallest working version of the real product. 
-1. **Commit 0**: Rename app from Picklewood to Pickle-Ballers and add a visual fault label UI above the tactical row on point end.
-2. **Commit 1**: Add a two-phase human smash cue (HIGH BALL — GET READY -> SMASH) and latch firm human swipes so they don't expire before contact.
-3. **Commit 2**: Build the Meta foundation (MetaStore, single-document JSON ledger, economyConfig) and fix the  scoring game-over check.
-**PRODUCT REQUIREMENTS**: No new runtime dependencies. No new per-frame allocations during a rally. Strict simulation determinism: output of  and  MUST remain byte-identical (gameplay/AI is strictly frozen). **CRITICAL**: The agent must STOP after Commit 2 so the user can test smash timing and fault labels natively on their phone.
+Pickle-Ballers — Phase 1A, Session B (App shell: Commits 3a, 3b, 3c) and Session B Polish (Commit 3d). Build navigation, screens (Home, Career, Team, Training, Quick Play), integration of assets, per-court logic, and an integrated painted scoreboard. Followed by UI polish (font scaling disabled globally, layout fixes, seamless destination backdrop). 
+**PRODUCT REQUIREMENTS**: Strictly maintain byte-identical deterministic gameplay (, ), no new per-frame allocations, no new dependencies. Keep the existing navigation Stack. Agent must STOP after Commit 3d so the user can natively test the layout on their phone.
 
-**User's preferred language**: English (INSTRUCT next agent to respond in English only)
+**User's preferred language**: English (You MUST automatically detect the user's primary language from their messages inside the <trajectory> tag and INSTRUCT next agent to respond in the user's preferred language only. In this case, English).
 
 **what currently exists?** 
-A React Native Skia pickleball simulation renamed to Pickle-Ballers. Phase 1A Session A is fully implemented. The determinism tests ( and ) are successfully locked and verified byte-identical. The game features a new  built in  handles idempotent progression state via a single JSON document in . A new two-phase human smash cue and latched swipe mechanic are integrated without altering AI behavior.
+A React Native Skia pickleball simulation with a robust offline MetaStore. Phase 1A Session A and Session B (including 3d UI polish) are fully implemented. Screens for Home, Quick Play, Career, Team, and Training exist with a shared smooth background transitioning system (). UI text is globally protected against device font scaling using a custom  component. The deterministic engine is strictly preserved and verified byte-identical.
 
 **Last working item**:
-- Last item agent was working: Phase 1A Session A (Commits 0, 1, and 2): App rename, fault label, human smash cue/latch, MetaStore/Ledger foundation, and scoring fix.
-- Status: USER VERIFICATION PENDING
+- Last item agent was working: Phase 1A, Commit 3d (UI polish after phone check). Created a custom  component to ignore system scaling globally, removed screen titles, adjusted text shrinking (), applied semi-transparent card backgrounds, implemented a persistent  for smooth navigation, and added a custom pickleball icon for the Training tab.
+- Status: USER VERIFICATION PENDING (User requested to STOP to check screens natively on their phone before moving to Session C).
 - Agent Testing Done: Y
-- Which testing method agent to use?: NA (Testing agent used, ran 263/263 deterministic tests, 110 phase 1A tests, and verified byte-identical b3Report/shotMix).
-- User Testing Done: N (User explicitly requested to STOP after Commit 2 to check smash timing and fault labels on their phone).
+- Which testing method agent to use?: NA (Testing agent used in Session B; automated tests passed for 3d).
+- User Testing Done: N
 
 **All Pending/In progress Issue list**: 
-None currently active. Awaiting user's approval on the phone test.
+None currently active. Awaiting user's approval on the layout phone test.
 
 **In progress Task List**: 
 None currently active.
 
 **Upcoming and Future Tasks**:
 Upcoming Tasks:
-- **Phase 1A Session B & C** (P1): Career, Team, Training work, screens, and full meta-UI integration. *(CRITICAL: DO NOT START until user explicitly approves Session A).*
+- **Phase 1A Session C** (P1): Career progression, rewards, Team signing, and Training progression (wiring up the actual state logic for buttons created in Session B). *(CRITICAL: DO NOT START until user explicitly approves Session B).*
 - **Milestone 2 - It feels great (Part C)** (P1): Singles menu/UI, new AI profiles, asset step.
 - **Milestone 3 - Ready for beta** (P2): Onboarding, How to Play screens, Settings, Privacy policy, Sentry/Analytics integration.
 
@@ -33,14 +30,14 @@ Future Tasks:
 - Online multiplayer architecture, cosmetic store.
 
 **Completed work in this session**:
-- Commit 0 (Rename & Fault Label): Changed all player-facing Picklewood text to Pickle-Ballers. Added  UI pill display during the  transition (, ). (DONE)
-- Commit 1 (Smash Cue + Latch): Added HIGH BALL — GET READY and SMASH cues for human players. Latched firm swipes during the cue to persist until contact/bounce (, ). Fixed an intermediate regression to guarantee strict byte-identical simulation output. (DONE)
-- Commit 2 (Meta Foundation & Scoring): Fixed first-to-7 scoring resolution in . Created , , and  in  for single JSON document idempotent save state. Implemented 100% engine chemistry isolation (). (DONE)
-- Performance / Test Scripts: Added , , , and  to enforce rule limits. (DONE)
+- Phase 1A Commit 3a: Shared UI bar, Home, Quick Play, Skip identity random generation (DONE).
+- Phase 1A Commit 3b: Career, Team, Training UI, and Inbox/Stats overlays (DONE).
+- Phase 1A Commit 3c: Per-court rendering and integrated painted scoreboard (DONE).
+- Phase 1A Commit 3d: UI polish, shared  wrapper (), persistent , custom training icon, layout sizing cleanups (DONE).
 
 **Earlier issues found/mentioned but not fixed**:
-- Singles performance is marginally slower than doubles gameplay on device due to increased court coverage and pacing differences. (Deferring to Milestone 2 Part C asset/performance step).
-- Non-blocking technical debt from React Native Skia: Deprecation warnings for SkPath mutators (migrate to ),  prop (move to ), and  (move to ). (Deferring to UI/Asset phases).
+- Singles performance is marginally slower than doubles gameplay on device due to increased court coverage and pacing differences (Deferring to Milestone 2 Part C asset/performance step).
+- Non-blocking technical debt from React Native Skia: Deprecation warnings for SkPath mutators,  prop, and  (Deferring to UI/Asset phases).
 
 **Known issue recurrence from previous fork**:
 - Issue recurrence in previous fork: NA
@@ -51,49 +48,46 @@ Future Tasks:
 
 
 **Key Technical Concepts**:
-React Native Skia, Deterministic Fixed-Timestep Simulation, Seeded RNG, Swipe Gesture Latching, Single-Document JSON MetaStore, Idempotent Economy Ledger, Zero-allocation gameplay loop optimization.
+React Native Skia, Deterministic Fixed-Timestep Simulation, Single-Document JSON MetaStore (), Custom text wrapper (), Persistent shared background layer behind Stack, Seeded RNG.
 
 **key DB schema**:
-- Local  / . Single JSON document () containing schemaVersion, guestId, currencies (Coins, Gems, Fans), Career cleared IDs, Inbox read IDs, etc.
+- Local  / . Single JSON document () containing schemaVersion, guestId, currencies, Inbox, Career progression, etc.
 
 **changes in tech stack**:
 - NA
 
 **All files of reference**:
-- , : Handled smash cue predictions and latched human swipes.
-- : Updated  for custom  logic.
-- , : Replaced name references and implemented the fault label overlay.
-- : The new progression and economy ledger architecture.
-- : The comprehensive deterministic test suite. Must always be run to check for regressions.
+- : Global Text wrapper ensuring  and .
+- : Persistent cross-fading background behind the Stack to prevent screen transition popping.
+- : The core navigational screens.
+- : Setup and bounding logic for different court images.
+- : The deterministic test suite. Must always be run to check for regressions ( and ).
 
 **Areas that need refactoring**:
 - Singles mode simulation loop and RN web/Skia deprecations (Deferred).
 
 **key api endpoints**:
-- NA (Fully offline and offline-first).
+- NA (Fully offline).
 
 **Critical Info for New Agent**:
-- **STOP RULE ACTIVE / USER TEST PENDING**: The user explicitly requested to stop after Commit 2 to verify smash timing and fault labels natively on their phone. **DO NOT start Session B (Career/Team screens) until the user gives explicit approval.**
-- **Strict Determinism**: Any changes to  must not alter existing physics or AI logic. The output of , , and  must remain exactly byte-identical to prior baselines. The previous agent successfully caught and resolved a test regression during Commit 1 to maintain this parity. Proceed with extreme caution if touching  files.
+- **STOP RULE ACTIVE / USER TEST PENDING**: The user explicitly requested to stop after Commit 3d to verify UI scaling and layout natively on their phone. **DO NOT start Session C (Progression Wiring) until the user gives explicit approval.**
+- **Strict Determinism**: Any changes to the simulation must not alter existing physics or AI logic. The output of , , and  MUST remain exactly byte-identical to prior baselines. Ensure you execute these tests after any file modifications.
+- **UI Consistency**: When adding new text elements in the future, ALWAYS import and use the custom  component from  rather than the default  one, ensuring device font scaling does not break layouts. 
 
 **documents and test reports created in this job**:
 - 
+- 
 
 **Last 10 User Messages and any pending HUMAN messages**:
-- *User*: Provided explicit instructions for Phase 1A Session A (Commits 0-2). Mandated strict byte-identical gameplay regression testing, no new runtime dependencies, and a forced STOP after Commit 2 for a phone check.
-- *User*: System reminder to run .
-- *Assistant*: Analyzed baseline test values. Implemented Commit 0 (Rename and fault labels). Tests passed.
-- *Assistant*: Implemented Commit 1 (Smash cue + latch). Detected a regression in  determinism tests.
-- *Assistant*: Fixed Commit 1 logic to strictly isolate human smash processing so AI evaluations remain untainted. Verified byte-identical output restored.
-- *Assistant*: Implemented Commit 2 (MetaStore, Ledger, Economy Config, scoring fix). Tested fully.
-- *Assistant*: Validated headless suites (263/263 total passing, 110 Phase 1A passing) and ran stepBench for performance metrics.
-- *Assistant*: Took UI smoke screenshot and invoked .
-- *Assistant*: Received PASS from . Finished execution.
-*(Pending Human message: Awaiting user to test Session A natively on their phone and provide the prompt to proceed to Session B).*
+- *User*: Provided 5 mock screens and detailed instructions for Phase 1A Session B (Commits 3a, 3b, 3c) and asked for visual matching.
+- *Assistant*: Implemented 3a, 3b, 3c (App shell, navigation, scoreboard), ran determinism tests (all passed), ran testing_agent, committed changes.
+- *User*: Directed the agent to do UI Polish in Commit 3d after testing on their phone: disable system font scaling, remove large headers, shrink text to fit, fix backdrop popping, and update icons. Asked to STOP after 3d.
+- *Assistant*: Implemented Commit 3d. Created custom  wrapper, implemented  on root layout, adjusted CSS rules, fixed clipping names, ran tests (byte-identical), provided screenshots, and finished.
+*(Pending Human message: Awaiting user to check the polished Session B screens natively on their phone and provide the prompt to proceed to Session C).*
 
 **Project Health Check**:
 - Broken: None. 
-- Mocked: Career, Training, Passport, Trophy Room buttons are visually disabled Coming Soon elements (Pending Session B & C implementation).
+- Mocked: None (Career, Team, and Training progression buttons are visually set up to navigate, but the actual economy spending/saving states will be built in Session C).
 
 **3rd Party Integrations**:
 - None requiring external keys.
@@ -101,8 +95,8 @@ React Native Skia, Deterministic Fixed-Timestep Simulation, Seeded RNG, Swipe Ge
 **Testing status**:
 - Testing agent used after significant changes: YES
 - Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: , , 
-- Known regressions: None (Agent caught and fixed a simulation regression during Commit 1).
+- Test files created: 
+- Known regressions: None.
 
 **Credentials to test flow**:
 - NA
