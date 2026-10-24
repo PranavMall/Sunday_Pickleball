@@ -604,11 +604,11 @@ export default function Match() {
       {gameOver && (
         <View style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} testID="result-overlay">
           <View style={styles.modal}>
-            <Text style={styles.resultKicker} testID="result-title">{nearWon ? "VICTORY" : "DEFEAT"}</Text>
-            <Text style={styles.finalScore} testID="final-score">
+            <Text style={[styles.resultKicker, !nearWon && styles.defeatKicker]} testID="result-title">{nearWon ? "VICTORY" : "DEFEAT"}</Text>
+            <Text style={[styles.finalScore, !nearWon && { color: "#1F2A22" }]} testID="final-score">
               {sim.score.nearScore} – {sim.score.farScore}
             </Text>
-            <Text style={styles.teamName} numberOfLines={1} testID="result-team-name">
+            <Text style={styles.teamName} numberOfLines={2} testID="result-team-name">
               Team {identity?.teamName ?? ""} vs {match.setup.rivalName}
             </Text>
             <View style={styles.rewardBox} testID="result-rewards">
@@ -643,7 +643,7 @@ export default function Match() {
                   : mode === "quick"
                     ? { label: "REMATCH", id: "rematch-button", fn: rematch }
                     : { label: "PLAY AGAIN", id: "play-again-button", fn: rematch };
-              const secondary = mode === "career" ? "Career" : mode === "quick" ? "HOME" : "BACK";
+              const secondary = mode === "career" ? "CAREER" : mode === "quick" ? "HOME" : "BACK";
               return (
                 <>
                   <Pressable testID={primary.id} style={[styles.primaryBtn, !outcome && { opacity: 0.6 }]} disabled={!outcome} onPress={primary.fn}>
@@ -723,8 +723,9 @@ const useStyles = makeStyles((c) => ({
   pauseModal: { backgroundColor: c.surface, borderRadius: 24, paddingVertical: 20, paddingHorizontal: 20, width: "100%", maxWidth: 360, alignItems: "center", gap: 10 },
   pauseSecondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, width: "100%", alignItems: "center", borderWidth: 1, borderColor: c.border },
   resultKicker: { color: c.accentGold, fontSize: 24, fontWeight: "900", letterSpacing: 3 },
+  defeatKicker: { color: "#8A3A2E" },
   modalTitle: { color: c.onSurface, fontSize: 24, fontWeight: "800", marginTop: 4 },
-  teamName: { color: c.muted, fontSize: 13, fontWeight: "700", marginTop: 2, maxWidth: "100%" },
+  teamName: { color: c.muted, fontSize: 13, fontWeight: "700", marginTop: 2, maxWidth: "100%", textAlign: "center" },
   finalScore: { color: c.brandPrimary, fontSize: 24, fontWeight: "900", marginTop: 2, fontVariant: ["tabular-nums"] },
   rewardBox: { alignSelf: "stretch", backgroundColor: c.surfaceSecondary, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, marginTop: 10, gap: 3, minHeight: 48, justifyContent: "center", borderWidth: 1, borderColor: c.border },
   rewardLine: { color: c.onSurface, fontSize: 15, fontWeight: "800", textAlign: "center" },

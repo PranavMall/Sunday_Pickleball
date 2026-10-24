@@ -1,6 +1,6 @@
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "@/src/ui/Text";
 
@@ -16,6 +16,8 @@ export default function Team() {
   const { highlight } = useLocalSearchParams<{ highlight?: string }>();
   const { save, refresh } = useSave();
   const [signing, setSigning] = useState<null | { id: PartnerId; step: 1 | 2 }>(null);
+  // A quick double-tap on Sign must not also answer the make-active question.
+  const stepAt = useRef(0);
   const ids = save ? discoveredPartners(save) : [];
 
   const onStatus = (id: PartnerId, st: RosterStatus) => {
@@ -83,6 +85,8 @@ export default function Team() {
                 testID="sign-dialog-yes"
                 style={styles.dBtn}
                 onPress={() => {
+                  if (Date.now() - stepAt.current < 500) return;
+                  stepAt.current = Date.now();
                   // Step 1: the one serialized signing transaction (spends once).
                   // Step 2: offer to make the new partner active.
                   if (signing.step === 1) {
@@ -160,7 +164,7 @@ const styles = StyleSheet.create({
   pillGoldSmall: { color: UI.goldInk, fontSize: 11, fontWeight: "900" },
   pillGoldText: { color: UI.goldInk, fontSize: 14, fontWeight: "900" },
   pillLocked: { backgroundColor: UI.creamDeep, flexDirection: "row", gap: 4, borderWidth: 1, borderColor: UI.line },
-  pillLockedText: { color: UI.muted, fontSize: 10, fontWeight: "800", textAlign: "center", flexShrink: 1 },
+  pillLockedText: { color: UI.inkSoft, fontSize: 11, fontWeight: "800", textAlign: "center", flexShrink: 1 },
   dialogText: { color: UI.ink, fontSize: 18, fontFamily: SERIF, marginVertical: 10 },
   dialogRow: { flexDirection: "row", gap: 10, marginTop: 8 },
   dBtn: { flex: 1, minHeight: 48, borderRadius: 12, backgroundColor: UI.gold, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: UI.goldDeep },

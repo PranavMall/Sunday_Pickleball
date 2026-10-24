@@ -132,6 +132,7 @@ export default function Career() {
                 ) : null}
               </View>
             </View>
+            {next.enabled ? (
             <View style={styles.rewards} testID="reward-preview">
               <View style={styles.reward}>
                 <Coin size={26} />
@@ -148,6 +149,7 @@ export default function Career() {
                 </View>
               </View>
             </View>
+            ) : null}
           </View>
           {next.court ? (
             <View style={{ marginLeft: 8, alignItems: "center" }}>

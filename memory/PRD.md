@@ -120,3 +120,9 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - src/ui/DestinationBackdrop.tsx in root layout behind Stack (NAV_THEME transparent background); destinations draw no bg; 150ms content FadeIn; Image.prefetch both bgs.
 - PickleballIcon (Views) in DestinationBar for Training.
 - STOP: Session C not started.
+
+## Phase 1A Session C (2026-06) — Commits 4–5 DONE, awaiting Pranav's full phone test
+- Commit 4 (f835d5f): MetaStore.completeMatch computes all rewards from economyConfig (Career first-clear win 100C/20F, loss 35C; rival first defeat 100C/25F; Milestones I/II/III 75/150/250 at 3/6/10 first-clear wins; replay 40/14C; partner +8/+5 Growth +1 Chem, chem halved at 50+, growth cap 100; Quick Play 40/20C). Discovery: Upsi met (M2), signable (M3), Matz discovered (M5). New result screen (grant lines, events, next goal, mode buttons). Career replays via the progress strip; Match 6 COMING SOON. Form removed from Home/Stats (fields stay in save, unused). DestinationBackdrop renders nothing on /match.
+- Commit 5 (9498bc8 + polish): signPartner = one transaction (spend id sign:upsi), make-active prompt; replay substitution (Upsi→Kiran, Matz→Vikram when signed); Training +20/+2, Scrimmage +10/+1 to training partner, caps 2/3 per local day, after-cap grants nothing; PLAY AGAIN/BACK.
+- Tests: phase1c.ts 53/53; run.ts 263/263; b3Report/shotMix byte-identical to fbb61cc; step 2.16 µs (was 2.15–2.16).
+- NEXT: STOP. Do not start First Session tutorial / presentation layer until Pranav approves.
