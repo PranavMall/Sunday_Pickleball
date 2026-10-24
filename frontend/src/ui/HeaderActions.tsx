@@ -12,7 +12,6 @@ import { partnerOf } from "@/src/game/meta/matchSetup";
 import type { SaveDoc } from "@/src/game/meta/metaStore";
 import { getMatchResults, type MatchResultRecord } from "@/src/game/services/matchLog";
 import { Badge, Card, IconSquare, MeterRow, SERIF, UI } from "./kit";
-import { formLabel } from "./useSave";
 
 export function HeaderActions({ save, onChange }: { save: SaveDoc | null; onChange?: () => void }) {
   const [open, setOpen] = useState<null | "inbox" | "stats">(null);
@@ -72,7 +71,6 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
         <Stat label="Win rate" value={`${rate}%`} testID="stat-rate" />
         <Stat label="Longest rally" value={String(longest)} testID="stat-rally" />
         <Stat label="Fans" value={String(save?.fans ?? 0)} testID="stat-fans" />
-        <Stat label="Form" value={formLabel(save?.form)} testID="stat-form" />
       </View>
       <View style={styles.partner}>
         <Badge name={partner.name} color={partner.color} size={40} />

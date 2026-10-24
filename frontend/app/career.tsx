@@ -1,7 +1,7 @@
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Text } from "@/src/ui/Text";
 
@@ -33,10 +33,14 @@ const GROUPS: { key: CareerMatchDef["stageKey"]; nums: number[] }[] = [
 export default function Career() {
   const router = useRouter();
   const { save, identity, refresh } = useSave();
-  const next = careerMatch(save?.career.nextMatchId);
+  const nextOpen = careerMatch(save?.career.nextMatchId);
   const cleared = save?.career.cleared ?? [];
+  // The card shows the next open match, or a cleared match picked for replay.
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const next = pickedId && cleared.includes(pickedId) ? careerMatch(pickedId) : nextOpen;
+  const replay = cleared.includes(next.id);
   const stage = STAGE_NAMES[next.stageKey];
-  const reward = careerRewardPreview(next);
+  const reward = careerRewardPreview(next, replay);
   const partner = partnerOf(save?.activePartnerId);
   const growth = save?.partners[partner.id]?.growth ?? 0;
   const chem = Math.floor((save?.chemistryHalves[`player+${partner.id}`] ?? 0) / 2);
@@ -66,10 +70,18 @@ export default function Career() {
                     const m = CAREER_MATCHES[n - 1];
                     const done = cleared.includes(m.id);
                     const current = m.id === next.id;
+                    const tappable = done || m.id === nextOpen.id;
                     return (
                       <React.Fragment key={n}>
                         {i > 0 ? <View style={[styles.link, done && styles.linkDone]} /> : null}
-                        <View style={{ alignItems: "center" }} testID={`node-${n}`}>
+                        <Pressable
+                          style={styles.nodeHit}
+                          testID={`node-${n}`}
+                          disabled={!tappable}
+                          accessibilityRole="button"
+                          accessibilityLabel={done ? `Replay match ${n}` : `Match ${n}`}
+                          onPress={() => setPickedId(m.id === nextOpen.id ? null : m.id)}
+                        >
                           <View style={[styles.node, done && styles.nodeDone, current && styles.nodeCurrent, !m.enabled && styles.nodeLocked]}>
                             {done ? (
                               <Ionicons name="checkmark" size={14} color="#fff" />
@@ -78,7 +90,7 @@ export default function Career() {
                             ) : null}
                           </View>
                           <Text style={[styles.nodeNum, !m.enabled && { color: UI.muted }]}>{n}</Text>
-                        </View>
+                        </Pressable>
                       </React.Fragment>
                     );
                   })}
@@ -91,7 +103,7 @@ export default function Career() {
 
       <Card style={styles.pad} testID="next-match-card">
         <View style={styles.nmHead}>
-          <Kicker>NEXT MATCH</Kicker>
+          <Kicker>{replay ? "REPLAY" : "NEXT MATCH"}</Kicker>
           <Text style={styles.nmOf} testID="next-match-number">Match {next.number} of 10</Text>
           {next.round ? (
             <View style={styles.roundBadge} testID="badge-round">
@@ -144,14 +156,20 @@ export default function Career() {
             </View>
           ) : null}
         </View>
-        <GoldButton
-          big
-          testID="play-match"
-          label="PLAY MATCH"
-          disabled={!next.enabled}
-          onPress={() => router.push({ pathname: "/match", params: { mode: "career", careerId: next.id } })}
-          style={{ marginTop: 10 }}
-        />
+        {next.enabled ? (
+          <GoldButton
+            big
+            testID="play-match"
+            label={replay ? "REPLAY MATCH" : "PLAY MATCH"}
+            onPress={() => router.push({ pathname: "/match", params: { mode: "career", careerId: next.id } })}
+            style={{ marginTop: 10 }}
+          />
+        ) : (
+          <View style={styles.soon} testID="play-match-locked" accessibilityState={{ disabled: true }}>
+            <Ionicons name="lock-closed" size={18} color={UI.muted} />
+            <Text style={styles.soonText}>COMING SOON</Text>
+          </View>
+        )}
       </Card>
 
       <Card style={styles.pad} testID="partner-block">
@@ -210,6 +228,9 @@ const styles = StyleSheet.create({
   nodeDone: { backgroundColor: UI.green, borderColor: "#1F5A37" },
   nodeCurrent: { backgroundColor: UI.gold, borderColor: UI.goldDeep, transform: [{ scale: 1.15 }] },
   nodeLocked: { opacity: 0.45 },
+  nodeHit: { alignItems: "center", minWidth: 28, minHeight: 44 },
+  soon: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 58, borderRadius: 16, marginTop: 10, backgroundColor: UI.creamDeep, borderWidth: 1, borderColor: UI.line },
+  soonText: { color: UI.muted, fontSize: 20, fontWeight: "900", letterSpacing: 1 },
   nodeNum: { color: UI.ink, fontSize: 11, marginTop: 3 },
   nmHead: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   nmOf: { color: UI.inkSoft, fontSize: 13 },

@@ -23,6 +23,8 @@ export interface MatchSetup {
   rivalCode: string; // scoreboard code of the far team
   rivalName: string;
   label: string; // analytics / share label
+  partnerId: string; // the near-side partner (rewards go to them)
+  careerId?: string;
 }
 
 const DIFFS: Difficulty[] = ["ROOKIE", "CLUB", "PRO"];
@@ -53,7 +55,7 @@ export function quickPlaySetup(difficulty: Difficulty, singles: boolean, partner
           names: ["Rival", "Rival"],
         },
       });
-  return { mode: "quick", config, rivalCode: "RIV", rivalName: "Rivals", label: difficulty };
+  return { mode: "quick", config, rivalCode: "RIV", rivalName: "Rivals", label: difficulty, partnerId: partner.id };
 }
 
 export function parseDifficulty(d: string | undefined): Difficulty {
@@ -90,7 +92,7 @@ export function careerSetup(m: CareerMatchDef, partnerId: string, seed: number):
     near: nearTeam(partnerId),
     far: { controllers: ["AI", "AI"], difficulties: [...m.ai], personalities: [...m.personalities], names },
   });
-  return { mode: "career", config, rivalCode: m.code, rivalName: m.rival, label: m.id };
+  return { mode: "career", config, rivalCode: m.code, rivalName: m.rival, label: m.id, partnerId: partnerOf(partnerId).id, careerId: m.id };
 }
 
 // Training / Scrimmage: training partner vs drill / sparring pair, first to 7 win by 2.
@@ -105,5 +107,5 @@ export function trainingSetup(mode: "training" | "scrimmage", partnerId: string,
     far: { controllers: ["AI", "AI"], difficulties: [...t.ai], personalities: [...t.personalities], names: ["Drill", "Drill"] },
     ruleModifiers: { ...SHORT_FORMAT },
   });
-  return { mode, config, rivalCode: t.code, rivalName: mode === "training" ? "Drill pair" : "Sparring pair", label: mode };
+  return { mode, config, rivalCode: t.code, rivalName: mode === "training" ? "Drill pair" : "Sparring pair", label: mode, partnerId: partnerOf(partnerId).id };
 }

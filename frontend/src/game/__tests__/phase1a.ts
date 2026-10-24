@@ -156,11 +156,11 @@ async function metaTests() {
   ok(m2.doc.partners.anli.growth === 2, "growth goes through the ledger");
 
   // completeMatch: idempotent by matchId; career progress.
-  const cm = { matchId: "MX", kind: "career" as const, won: true, careerMatchId: "mumbai.community.01", rewards: [{ currency: "coins" as const, amount: 40 }, { currency: "fans" as const, amount: 5 }] };
+  const cm = { matchId: "MX", kind: "career" as const, won: true, careerMatchId: "mumbai.community.01" };
   const before = m2.doc.coins;
   const r1 = m2.completeMatch(cm, T0);
   const r2 = m2.completeMatch(cm, T0);
-  ok(r1.applied && !r2.applied && m2.doc.coins === before + 40, "completeMatch twice grants once");
+  ok(r1.applied && !r2.applied && m2.doc.coins === before + 100, "completeMatch twice grants once");
   ok(m2.doc.rewardIds.includes("career:MX:coins") && m2.doc.rewardIds.includes("career:MX:fans"), "rewardIds derive from the matchId");
   ok(m2.doc.career.cleared.includes("mumbai.community.01") && m2.doc.career.nextMatchId === "mumbai.community.02" && m2.doc.career.firstClearWins === 1, "career clear + next match id + first-clear wins");
   m2.completeMatch({ matchId: "MY", kind: "career", won: false, careerMatchId: "mumbai.community.02" }, T0);

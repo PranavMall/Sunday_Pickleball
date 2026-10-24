@@ -2,7 +2,7 @@
 // Home / Training / Quick Play → bg_home; Career / Team → bg_career_mumbai.
 // A change of background is a 200 ms cross-fade inside this single image;
 // moving between two screens that share a background changes nothing.
-// Other routes (match, profile, history) cover it with their own opaque view.
+// Profile / history cover it with their own opaque view; on /match it renders nothing.
 import { Image } from "expo-image";
 import { usePathname } from "expo-router";
 import React, { useEffect, useRef } from "react";
@@ -34,5 +34,8 @@ export function DestinationBackdrop() {
     }
   }, []);
 
+  // In a match nothing is drawn behind the court: the image is released from
+  // the view tree and comes back from the memory cache on leaving.
+  if (pathname === "/match") return null;
   return <Image source={last.current} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory" transition={200} testID="destination-backdrop" />;
 }

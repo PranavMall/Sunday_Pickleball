@@ -55,7 +55,7 @@ ok(PARTNERS.upsi.reserveName === "Kiran" && PARTNERS.matz.reserveName === "Vikra
 ok(CAREER_MATCHES.slice(0, 3).every((m) => m.court === "bandra_garden") && CAREER_MATCHES.slice(3, 6).every((m) => m.court === "mumbai_local") && CAREER_MATCHES.slice(6).every((m) => m.court === null), "courts per match");
 const r3 = careerRewardPreview(careerMatch("mumbai.community.03"));
 ok(r3.coins === 275 && r3.fans === 45, `Match 3 preview computes 275 Coins / 45 Fans (got ${r3.coins}/${r3.fans})`);
-ok(r3.coins === CAREER_REWARDS.win.coins + CAREER_REWARDS.namedRival.coins + CAREER_REWARDS.milestones["mumbai.community.03"].coins && r3.coinParts.join("+") === "Win+Rival+Milestone I" && r3.fanParts.join("+") === "Win+Rival", "Match 3 preview built from components");
+ok(r3.coins === CAREER_REWARDS.win.coins + CAREER_REWARDS.namedRival.coins + CAREER_REWARDS.milestones[0].coins && r3.coinParts.join("+") === "Win+Rival+Milestone I" && r3.fanParts.join("+") === "Win+Rival", "Match 3 preview built from components");
 const r1 = careerRewardPreview(careerMatch("mumbai.community.01"));
 ok(r1.coins === CAREER_REWARDS.win.coins && r1.fans === CAREER_REWARDS.win.fans, "Match 1 preview = win components only");
 

@@ -15,7 +15,7 @@ import { HeaderActions } from "@/src/ui/HeaderActions";
 import Animated, { FadeIn } from "react-native-reanimated";
 
 import { Badge, Card, Coin, GoldButton, Kicker, SERIF, UI } from "@/src/ui/kit";
-import { formLabel, useSave } from "@/src/ui/useSave";
+import { useSave } from "@/src/ui/useSave";
 
 const LOGO = require("@/assets/images/logo_pickleballers.webp");
 const TROPHY = require("@/assets/images/trophy_mumbai.webp");
@@ -67,8 +67,6 @@ export default function Home() {
           <StatusCell icon={<Coin size={24} />} label="Coins" value={save ? String(save.coins) : "–"} testID="status-coins" />
           <View style={styles.divider} />
           <StatusCell icon={<Ionicons name="people" size={24} color={UI.fans} />} label="Fans" value={save ? String(save.fans) : "–"} testID="status-fans" />
-          <View style={styles.divider} />
-          <StatusCell icon={<Ionicons name="footsteps" size={24} color={UI.green} />} label="Form" value={formLabel(save?.form)} testID="status-form" />
         </Card>
 
         <Pressable

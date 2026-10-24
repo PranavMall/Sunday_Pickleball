@@ -10,7 +10,7 @@ export const WALLET_CURRENCIES = ["coins", "gems", "fans"] as const;
 
 export const HOME_CITY = "mumbai";
 export const FIRST_SESSION_START = "not_started";
-export const FORM_START = "normal";
+export const FORM_START = "normal"; // Form dropped from 1A: stored, never read
 
 export const START_VALUES = {
   coins: 300,
@@ -48,7 +48,7 @@ export const COURT_NAMES: Record<CourtId, string> = {
 };
 export const QUICK_PLAY_COURT: CourtId = "bandra_garden";
 
-// Quick Play pays Coins only (wired in Session C).
+// Quick Play pays Coins only (doubles and 1v1, every level).
 export const QUICK_PLAY_REWARDS = { winCoins: 40, lossCoins: 20 } as const;
 
 // Chemistry: 0–100, stored in HALF points (0.5 steps), displayed rounded down.
@@ -122,13 +122,34 @@ export function careerMatch(id: string | undefined): CareerMatchDef {
 }
 
 // Career reward COMPONENTS (previews always sum these; never typed totals).
-// Applied in Session C. Milestone I = clearing the Community Cup Final.
+// First clear pays win/loss + the active partner's Growth/Chemistry; a named
+// rival's first defeat and each milestone (by first-clear WIN count) pay once.
+// Replays of a cleared match pay replay Coins only (+ normal partner progress).
 export const CAREER_REWARDS = {
   win: { coins: 100, fans: 20 },
-  namedRival: { coins: 75, fans: 25 },
-  milestones: { "mumbai.community.03": { id: "milestone.1", label: "Milestone I", coins: 100 } } as Record<string, { id: string; label: string; coins: number }>,
+  loss: { coins: 35, fans: 0 },
+  partnerWin: { growth: 8, chemistry: 1 },
+  partnerLoss: { growth: 5, chemistry: 1 },
+  namedRival: { coins: 100, fans: 25 },
+  replay: { winCoins: 40, lossCoins: 14 },
+  milestones: [
+    { id: "milestone.1", label: "Milestone I", at: 3, coins: 75 },
+    { id: "milestone.2", label: "Milestone II", at: 6, coins: 150 },
+    { id: "milestone.3", label: "Milestone III", at: 10, coins: 250 },
+  ],
 };
-export function careerRewardPreview(m: CareerMatchDef): { coins: number; fans: number; coinParts: string[]; fanParts: string[] } {
+// Career is linear, so match N is always the N-th first-clear win.
+export function milestoneFor(firstClearWins: number) {
+  return CAREER_REWARDS.milestones.find((ms) => ms.at === firstClearWins);
+}
+// Discovery flags set by a first-clear WIN of a match number.
+export const CAREER_UNLOCKS: Record<number, { partnerId: PartnerId; flag: "discovered" | "signable"; event: string }> = {
+  2: { partnerId: "upsi", flag: "discovered", event: "You met Upsi" },
+  3: { partnerId: "upsi", flag: "signable", event: "Upsi can now be signed" },
+  5: { partnerId: "matz", flag: "discovered", event: "Matz is watching you" },
+};
+export function careerRewardPreview(m: CareerMatchDef, replay = false): { coins: number; fans: number; coinParts: string[]; fanParts: string[] } {
+  if (replay) return { coins: CAREER_REWARDS.replay.winCoins, fans: 0, coinParts: ["Replay win"], fanParts: ["Replay"] };
   const coinParts = ["Win"];
   const fanParts = ["Win"];
   let coins = CAREER_REWARDS.win.coins;
@@ -139,13 +160,17 @@ export function careerRewardPreview(m: CareerMatchDef): { coins: number; fans: n
     coinParts.push("Rival");
     fanParts.push("Rival");
   }
-  const ms = CAREER_REWARDS.milestones[m.id];
+  const ms = milestoneFor(m.number);
   if (ms) {
     coins += ms.coins;
     coinParts.push(ms.label);
   }
   return { coins, fans, coinParts, fanParts };
 }
+
+// Partner meters: 0–100. Chemistry gains are halved once the pairing is at 50+.
+export const GROWTH_MAX = 100;
+export const CHEMISTRY_HALVE_AT = 50;
 
 // Partner signing (spend wired in Session C).
 export const SIGN_COST: Partial<Record<PartnerId, number>> = { upsi: 750 };

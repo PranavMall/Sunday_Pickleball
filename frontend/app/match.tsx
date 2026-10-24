@@ -18,7 +18,9 @@ import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
 import { initMeta, meta } from "@/src/game/meta";
-import { newMatchId } from "@/src/game/meta/metaStore";
+import { newMatchId, type MatchOutcome } from "@/src/game/meta/metaStore";
+import { nextGoal } from "@/src/game/meta/goals";
+import { careerMatch } from "@/src/game/meta/economyConfig";
 import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_LABEL_SECONDS, faultLabelFor } from "@/src/game/faultLabel";
@@ -152,11 +154,7 @@ const PauseButton = memo(function PauseButton(props: { paused: boolean; top: num
 
 export default function Match() {
   const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string }>();
-  const launch = useMemo<LaunchParams>(
-    () => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  const [launch, setLaunch] = useState<LaunchParams>(() => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court }));
   const router = useRouter();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -164,6 +162,7 @@ export default function Match() {
   const landscape = width > height;
 
   const [match, setMatch] = useState(() => buildMatch(launch));
+  const [outcome, setOutcome] = useState<(MatchOutcome & { goal: string | null; nextCareerId: string; nextEnabled: boolean }) | null>(null);
   const sim = match.sim;
   const config = match.config;
   const matchId = match.matchId;
@@ -304,9 +303,16 @@ export default function Match() {
       if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
         logMatchResult(config, sim);
-        // Match end: the only meta save point for a match (idempotent by matchId).
-        // Career / Training / Scrimmage progression is wired in Session C.
-        if (match.setup.mode === "quick") initMeta().then(() => meta.completeMatch({ matchId, kind: "quick", won: sim.winner === "near" }, Date.now()));
+        // Match end: the only meta save point for a match (idempotent by
+        // matchId). Quitting / app-kill before this point grants nothing.
+        const setup = match.setup;
+        const won = sim.winner === "near";
+        initMeta().then(() => {
+          const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: setup.partnerId }, Date.now());
+          const d = meta.doc;
+          const training = setup.mode === "training" || setup.mode === "scrimmage";
+          setOutcome({ ...o, goal: training ? null : nextGoal(d), nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
+        });
         analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
       }
       setFrame((f) => (f + 1) % 1000000);
@@ -315,7 +321,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, matchId, match.setup.mode]);
+  }, [sim, config, difficulty, humanSlot, matchId, match.setup]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time
@@ -393,7 +399,19 @@ export default function Match() {
     analytics.track("rematch_selected", { difficulty });
     loggedRef.current = false;
     armedRef.current = false;
+    setOutcome(null);
     setMatch(buildMatch(launch));
+    setPaused(false);
+  };
+  // Career win → the next open Career match, built from its config.
+  const nextMatch = () => {
+    if (!outcome?.nextCareerId) return;
+    const l: LaunchParams = { mode: "career", careerId: outcome.nextCareerId };
+    loggedRef.current = false;
+    armedRef.current = false;
+    setOutcome(null);
+    setLaunch(l);
+    setMatch(buildMatch(l));
     setPaused(false);
   };
   // Re-assert immersive mode on resume (a system-bar reveal during pause is
@@ -584,45 +602,73 @@ export default function Match() {
       )}
 
       {gameOver && (
-        <View style={styles.modalWrap} testID="result-overlay">
+        <View style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} testID="result-overlay">
           <View style={styles.modal}>
-            <Text style={styles.resultKicker}>{nearWon ? "VICTORY" : "DEFEAT"}</Text>
-            <Text style={styles.modalTitle} numberOfLines={1} testID="result-title">
-              {nearWon ? `${identity?.playerName ?? "You"} wins!` : "Rivals win"}
-            </Text>
-            <Text style={styles.teamName} numberOfLines={1} testID="result-team-name">
-              Team {identity?.teamName ?? ""}
-            </Text>
+            <Text style={styles.resultKicker} testID="result-title">{nearWon ? "VICTORY" : "DEFEAT"}</Text>
             <Text style={styles.finalScore} testID="final-score">
               {sim.score.nearScore} – {sim.score.farScore}
             </Text>
+            <Text style={styles.teamName} numberOfLines={1} testID="result-team-name">
+              Team {identity?.teamName ?? ""} vs {match.setup.rivalName}
+            </Text>
+            <View style={styles.rewardBox} testID="result-rewards">
+              {!outcome ? (
+                <ActivityIndicator color="#2E7D4F" />
+              ) : (
+                <>
+                  {outcome.lines.map((l, i) => (
+                    <Text key={`l${i}`} style={[styles.rewardLine, outcome.capped && styles.rewardMuted]} testID={`reward-line-${i}`}>{l}</Text>
+                  ))}
+                  {outcome.events.map((e, i) => (
+                    <Text key={`e${i}`} style={styles.eventLine} testID={`event-line-${i}`}>★ {e}</Text>
+                  ))}
+                  {outcome.goal ? <Text style={styles.goalLine} testID="next-goal">{outcome.goal}</Text> : null}
+                </>
+              )}
+            </View>
             <View style={styles.statsRow}>
               <Stat label="Longest rally" value={sim.stats.longestRally} />
               <Stat label="Rallies" value={sim.stats.totalRallies} />
               <Stat label="My dinks" value={sim.stats.myDinks} />
-              <Stat label="Match dinks" value={sim.stats.dinks} />
-              <Stat label="Kitchen faults" value={sim.stats.kitchenFaults} />
             </View>
-            <Pressable testID="rematch-button" style={styles.primaryBtn} onPress={rematch}>
-              <Text style={styles.primaryText}>REMATCH</Text>
-            </Pressable>
-            <View style={styles.resultRow}>
-              <Pressable testID="menu-button" style={styles.secondaryBtn} onPress={goMenu}>
-                <Text style={styles.secondaryText}>Main Menu</Text>
-              </Pressable>
-              <Pressable
-                testID="share-button"
-                style={styles.secondaryBtn}
-                onPress={() => {
-                  analytics.track("share_clicked", { difficulty });
-                  Share.share({
-                    message: `I ${nearWon ? "won" : "lost"} ${sim.score.nearScore}-${sim.score.farScore} on ${difficulty} in Pickle-Ballers! 🥒`,
-                  });
-                }}
-              >
-                <Text style={styles.secondaryText}>Share</Text>
-              </Pressable>
-            </View>
+            {(() => {
+              const mode = match.setup.mode;
+              const primary =
+                mode === "career"
+                  ? nearWon
+                    ? outcome?.nextEnabled
+                      ? { label: "NEXT MATCH", id: "next-match-button", fn: nextMatch }
+                      : { label: "BACK TO CAREER", id: "back-career-button", fn: goMenu }
+                    : { label: "TRY AGAIN", id: "try-again-button", fn: rematch }
+                  : mode === "quick"
+                    ? { label: "REMATCH", id: "rematch-button", fn: rematch }
+                    : { label: "PLAY AGAIN", id: "play-again-button", fn: rematch };
+              const secondary = mode === "career" ? "Career" : mode === "quick" ? "HOME" : "BACK";
+              return (
+                <>
+                  <Pressable testID={primary.id} style={[styles.primaryBtn, !outcome && { opacity: 0.6 }]} disabled={!outcome} onPress={primary.fn}>
+                    <Text style={styles.primaryText}>{primary.label}</Text>
+                  </Pressable>
+                  <View style={styles.resultRow}>
+                    <Pressable testID="menu-button" style={styles.secondaryBtn} onPress={goMenu}>
+                      <Text style={styles.secondaryText}>{secondary}</Text>
+                    </Pressable>
+                    <Pressable
+                      testID="share-button"
+                      style={styles.secondaryBtn}
+                      onPress={() => {
+                        analytics.track("share_clicked", { difficulty });
+                        Share.share({
+                          message: `I ${nearWon ? "won" : "lost"} ${sim.score.nearScore}-${sim.score.farScore} vs ${match.setup.rivalName} in Pickle-Ballers! 🥒`,
+                        });
+                      }}
+                    >
+                      <Text style={styles.secondaryText}>Share</Text>
+                    </Pressable>
+                  </View>
+                </>
+              );
+            })()}
           </View>
         </View>
       )}
@@ -673,16 +719,21 @@ const useStyles = makeStyles((c) => ({
   debugText: { color: "#fff", fontSize: 10, fontFamily: "monospace" as any },
   traceText: { color: "#9fe", fontSize: 9, fontFamily: "monospace" as any },
   modalWrap: { ...abs(), backgroundColor: "rgba(20,26,18,0.72)", alignItems: "center", justifyContent: "center", padding: 24 },
-  modal: { backgroundColor: c.surface, borderRadius: 24, padding: 24, width: "100%", maxWidth: 380, alignItems: "center" },
+  modal: { backgroundColor: c.surface, borderRadius: 24, paddingVertical: 18, paddingHorizontal: 20, width: "100%", maxWidth: 380, alignItems: "center" },
   pauseModal: { backgroundColor: c.surface, borderRadius: 24, paddingVertical: 20, paddingHorizontal: 20, width: "100%", maxWidth: 360, alignItems: "center", gap: 10 },
   pauseSecondaryBtn: { backgroundColor: c.surfaceSecondary, borderRadius: 16, paddingVertical: 14, width: "100%", alignItems: "center", borderWidth: 1, borderColor: c.border },
-  resultKicker: { color: c.accentGold, fontSize: 13, fontWeight: "800", letterSpacing: 3 },
-  modalTitle: { color: c.onSurface, fontSize: 28, fontWeight: "800", marginTop: 4 },
-  teamName: { color: c.muted, fontSize: 14, fontWeight: "700", marginTop: 2, maxWidth: "100%" },
-  finalScore: { color: c.brandPrimary, fontSize: 44, fontWeight: "800", marginVertical: 8 },
-  statsRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, marginVertical: 12 },
+  resultKicker: { color: c.accentGold, fontSize: 24, fontWeight: "900", letterSpacing: 3 },
+  modalTitle: { color: c.onSurface, fontSize: 24, fontWeight: "800", marginTop: 4 },
+  teamName: { color: c.muted, fontSize: 13, fontWeight: "700", marginTop: 2, maxWidth: "100%" },
+  finalScore: { color: c.brandPrimary, fontSize: 24, fontWeight: "900", marginTop: 2, fontVariant: ["tabular-nums"] },
+  rewardBox: { alignSelf: "stretch", backgroundColor: c.surfaceSecondary, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, marginTop: 10, gap: 3, minHeight: 48, justifyContent: "center", borderWidth: 1, borderColor: c.border },
+  rewardLine: { color: c.onSurface, fontSize: 15, fontWeight: "800", textAlign: "center" },
+  rewardMuted: { color: c.muted, fontWeight: "700" },
+  eventLine: { color: "#1E4D33", fontSize: 14, fontWeight: "700", textAlign: "center" },
+  goalLine: { color: c.muted, fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 4 },
+  statsRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 14, marginVertical: 8 },
   stat: { alignItems: "center", minWidth: 70 },
-  statValue: { color: c.onSurface, fontSize: 22, fontWeight: "800" },
+  statValue: { color: c.onSurface, fontSize: 18, fontWeight: "800" },
   statLabel: { color: c.muted, fontSize: 11, marginTop: 2 },
   primaryBtn: { backgroundColor: c.brandPrimary, borderRadius: 18, paddingVertical: 16, width: "100%", alignItems: "center", marginTop: 8 },
   primaryText: { color: c.onBrandPrimary, fontSize: 18, fontWeight: "800", letterSpacing: 1 },

@@ -25,7 +25,3 @@ export function useSave(): { save: SaveDoc | null; identity: Identity | null; re
 function structuredCloneSafe<T>(v: T): T {
   return JSON.parse(JSON.stringify(v));
 }
-
-export function formLabel(form: string | undefined): string {
-  return form === "hot" ? "HOT" : form === "cold" ? "COLD" : "–";
-}
