@@ -126,3 +126,11 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - Commit 5 (9498bc8 + polish): signPartner = one transaction (spend id sign:upsi), make-active prompt; replay substitution (Upsi→Kiran, Matz→Vikram when signed); Training +20/+2, Scrimmage +10/+1 to training partner, caps 2/3 per local day, after-cap grants nothing; PLAY AGAIN/BACK.
 - Tests: phase1c.ts 53/53; run.ts 263/263; b3Report/shotMix byte-identical to fbb61cc; step 2.16 µs (was 2.15–2.16).
 - NEXT: STOP. Do not start First Session tutorial / presentation layer until Pranav approves.
+
+## Phase 1A Session D (2026-06) — Commits 6–8 DONE, awaiting Pranav's phone test (STOP rule)
+- c2985ec Commit 6: Next line Career only; Share only Career/Quick Play wins; backdrop memory-disk; sizes −15–20%; 80% cream cards; Team one card per partner; Stats 6-cell grid w/ icons; celebration pop-ups (stage/new court/partner) + animated result card (src/ui/MatchEnd.tsx) from this match's ledger entries.
+- 660619c Commit 7: Growth running total + levels (src/game/meta/levels.ts), stage cap 300/500; PARTNER_REWARDS win/loss by mode; Chemistry fade (chemistry_fade ledger, 25-floor, catch-up, Rusty); Team info + 4 actions; Quick Play own partner (quickPartnerId); Career codes/replay marks/NEW court tag (courtsPlayed); M3–5 line-ups; Inbox sender/subject/line/CTA.
+- fc0663b Commit 8: near-team pixel sprites (render/sprites.ts CHARACTER_SHEETS, render/spriteAnim.ts preallocated animator, one Atlas per sheet), game-over walk+celebrate 1.9 s, portraits in Badge, DEV Sprites On/Off.
+- Tests changed (rule changed by brief): phase1c partner lines/values (7.2), growth cap (7.1), training values; phase1b inbox (7.9), Match 4 line-up (7.8). New sessionD block in phase1c. phase1c 72/72, run.ts 263/263, b3Report/shotMix byte-identical vs fbb61cc, step 2.15–2.19 µs.
+- Web DEV probe Sprites On vs Off: 60 fps, 60 renders/s, work 0.1 ms both. Phone A/B pending.
+- Testing: /app/test_reports/iteration_14.json — all flows pass.

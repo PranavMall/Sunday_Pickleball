@@ -1,0 +1,50 @@
+{
+  "summary": "Phase 1A Session D (Commits 6-8) FRONTEND verification on live web preview (375x667 + 390x844). No backend exists. Nearly every requested scenario PASSES end-to-end with zero page errors (after 2 small fixes). Two findings: (a) the DEV test hook window.__pwSim described in the review request DID NOT EXIST in code; I added it (match.tsx, __DEV__ only) so I could test. (b) The Team card highlighted after 'SIGN IN TEAM' was almost see-through (rowHi bg rgba(...,0.18) replaced the 80% cream) so text over the court painting was unreadable; I fixed this. I also fixed an unhandled Share.share() rejection on web. Verified: Career M3 clean path (3 pop-ups in order COMMUNITY CUP champions -> NEW COURT UNLOCKED Mumbai Local -> NEW PARTNER Upsi can now be signed with SIGN IN TEAM + Later + dots; result VICTORY 11–7, 'PIC vs CCK · Community Cup Final', Coins 775 'Win +100 · Rival +100 · Milestone I +75', Fans 85 'Win +20 · Rival +25', Anli '+12 Growth · +2 Chemistry', next 'Sign Upsi in Team', CAREER · NEXT MATCH · share in one row; save persisted coins 775/fans 85/growth 36/chem 12 halves/next mumbai.local.04/courts +bandra_garden). Coin count-up observed (319->320, 357->360). End sequence ~1.99 s, then auto-advances; tapping end-sequence-skip works. Career loss M4: DEFEAT, '+3 Growth · +0.5 Chemistry', CAREER · TRY AGAIN, no share. M5 win: Matz SCOUT pop-up, BACK TO CAREER · share, next 'Mumbai Local Series Final — coming soon'. Replay of M3 (node-3 -> REPLAY MATCH): no pop-ups, 'Replay win +40', no Fans tile. Quick Play loss: DEFEAT, HOME · REMATCH, no share/next; win: share present, no next. Training loss: SESSION COMPLETE, '+4 Growth · +0.5 Chemistry', BACK · PLAY AGAIN, no share. Scrimmage (from Team act-scrimmage-upsi): SCRIMMAGE COMPLETE, win '+10 Growth · +1 Chemistry' + 'LV UP · Lv 2' (95->105), loss '+2/+0.5', after daily cap 'Progress used today — play for fun' and no partner row; BACK returns to /team. Growth cap: 295 -> 300 '+5 Growth', 'MAX for Community Cup'. Chemistry fade: 3 Quick Play matches with Upsi -> player+anli 20->18 halves (-1), rusty-anli 'Rusty · play together to recover'. Team: one card per partner, level-* LV, team-info overlay text OK, act-career toast 'Upsi/Anli is your Career partner' + activePartnerId persisted, act-train/scrimmage 'N left' start /match?mode=training|scrimmage, act-quick opens /quickplay with that partner. Quick Play qp-change -> qp-picker -> qp-pick-upsi -> qp-partner-name Upsi, caption 'Only for Quick Play · your Career partner stays Anli', quickPartnerId saved separately, Career partner-block still Anli. Career: nm-team-code PIC, rival-code, replay-1..N + 'Tap ✓ to replay', court-new NEW until courtsPlayed includes the court. Inbox: every row has sender badge/sender/subject/line + CTA (44px tall); welcome CTA -> /career, upsi_signable -> /team; list scrolls at 667. Stats: 6 cells incl stat-fans/stat-coins with icons. Match: near-team pixel sprites render (Anli/Upsi swap correctly with partner), DEV pause has sprites-toggle 'Sprites: On' <-> 'Sprites: Off'. Sign flow from pop-up: /team?highlight=upsi -> Sign 750 -> 'Make Upsi your Career partner?' -> No; coins 775->25, upsi signed, active stays Anli. No deprecated Expo packages (expo-av/barcode-scanner/background-fetch) found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Team highlighted roster card (after SIGN IN TEAM pop-up / ?highlight=)", "issue": "styles.rowHi set backgroundColor rgba(246,201,74,0.18), replacing the 80% cream card bg -> card nearly transparent, name/archetype/bars unreadable over the court painting. FIXED by tester to rgba(252,240,205,0.9). Reference: app/team.tsx:240", "testID": "roster-upsi", "priority": "MEDIUM (fixed)"},
+      {"component": "Result Share button (web)", "issue": "Share.share() promise had no catch -> unhandled 'Share is not supported in this browser' page error on web. FIXED by adding .catch(() => {}). Reference: app/match.tsx:692", "testID": "share-button", "priority": "LOW (fixed)"},
+      {"component": "Result partner Chemistry bar text", "issue": "Bar text uses Math.floor(chemAfter) so a +0.5 Chemistry gain from 0 still reads '0 / 100' (Training/Scrimmage loss). Consider showing one decimal (fmt). Reference: app/match.tsx:739", "testID": "result-chem", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "DEV test hook", "issue": "Review request says window.__pwSim exists on /match but it was not in the code (grep found nothing). Tester added `if (__DEV__) (globalThis as any).__pwSim = sim;` at app/match.tsx:205. Keep it (DEV-only) for future regression runs.", "affected_testIDs": ["result-overlay"]}
+    ],
+    "design_issues": [
+      {"screen": "Header / Quick Play / Career", "issues": [
+        "header-inbox/header-stats and quickplay back-button are 42x42 (spec asks 42; below the 44pt minimum).",
+        "Career path nodes node-1..10 hit area is 28x44 (width < 44).",
+        "Quick Play format toggles toggle-doubles/toggle-singles are 36px tall (< 44)."
+      ]},
+      {"screen": "Result card", "issues": [
+        "At 375 wide, 'NEXT MATCH' shows ellipsised on web ('NEXT MAT…') next to CAREER + share — known web-only adjustsFontSizeToFit artifact; check it fits on a small native device."
+      ]},
+      {"screen": "Stats overlay", "issues": ["stat-fans and stat-coins cells show only icon + number with no label, while the other 4 cells have labels (inconsistent)."]},
+      {"screen": "Celebration pop-ups", "issues": ["The backdrop is 0.86 opacity, so the match scoreboard shows through right behind the kicker text (e.g. 'COMMUNITY CUP'), which makes it slightly harder to read; consider a darker backdrop or more top margin."]},
+      {"screen": "Inbox", "issues": ["Welcome message CTA always says 'PLAY MATCH 1' even after the whole Community Cup is cleared (stale copy). It still navigates to /career correctly."]},
+      {"screen": "Career next-match card (replay)", "issues": ["Reward preview shows '+0 Fans (Replay)' — a zero reward adds noise; consider hiding it."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/tests/e2e_session_d_helpers.py"],
+  "action_items": [
+    "Keep the DEV hook globalThis.__pwSim in app/match.tsx (added by tester) — the review request expected it but it was missing.",
+    "Review the tester's rowHi fix in app/team.tsx:240 (highlighted card must keep an opaque cream bg).",
+    "Optional: show Chemistry bar text with 0.5 precision in partnerRow (match.tsx:739).",
+    "Optional: raise header icons / career nodes / QP toggles to >=44pt hit area (use hitSlop if the look should stay the same).",
+    "Optional: add labels to the Stats Fans/Coins cells; make the inbox welcome CTA label depend on progress; hide '+0 Fans' in the replay preview."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx is 823 lines (>700) — consider extracting resultButtons/partnerRow/stageLabel and the end-sequence/celebration block into a separate module.",
+    "resultButtons(): while outcome is still loading (null) a Career win briefly computes the 'BACK TO CAREER' set (because !outcome?.nextEnabled) before switching to CAREER · NEXT MATCH. Primary buttons are disabled while loading so this is only a brief flicker.",
+    "Celebration onSign uses router.replace to /team, so the result card is never shown in that path (rewards are already saved). Probably intended — just confirming.",
+    "Team act('train'|'scrimmage') calls meta.setTrainingPartner(id), so starting a Scrimmage from Upsi's card also makes Upsi the training partner. Probably intended."
+  ],
+  "updated_files": ["/app/frontend/app/match.tsx (added __DEV__ __pwSim hook; Share.share().catch)", "/app/frontend/app/team.tsx (rowHi background opacity fix)", "/app/tests/e2e_session_d_helpers.py (new)"],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "~97% (all requested flows pass; 1 visual bug + 1 web share error fixed by tester; remaining items are minor design)"},
+  "seed_data_creation": "Only localStorage 'pb.meta' seeds inside the browser test contexts; no server data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Offline Expo app, no backend. Save = localStorage 'pb.meta' JSON (schemaVersion 1); seed it then goto the route. Home '/' may show an identity dialog — click identity-skip-button. On /match, globalThis.__pwSim (DEV) is the sim: set score.nearScore/farScore, winner 'near'|'far', phase 'game_over'; end sequence ~1.9 s (tap end-sequence-skip to skip) -> celebration-N pop-ups -> result-overlay. Helpers: /app/tests/e2e_session_d_helpers.py. Career IDs: mumbai.community.01-03, mumbai.local.04-05 (06 = coming soon). Court ids: dadar, bandra_garden, mumbai_local. Scrimmage daily cap 3, Training 2. Don't modify src/game/sim/*.",
+  "rca_of_issue": "Transparent highlighted Team card: in team.tsx the Card base style (kit.card) uses backgroundColor UI.cardBg (cream at 80%); the rowHi override replaced it with gold at 18%, so the highlighted card became see-through. Fix: use an opaque tint (0.9 alpha)."
+}
