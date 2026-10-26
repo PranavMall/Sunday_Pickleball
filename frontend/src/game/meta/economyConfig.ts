@@ -108,9 +108,9 @@ const M = (
 export const CAREER_MATCHES: CareerMatchDef[] = [
   M(1, "", "Bandra Gully Smashers", "BGS", "#3E7CB1", false, ["ROOKIE", "ROOKIE"], ["DEFENSIVE", "TACTICAL"], "bandra_garden"),
   M(2, "", "Dadar Dinkers", "DAD", "#8E5BA8", false, ["ROOKIE", "ROOKIE"], ["KITCHEN", "TACTICAL"], "bandra_garden", { slot: 0, partnerId: "upsi" }),
-  M(3, "FINAL", "Colaba Causeway Kings", "CCK", "#2F5DA8", true, ["ROOKIE", "ROOKIE"], ["AGGRESSIVE", "KITCHEN"], "bandra_garden"),
-  M(4, "", "Andheri Local Express", "ALX", "#C77D2E", false, ["ROOKIE", "CLUB"], ["DEFENSIVE", "TACTICAL"], "mumbai_local"),
-  M(5, "", "Juhu Beach Bouncers", "JBB", "#2A9D8F", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "KITCHEN"], "mumbai_local", { slot: 0, partnerId: "matz" }),
+  M(3, "FINAL", "Colaba Causeway Kings", "CCK", "#2F5DA8", true, ["ROOKIE", "CLUB"], ["AGGRESSIVE", "KITCHEN"], "bandra_garden"),
+  M(4, "", "Andheri Local Express", "ALX", "#C77D2E", false, ["CLUB", "CLUB"], ["DEFENSIVE", "TACTICAL"], "mumbai_local"),
+  M(5, "", "Juhu Beach Bouncers", "JBB", "#2A9D8F", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "AGGRESSIVE"], "mumbai_local", { slot: 0, partnerId: "matz" }),
   M(6, "FINAL", "Worli Sea Face Strikers", "WSF", "#B23A48", true, ["CLUB", "CLUB"], ["AGGRESSIVE", "AGGRESSIVE"], "mumbai_local"),
   M(7, "", "Powai Lake Lobbers", "PLL", "#5B8C3A", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "TACTICAL"], null),
   M(8, "", "Marine Drive Volleyers", "MDV", "#4A6FA5", false, ["CLUB", "CLUB"], ["TACTICAL", "KITCHEN"], null),
@@ -128,8 +128,6 @@ export function careerMatch(id: string | undefined): CareerMatchDef {
 export const CAREER_REWARDS = {
   win: { coins: 100, fans: 20 },
   loss: { coins: 35, fans: 0 },
-  partnerWin: { growth: 8, chemistry: 1 },
-  partnerLoss: { growth: 5, chemistry: 1 },
   namedRival: { coins: 100, fans: 25 },
   replay: { winCoins: 40, lossCoins: 14 },
   milestones: [
@@ -168,17 +166,33 @@ export function careerRewardPreview(m: CareerMatchDef, replay = false): { coins:
   return { coins, fans, coinParts, fanParts };
 }
 
-// Partner meters: 0–100. Chemistry gains are halved once the pairing is at 50+.
-export const GROWTH_MAX = 100;
+// Partner progress per completed match (win / loss), by mode. A loss pays about
+// a quarter of the win's Growth and the minimum Chemistry.
+export const PARTNER_REWARDS = {
+  career: { win: { growth: 12, chemistry: 2 }, loss: { growth: 3, chemistry: 0.5 } },
+  training: { win: { growth: 15, chemistry: 2 }, loss: { growth: 4, chemistry: 0.5 } },
+  scrimmage: { win: { growth: 10, chemistry: 1 }, loss: { growth: 2, chemistry: 0.5 } },
+} as const;
+
+// Growth is a running total: Level = 1 + floor(total / 100). The furthest
+// unlocked Career stage caps it (Growth above the cap is not stored).
+export const GROWTH_PER_LEVEL = 100;
+export const GROWTH_CAP_BY_STAGE: Record<string, number> = { community: 300, local: 500, district: 500 };
+
+// Chemistry 0–100. Gains are halved (0.5 steps, min 0.5) once the pairing is at 50+.
 export const CHEMISTRY_HALVE_AT = 50;
+// Fade: every FADE_EVERY matches played with someone else → −1, never below the
+// highest multiple of FADE_FLOOR_STEP ever reached; below the peak gains double.
+export const CHEMISTRY_FADE_EVERY = 3;
+export const CHEMISTRY_FLOOR_STEP = 25;
 
 // Partner signing (spend wired in Session C).
 export const SIGN_COST: Partial<Record<PartnerId, number>> = { upsi: 750 };
 
 // Training (progression wired in Session C). First to 7, win by 2.
 export const TRAINING_MODES = {
-  training: { growth: 20, chemistry: 2, dailyCap: 2, vs: "drill pair", code: "DRL", ai: ["ROOKIE", "ROOKIE"] as [AiDiff, AiDiff], personalities: ["DEFENSIVE", "KITCHEN"] as [AiPers, AiPers] },
-  scrimmage: { growth: 10, chemistry: 1, dailyCap: 3, vs: "sparring pair", code: "SPR", ai: ["CLUB", "CLUB"] as [AiDiff, AiDiff], personalities: ["AGGRESSIVE", "TACTICAL"] as [AiPers, AiPers] },
+  training: { dailyCap: 2, vs: "drill pair", code: "DRL", ai: ["ROOKIE", "ROOKIE"] as [AiDiff, AiDiff], personalities: ["DEFENSIVE", "KITCHEN"] as [AiPers, AiPers] },
+  scrimmage: { dailyCap: 3, vs: "sparring pair", code: "SPR", ai: ["CLUB", "CLUB"] as [AiDiff, AiDiff], personalities: ["AGGRESSIVE", "TACTICAL"] as [AiPers, AiPers] },
 } as const;
 export const SHORT_FORMAT = { pointsToWin: 7, winBy: 2 } as const;
 

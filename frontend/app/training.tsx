@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "@/src/ui/Text";
 
 import { meta } from "@/src/game/meta";
-import { PARTNER_IDS, PARTNERS, TRAINING_MODES } from "@/src/game/meta/economyConfig";
+import { PARTNER_IDS, PARTNER_REWARDS, PARTNERS, TRAINING_MODES } from "@/src/game/meta/economyConfig";
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions, Overlay } from "@/src/ui/HeaderActions";
@@ -52,7 +52,7 @@ export default function Training() {
       </Card>
 
       {(["training", "scrimmage"] as const).map((mode) => {
-        const t = TRAINING_MODES[mode];
+        const t = { ...TRAINING_MODES[mode], ...PARTNER_REWARDS[mode].win };
         const left = Math.max(0, t.dailyCap - usage[mode]);
         return (
           <Card key={mode} style={styles.modeCard} testID={`${mode}-card`}>

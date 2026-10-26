@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { meta } from "@/src/game/meta";
 import { hasUnread, inboxMessages } from "@/src/game/meta/inbox";
 import { partnerOf } from "@/src/game/meta/matchSetup";
+import { levelView } from "@/src/game/meta/levels";
 import type { SaveDoc } from "@/src/game/meta/metaStore";
 import { getMatchResults, type MatchResultRecord } from "@/src/game/services/matchLog";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
@@ -22,14 +23,15 @@ export function HeaderActions({ save, onChange }: { save: SaveDoc | null; onChan
       <IconSquare testID="header-inbox" icon="mail" label={unread ? "Inbox, unread messages" : "Inbox"} dot={unread} onPress={() => setOpen("inbox")} />
       <IconSquare testID="header-stats" icon="bar-chart" label="Stats" onPress={() => setOpen("stats")} />
       <Overlay visible={open !== null} title={open === "inbox" ? "Inbox" : "Stats"} onClose={() => setOpen(null)} testID={`${open ?? "none"}-overlay`}>
-        {open === "inbox" ? <InboxBody save={save} onChange={onChange} /> : null}
+        {open === "inbox" ? <InboxBody save={save} onChange={onChange} onClose={() => setOpen(null)} /> : null}
         {open === "stats" ? <StatsBody save={save} onClose={() => setOpen(null)} /> : null}
       </Overlay>
     </View>
   );
 }
 
-function InboxBody({ save, onChange }: { save: SaveDoc | null; onChange?: () => void }) {
+function InboxBody({ save, onChange, onClose }: { save: SaveDoc | null; onChange?: () => void; onClose: () => void }) {
+  const router = useRouter();
   const msgs = save ? inboxMessages(save) : [];
   // Snapshot of what was unread when opened; then mark everything read.
   const [unreadIds] = useState(() => msgs.filter((m) => !save?.inboxRead.includes(m.id)).map((m) => m.id));
@@ -42,8 +44,26 @@ function InboxBody({ save, onChange }: { save: SaveDoc | null; onChange?: () => 
     <View>
       {[...msgs].reverse().map((m) => (
         <View key={m.id} style={styles.msgRow} testID={`inbox-${m.id}`}>
-          {unreadIds.includes(m.id) ? <View style={styles.unreadDot} /> : <View style={{ width: 10 }} />}
-          <Text style={styles.msgText}>{m.text}</Text>
+          <View>
+            <Badge id={m.senderId} name={m.sender} color={m.senderId ? partnerOf(m.senderId).color : UI.wood} size={36} />
+            {unreadIds.includes(m.id) ? <View style={styles.unreadDot} /> : null}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.msgSender}>{m.sender}</Text>
+            <Text style={styles.msgText}>{m.subject}</Text>
+            <Text style={styles.msgLine}>{m.line}</Text>
+          </View>
+          <Pressable
+            testID={`inbox-cta-${m.id}`}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
+            onPress={() => {
+              onClose();
+              router.replace(m.cta.path);
+            }}
+          >
+            <Text style={styles.ctaText} numberOfLines={2}>{m.cta.label}</Text>
+          </Pressable>
         </View>
       ))}
     </View>
@@ -62,7 +82,7 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
   const rate = career.length ? Math.round((wins / career.length) * 100) : 0;
   const longest = (log ?? []).reduce((m, r) => Math.max(m, r.rallyStats?.longestRally ?? 0), 0);
   const partner = partnerOf(save?.activePartnerId);
-  const growth = save?.partners[partner.id]?.growth ?? 0;
+  const lv = levelView(save?.partners[partner.id]?.growth ?? 0, save?.career.nextMatchId ?? "mumbai.community.01");
   const chem = Math.floor((save?.chemistryHalves[`player+${partner.id}`] ?? 0) / 2);
   return (
     <View testID="stats-body">
@@ -81,7 +101,7 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
           <Text style={styles.partnerSub}>Active partner · {partner.archetype}</Text>
         </View>
       </View>
-      <MeterRow icon="star" value={growth} color={UI.growth} testID="stats-growth" />
+      <MeterRow icon="star" value={lv.frac * 100} num={lv.max ?? `Lv ${lv.level} · ${lv.text}`} color={UI.growth} testID="stats-growth" />
       <MeterRow icon="heart" value={chem} color={UI.chem} testID="stats-chem" />
       <Pressable
         testID="stats-history-link"
@@ -144,8 +164,12 @@ const styles = StyleSheet.create({
   closeText: { color: UI.inkSoft, fontSize: 20, fontWeight: "700" },
   empty: { color: UI.muted, fontSize: 15, paddingVertical: 12, lineHeight: 21 },
   msgRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: UI.line },
-  msgText: { flex: 1, color: UI.ink, fontSize: 15, fontWeight: "600" },
-  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: UI.red },
+  msgSender: { color: UI.muted, fontSize: 11, fontWeight: "700" },
+  msgText: { color: UI.ink, fontSize: 15, fontWeight: "700" },
+  msgLine: { color: UI.inkSoft, fontSize: 12.5, marginTop: 1 },
+  unreadDot: { position: "absolute", top: -2, right: -2, width: 10, height: 10, borderRadius: 5, backgroundColor: UI.red, borderWidth: 1.5, borderColor: UI.cream },
+  cta: { minHeight: 44, maxWidth: 96, borderRadius: 10, backgroundColor: UI.gold, borderWidth: 1, borderColor: UI.goldDeep, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" },
+  ctaText: { color: UI.goldInk, fontSize: 11, fontWeight: "900", textAlign: "center" },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   stat: { width: "31.5%", backgroundColor: UI.creamDeep, borderRadius: 12, paddingVertical: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: UI.line, minHeight: 56 },
   statTop: { flexDirection: "row", alignItems: "center", gap: 5 },

@@ -7,7 +7,10 @@ import { Text } from "@/src/ui/Text";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { partnerOf } from "@/src/game/meta/matchSetup";
-import { QUICK_PLAY_REWARDS } from "@/src/game/meta/economyConfig";
+import { PARTNER_IDS, PARTNERS, QUICK_PLAY_REWARDS } from "@/src/game/meta/economyConfig";
+import { meta } from "@/src/game/meta";
+import { levelView } from "@/src/game/meta/levels";
+import { Overlay } from "@/src/ui/HeaderActions";
 import { DIM } from "@/src/ui/DestinationScreen";
 import { Badge, Card, Coin, IconSquare, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
@@ -24,9 +27,15 @@ export default function QuickPlay() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const compact = height < 740;
-  const { save } = useSave();
+  const { save, refresh } = useSave();
   const [singles, setSingles] = useState(false);
-  const partner = partnerOf(save?.activePartnerId);
+  const [picker, setPicker] = useState(false);
+  // Quick Play partner: its own saved choice (defaults to the Career partner).
+  const qpId = save?.quickPartnerId && save.partners[save.quickPartnerId]?.signed ? save.quickPartnerId : save?.activePartnerId;
+  const partner = partnerOf(qpId);
+  const career = partnerOf(save?.activePartnerId);
+  const lv = levelView(save?.partners[partner.id]?.growth ?? 0, save?.career.nextMatchId ?? "mumbai.community.01");
+  const signed = save ? PARTNER_IDS.filter((id) => save.partners[id]?.signed) : [];
 
   const start = (difficulty: string) =>
     router.push({ pathname: "/match", params: { mode: "quick", difficulty, ...(singles ? { singles: "1" } : {}) } });
@@ -60,11 +69,23 @@ export default function QuickPlay() {
         </View>
 
         {!singles ? (
-          <Card style={styles.partnerRow} testID="qp-partner">
-            <Text style={styles.partnerLabel}>Your partner:</Text>
-            <Badge name={partner.name} color={partner.color} size={compact ? 40 : 46} />
-            <Text style={styles.partnerName}>{partner.name}</Text>
-          </Card>
+          <>
+            <Card style={styles.partnerRow} testID="qp-partner">
+              <Text style={styles.partnerLabel}>Your partner</Text>
+              <Badge id={partner.id} name={partner.name} color={partner.color} size={36} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.partnerName} numberOfLines={1} testID="qp-partner-name">{partner.name}</Text>
+                <Text style={styles.partnerSub} numberOfLines={1}>{partner.archetype} · LV {lv.level}</Text>
+              </View>
+              <Pressable testID="qp-change" accessibilityRole="button" onPress={() => setPicker(true)} style={({ pressed }) => [styles.change, pressed && { opacity: 0.8 }]}>
+                <Text style={styles.changeText}>Change</Text>
+                <Ionicons name="chevron-forward" size={14} color={UI.ink} />
+              </Pressable>
+            </Card>
+            {partner.id !== career.id ? (
+              <Text style={styles.caption} testID="qp-caption">Only for Quick Play · your Career partner stays {career.name}</Text>
+            ) : null}
+          </>
         ) : null}
 
         <View style={{ gap: compact ? 10 : 14, marginTop: compact ? 10 : 14 }}>
@@ -103,6 +124,29 @@ export default function QuickPlay() {
           </Pressable>
         ) : null}
       </ScrollView>
+      <Overlay visible={picker} title="Quick Play partner" onClose={() => setPicker(false)} testID="qp-picker">
+        {signed.map((id) => {
+          const p = PARTNERS[id];
+          return (
+            <Pressable
+              key={id}
+              testID={`qp-pick-${id}`}
+              style={styles.pickRow}
+              onPress={() => {
+                if (meta.setQuickPartner(id)) refresh();
+                setPicker(false);
+              }}
+            >
+              <Badge id={id} name={p.name} color={p.color} size={40} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.pickName}>{p.name}</Text>
+                <Text style={styles.partnerSub}>{p.archetype}</Text>
+              </View>
+              {id === partner.id ? <Ionicons name="checkmark-circle" size={24} color={UI.green} /> : null}
+            </Pressable>
+          );
+        })}
+      </Overlay>
     </View>
   );
 }
@@ -117,9 +161,15 @@ const styles = StyleSheet.create({
   segSel: { backgroundColor: UI.gold, borderWidth: 1, borderColor: UI.goldDeep },
   segText: { color: UI.ink, fontSize: 16, fontWeight: "700" },
   segTextSel: { fontWeight: "900" },
-  partnerRow: { flexDirection: "row", alignItems: "center", gap: 14, alignSelf: "center", marginTop: 12, paddingVertical: 8, paddingHorizontal: 22 },
-  partnerLabel: { color: UI.ink, fontFamily: SERIF, fontSize: 17 },
-  partnerName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 22 },
+  partnerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10, paddingVertical: 6, paddingHorizontal: 12 },
+  partnerLabel: { color: UI.inkSoft, fontSize: 13 },
+  partnerName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 17 },
+  partnerSub: { color: UI.inkSoft, fontSize: 12 },
+  change: { flexDirection: "row", alignItems: "center", gap: 2, borderWidth: 1, borderColor: UI.line, backgroundColor: "#fff", borderRadius: 10, paddingHorizontal: 10, minHeight: 44 },
+  changeText: { color: UI.ink, fontSize: 14, fontWeight: "700" },
+  caption: { color: UI.ink, fontSize: 12, textAlign: "center", marginTop: 4, backgroundColor: "rgba(251,244,226,0.7)", alignSelf: "center", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  pickRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: UI.line },
+  pickName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 18 },
   level: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
   levelIcon: { width: 72, height: 64 },
   levelTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 20 },

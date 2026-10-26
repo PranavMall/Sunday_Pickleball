@@ -28,40 +28,40 @@ async function fresh() {
   return { s, mem };
 }
 const career = (s: MetaStore, n: number, won: boolean, id = `m${++seq}`) =>
-  s.completeMatch({ matchId: id, kind: "career", won, careerMatchId: CAREER_MATCH_IDS[n - 1], partnerId: s.doc.activePartnerId }, T0);
+  s.completeMatch({ matchId: id, kind: "career", won, careerMatchId: CAREER_MATCH_IDS[n - 1], partnerId: s.doc.activePartnerId, court: careerMatch(CAREER_MATCH_IDS[n - 1]).court ?? undefined }, T0);
 
 async function commit4() {
-  // Clean path to Match 3: 775 Coins / 85 Fans; Anli 24 Growth / 3 Chemistry.
+  // Clean path to Match 3: 775 Coins / 85 Fans; Anli 36 Growth / 6 Chemistry (Session D 7.2).
   const { s, mem } = await fresh();
   ok(s.doc.coins === 300 && s.doc.fans === 0, "fresh: 300 Coins, 0 Fans");
   const o1 = career(s, 1, true);
-  eq(o1.lines, ["+100 Coins", "+20 Fans", "Anli +8 Growth · +1 Chemistry"], "Match 1 first-clear win lines");
+  eq(o1.lines, ["+100 Coins", "+20 Fans", "Anli +12 Growth · +2 Chemistry"], "Match 1 first-clear win lines");
   ok(s.doc.career.nextMatchId === CAREER_MATCH_IDS[1], "win unlocks Match 2");
   const o2 = career(s, 2, true);
   eq(o2.events, ["You met Upsi"], "Match 2 win: You met Upsi");
   ok(s.doc.partners.upsi?.discovered && !s.doc.partners.upsi.signable, "Upsi discovered, not signable");
   eq(nextGoal(s.doc), "Next: Community Cup Final", "next goal after Match 2");
   const o3 = career(s, 3, true);
-  eq(o3.lines, ["+100 Coins", "+20 Fans", "+100 Coins · Rival defeated", "+25 Fans · Rival defeated", "+75 Coins · Milestone I", "Anli +8 Growth · +1 Chemistry"], "Match 3 lines");
+  eq(o3.lines, ["+100 Coins", "+20 Fans", "+100 Coins · Rival defeated", "+25 Fans · Rival defeated", "+75 Coins · Milestone I", "Anli +12 Growth · +2 Chemistry"], "Match 3 lines");
   eq(o3.events, ["Milestone I reached", "Upsi can now be signed"], "Match 3 events");
   ok(s.doc.coins === 775 && s.doc.fans === 85, `clean path: 775 Coins / 85 Fans (got ${s.doc.coins}/${s.doc.fans})`);
-  ok(s.doc.partners.anli.growth === 24 && s.chemistry("anli") === 3, "Anli 24 Growth / 3 Chemistry");
+  ok(s.doc.partners.anli.growth === 36 && s.chemistry("anli") === 6, "Anli 36 Growth / 6 Chemistry");
   ok(s.doc.partners.upsi.signable, "Upsi signable after Match 3");
   eq(nextGoal(s.doc), "Sign Upsi in Team", "next goal: Sign Upsi");
 
   // Replay of a cleared match: replay rates only, no rival / milestone / fans.
   const c0 = s.doc.coins, f0 = s.doc.fans;
   const r3 = career(s, 3, true);
-  eq(r3.lines, ["+40 Coins", "Anli +8 Growth · +1 Chemistry"], "Match 3 replay win lines");
+  eq(r3.lines, ["+40 Coins", "Anli +12 Growth · +2 Chemistry"], "Match 3 replay win lines");
   ok(s.doc.coins === c0 + 40 && s.doc.fans === f0 && r3.events.length === 0, "replay win: +40 Coins, 0 Fans, no events");
   const r2 = career(s, 2, false);
-  eq(r2.lines, ["+14 Coins", "Anli +5 Growth · +1 Chemistry"], "replay loss lines");
+  eq(r2.lines, ["+14 Coins", "Anli +3 Growth · +0.5 Chemistry"], "replay loss lines");
   ok(s.doc.career.nextMatchId === CAREER_MATCH_IDS[3], "replays do not move the next match");
 
   // First-clear loss: +35 Coins, no Fans, retry the same match.
   const f1 = s.doc.fans;
   const l4 = career(s, 4, false);
-  eq(l4.lines, ["+35 Coins", "Anli +5 Growth · +1 Chemistry"], "Match 4 first-clear loss lines");
+  eq(l4.lines, ["+35 Coins", "Anli +3 Growth · +0.5 Chemistry"], "Match 4 first-clear loss lines");
   ok(s.doc.fans === f1 && s.doc.career.nextMatchId === CAREER_MATCH_IDS[3], "loss: no Fan change, same match stays open");
   career(s, 4, true);
   const o5 = career(s, 5, true);
@@ -89,12 +89,14 @@ async function commit4() {
     const cfg = buildSetup(p, 1, s.doc).config;
     ok([...cfg.near.players, ...cfg.far.players].every((pl: any) => pl.chemistry === undefined && pl.stats === undefined), `${p.mode}: engine chemistry / stats unset`);
   }
-  // Growth caps at 100; Chemistry halves at 50+.
+  // Growth (7.1, replaces the 100 cap): running total, capped 300 in the
+  // Community Cup; Chemistry gains halved at 50+.
   const { s: c } = await fresh();
-  (c.doc as any).partners.anli.growth = 96;
+  (c.doc as any).partners.anli.growth = 296;
   (c.doc as any).chemistryHalves["player+anli"] = 100; // 50.0
+  (c.doc as any).chemistryPeakHalves["player+anli"] = 100;
   c.completeMatch({ matchId: "cap", kind: "career", won: true, careerMatchId: CAREER_MATCH_IDS[0], partnerId: "anli" }, T0);
-  ok(c.doc.partners.anli.growth === 100 && c.doc.chemistryHalves["player+anli"] === 101 && c.chemistry("anli") === 50, "growth stops at 100; chemistry +1 halved to +0.5 above 50, shown rounded down");
+  ok(c.doc.partners.anli.growth === 300 && c.doc.chemistryHalves["player+anli"] === 102 && c.chemistry("anli") === 51, "growth stops at 300 (Community Cup); chemistry +2 halved to +1 at 50+");
 }
 
 async function commit5() {
@@ -131,26 +133,68 @@ async function commit5() {
 
   // Training / Scrimmage with Upsi while Anli stays active.
   ok(s.setTrainingPartner("upsi") && s.doc.activePartnerId === "anli", "training partner Upsi, Anli still active");
-  const tr = (kind: "training" | "scrimmage", at = T0) => s.completeMatch({ matchId: `${kind}${++seq}`, kind, won: seq % 2 === 0, partnerId: s.doc.trainingPartnerId }, at);
+  const tr = (kind: "training" | "scrimmage", at = T0, won = true) => s.completeMatch({ matchId: `${kind}${++seq}`, kind, won, partnerId: s.doc.trainingPartnerId }, at);
   const c0 = s.doc.coins, f0 = s.doc.fans, ag = s.doc.partners.anli.growth;
-  eq(tr("training").lines, ["Upsi +20 Growth · +2 Chemistry"], "Training grants +20 / +2 to the training partner");
-  ok(s.doc.partners.upsi.growth === 20 && s.chemistry("upsi") === 2, "Upsi 20 / 2");
+  eq(tr("training").lines, ["Upsi +15 Growth · +2 Chemistry"], "Training win grants +15 / +2 to the training partner");
+  ok(s.doc.partners.upsi.growth === 15 && s.chemistry("upsi") === 2, "Upsi 15 / 2");
   eq(tr("scrimmage").lines, ["Upsi +10 Growth · +1 Chemistry"], "Scrimmage +10 / +1");
-  tr("training");
+  eq(tr("training", T0, false).lines, ["Upsi +4 Growth · +0.5 Chemistry"], "Training loss +4 / +0.5");
   eq(s.dailyUsage(T0), { training: 2, scrimmage: 1 }, "counts used");
   const capped = tr("training");
-  ok(capped.capped === true && capped.lines.join() === "Progress used today — play for fun" && s.doc.partners.upsi.growth === 50, "after cap: plays, grants nothing");
+  ok(capped.capped === true && capped.lines.join() === "Progress used today — play for fun" && s.doc.partners.upsi.growth === 29, "after cap: plays, grants nothing");
+  eq(tr("scrimmage", T0, false).lines, ["Upsi +2 Growth · +0.5 Chemistry"], "Scrimmage loss +2 / +0.5");
   tr("scrimmage");
-  tr("scrimmage");
-  ok(tr("scrimmage").capped === true && s.doc.partners.upsi.growth === 70, "scrimmage cap 3");
+  ok(tr("scrimmage").capped === true && s.doc.partners.upsi.growth === 41, "scrimmage cap 3");
   ok(s.doc.coins === c0 && s.doc.fans === f0 && s.doc.partners.anli.growth === ag, "Training/Scrimmage never pay Coins / Fans, active partner untouched");
   ok(tr("training", T0 - 2 * DAY).capped === true, "clock moved back: cap still holds");
-  ok(!tr("training", T0 + DAY).capped && s.doc.daily.training === 1, "next local day: fresh cap");
+}
+
+// Session D Commit 6/7: result-screen data, levels, chemistry fade / floor / catch-up.
+async function sessionD() {
+  const { s } = await fresh();
+  career(s, 1, true);
+  career(s, 2, true);
+  const o3 = career(s, 3, true);
+  eq(o3.moments.map((m) => m.kind), ["stage", "court", "partner"], "Match 3: three moments in order");
+  eq(o3.coins, { before: 500, after: 775, parts: ["Win +100", "Rival +100", "Milestone I +75"] }, "Coins tile 500 → 775 with parts");
+  eq(o3.fans, { before: 40, after: 85, parts: ["Win +20", "Rival +25"] }, "Fans tile 40 → 85");
+  ok(o3.partner?.growthBefore === 24 && o3.partner.growthAfter === 36 && o3.partner.chemAfter === 6, "partner row 24 → 36 Growth, 6 Chemistry");
+  ok(career(s, 4, false).moments.length === 0, "ordinary match: no pop-ups");
+  ok(s.doc.courtsPlayed.join() === "bandra_garden,mumbai_local", "courts played tracked (NEW tag)");
+  const q = s.completeMatch({ matchId: "qd", kind: "quick", won: true, partnerId: "anli" }, T0);
+  ok(!q.fans && q.coins?.parts.join() === "Win +40", "Quick Play: Coins tile only");
+  // Levels / stage cap: Mumbai Local unlocked → cap 500.
+  const { levelView, growthCap } = await import("../meta/levels");
+  ok(growthCap("mumbai.community.02") === 300 && growthCap("mumbai.local.04") === 500, "cap 300 Community Cup / 500 Mumbai Local");
+  eq(levelView(140, "mumbai.community.02"), { level: 2, frac: 0.4, text: "40 / 100" }, "140 → Lv 2, 40/100");
+  ok(levelView(300, "mumbai.community.03").max === "MAX for Community Cup" && levelView(300, "mumbai.community.03").level === 3, "300 → Lv 3 MAX for Community Cup");
+  // Fade: sign Upsi, play 3 with her → Anli −1, Rusty; then catch-up.
+  (s.doc as any).coins = 5000;
+  ok(s.signPartner("upsi", T0) && s.setTrainingPartner("upsi"), "Upsi signed, training partner");
+  const a0 = s.doc.chemistryHalves["player+anli"];
+  for (let i = 0; i < 3; i++) s.completeMatch({ matchId: `fu${i}`, kind: "scrimmage", won: true, partnerId: "upsi" }, T0);
+  ok(s.doc.chemistryHalves["player+anli"] === a0 - 2 && s.doc.ledger.some((e) => e.sourceType === "chemistry_fade"), "3 apart → Anli −1 via chemistry_fade ledger");
+  ok(s.doc.chemistryHalves["player+anli"] < s.doc.chemistryPeakHalves["player+anli"], "below peak → Rusty");
+  const back = career(s, 1, true);
+  ok(back.partner!.chemAfter - back.partner!.chemBefore === 3 && s.doc.chemistryHalves["player+anli"] === a0 - 2 + 6, "catch-up: +2 doubled up to the peak (+3)");
+  ok(s.doc.apart["player+anli"] === 0 && s.doc.apart["player+upsi"] === 1, "played together resets; other partner counts apart");
+  // Floor: never below the highest multiple of 25 reached.
+  (s.doc as any).chemistryHalves["player+anli"] = 52; // 26
+  (s.doc as any).chemistryPeakHalves["player+anli"] = 60; // 30 → floor 25
+  for (let i = 0; i < 6; i++) s.completeMatch({ matchId: `fl${i}`, kind: "scrimmage", won: true, partnerId: "upsi" }, T0 + 2 * DAY);
+  ok(s.chemistry("anli") === 25, "fade floor 25");
+  // 1v1: no fade.
+  const h = s.doc.chemistryHalves["player+anli"], ap = s.doc.apart["player+anli"];
+  s.completeMatch({ matchId: "solo", kind: "quick", won: true, singles: true }, T0);
+  ok(s.doc.chemistryHalves["player+anli"] === h && s.doc.apart["player+anli"] === ap, "1v1 never fades");
+  // Quick Play partner never changes Career / training partner.
+  ok(s.setQuickPartner("upsi") && s.doc.activePartnerId === "anli" && s.doc.trainingPartnerId === "upsi" && buildSetup({ mode: "quick", difficulty: "CLUB" }, 1, s.doc).config.near.players[1].name === "Upsi", "Quick Play partner Upsi; Career partner stays Anli");
 }
 
 (async () => {
   await commit4();
   await commit5();
+  await sessionD();
   console.log(`=== PHASE 1C RESULT: ${pass} passed, ${fail} failed ===`);
   if (fail) process.exitCode = 1;
 })();

@@ -13,9 +13,11 @@ import {
   CAREER_MATCHES,
   CAREER_REWARDS,
   CAREER_UNLOCKS,
+  CHEMISTRY_FADE_EVERY,
+  CHEMISTRY_FLOOR_STEP,
   CHEMISTRY_HALVE_AT,
   CHEMISTRY_MAX,
-  GROWTH_MAX,
+  PARTNER_REWARDS,
   PARTNERS,
   QUICK_PLAY_REWARDS,
   SIGN_COST,
@@ -34,6 +36,7 @@ import {
   START_VALUES,
   type Currency,
 } from "./economyConfig";
+import { growthCap } from "./levels";
 
 export interface StorageAdapter {
   getItem(key: string): Promise<string | null>;
@@ -73,6 +76,10 @@ export interface SaveDoc {
   trainingPartnerId: string;
   partners: Record<string, PartnerState>;
   chemistryHalves: Record<string, number>; // pairing key → half points (0..200)
+  chemistryPeakHalves: Record<string, number>; // highest value each pairing ever reached
+  apart: Record<string, number>; // pairing key → matches played with someone else in a row
+  quickPartnerId: string; // "" = follow the Career partner
+  courtsPlayed: string[]; // courts with at least one completed Career match (NEW tag)
   career: { cleared: string[]; nextMatchId: string; firstClearWins: number; firstClearLosses: number };
   namedRivals: Record<string, boolean>;
   milestones: Record<string, boolean>;
@@ -154,6 +161,10 @@ export function freshSave(now: number, rand: () => number = Math.random): SaveDo
     trainingPartnerId: STARTER_PARTNER_ID,
     partners: { [STARTER_PARTNER_ID]: { discovered: true, signable: true, signed: true, growth: 0 } },
     chemistryHalves: { [pairingKey(STARTER_PARTNER_ID)]: 0 },
+    chemistryPeakHalves: {},
+    apart: {},
+    quickPartnerId: "",
+    courtsPlayed: [],
     career: { cleared: [], nextMatchId: FIRST_CAREER_MATCH_ID, firstClearWins: 0, firstClearLosses: 0 },
     namedRivals: {},
     milestones: {},
@@ -190,6 +201,13 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
   if (r.chemistryHalves && typeof r.chemistryHalves === "object") {
     for (const [k, v] of Object.entries(r.chemistryHalves)) chemistryHalves[k] = Math.min(CHEMISTRY_MAX * 2, Math.round(num(v, 0)));
   }
+  const numMap = (v: unknown) => {
+    const out: Record<string, number> = {};
+    if (v && typeof v === "object") for (const [k, n] of Object.entries(v)) out[k] = num(n, 0);
+    return out;
+  };
+  const chemistryPeakHalves = numMap(r.chemistryPeakHalves);
+  for (const [k, v] of Object.entries(chemistryHalves)) chemistryPeakHalves[k] = Math.max(chemistryPeakHalves[k] ?? 0, v);
   const c = r.career && typeof r.career === "object" ? r.career : {};
   const dly = r.daily && typeof r.daily === "object" ? r.daily : {};
   return {
@@ -206,6 +224,10 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
     trainingPartnerId: str(r.trainingPartnerId, base.trainingPartnerId),
     partners,
     chemistryHalves,
+    chemistryPeakHalves,
+    apart: numMap(r.apart),
+    quickPartnerId: typeof r.quickPartnerId === "string" ? r.quickPartnerId : "",
+    courtsPlayed: strArr(r.courtsPlayed),
     career: {
       cleared: strArr(c.cleared).filter((id: string) => (CAREER_MATCH_IDS as readonly string[]).includes(id)),
       nextMatchId: (CAREER_MATCH_IDS as readonly string[]).includes(c.nextMatchId) ? c.nextMatchId : base.career.nextMatchId,
@@ -312,7 +334,12 @@ export class MetaStore {
       case "gems": d.gems = value; break;
       case "fans": d.fans = value; break;
       case "growth": d.partners[target!].growth = value; break;
-      case "chemistry": d.chemistryHalves[target!] = Math.round(value * 2); break;
+      case "chemistry": {
+        const h = Math.round(value * 2);
+        d.chemistryHalves[target!] = h;
+        d.chemistryPeakHalves[target!] = Math.max(d.chemistryPeakHalves[target!] ?? 0, h);
+        break;
+      }
     }
   }
 
@@ -329,7 +356,9 @@ export class MetaStore {
     let after = before + delta;
     if (after < 0) return { ok: false, reason: "insufficient" };
     if (currency === "chemistry") after = Math.min(CHEMISTRY_MAX, after);
-    if (currency === "growth") after = Math.min(GROWTH_MAX, after);
+    // Growth: capped by the furthest unlocked stage; a value already above the
+    // cap (older saves) is kept, never reduced.
+    if (currency === "growth" && delta > 0) after = Math.max(before, Math.min(growthCap(this.doc.career.nextMatchId), after));
     this.write(currency, after, target);
     const entry: LedgerEntry = {
       rewardId, currency, target, valueBefore: before, delta: after - before, valueAfter: after,
@@ -376,6 +405,8 @@ export class MetaStore {
       won: boolean;
       careerMatchId?: string;
       partnerId?: string; // the partner who actually played
+      singles?: boolean; // 1v1: no partner (no Chemistry fade)
+      court?: string;
     },
     now: number,
   ): MatchOutcome {
@@ -408,17 +439,21 @@ export class MetaStore {
       if (v > 0) out.lines.push(`+${v} Fans${suffix}`);
       tile("fans", label, v);
     };
-    // Partner progress: Growth caps at 100; Chemistry is halved at 50+ (stored
-    // in half points). The line shows the base reward, as the cards do.
+    // Partner progress: Growth capped by stage; Chemistry doubled while below the
+    // pairing's peak (the extra only up to the peak), then halved at 50+ (0.5
+    // steps, min 0.5). Stored in half points.
     const partnerLine = (partnerId: string, growth: number, chemistry: number) => {
       if (!d.partners[partnerId]) return;
       const key = pairingKey(partnerId);
       const chemNow = (d.chemistryHalves[key] ?? 0) / 2;
+      const peak = (d.chemistryPeakHalves[key] ?? 0) / 2;
+      let cg = chemistry + Math.min(chemistry, Math.max(0, peak - chemNow));
+      if (chemNow >= CHEMISTRY_HALVE_AT) cg = Math.max(0.5, Math.floor(cg) / 2);
       const gBefore = d.partners[partnerId].growth;
       const g = give(`growth:${partnerId}`, "growth", growth, partnerId);
-      const c = give(`chemistry:${key}`, "chemistry", chemNow >= CHEMISTRY_HALVE_AT ? chemistry / 2 : chemistry, key);
+      const c = give(`chemistry:${key}`, "chemistry", cg, key);
       out.partner = { id: partnerId, growthBefore: gBefore, growthAfter: d.partners[partnerId].growth, chemBefore: chemNow, chemAfter: (d.chemistryHalves[key] ?? 0) / 2 };
-      const parts = [g > 0 ? `+${g} Growth` : "", c > 0 ? `+${chemistry} Chemistry` : ""].filter(Boolean);
+      const parts = [g > 0 ? `+${g} Growth` : "", c > 0 ? `+${c} Chemistry` : ""].filter(Boolean);
       if (parts.length) out.lines.push(`${PARTNERS[partnerId as PartnerId]?.name ?? partnerId} ${parts.join(" · ")}`);
     };
     this.rewardSet.add(doneId);
@@ -474,8 +509,9 @@ export class MetaStore {
       } else {
         coinsLine("coins", m.won ? R.replay.winCoins : R.replay.lossCoins, "", m.won ? "Replay win" : "Replay");
       }
-      const pr = m.won ? R.partnerWin : R.partnerLoss;
+      const pr = PARTNER_REWARDS.career[m.won ? "win" : "loss"];
       partnerLine(m.partnerId ?? d.activePartnerId, pr.growth, pr.chemistry);
+      if (m.court && !d.courtsPlayed.includes(m.court)) d.courtsPlayed.push(m.court);
       analytics.track("career_match_completed", { matchId: m.matchId, careerMatchId: id, won: m.won, replay: !firstAttempt });
     } else if (m.kind === "training" || m.kind === "scrimmage") {
       // Daily cap by local day key (rollDay above never moves backwards).
@@ -483,7 +519,8 @@ export class MetaStore {
       const t = TRAINING_MODES[m.kind];
       const used = d.daily[m.kind];
       d.daily[m.kind] = used + 1;
-      if (used < t.dailyCap) partnerLine(m.partnerId ?? d.trainingPartnerId, t.growth, t.chemistry);
+      const pr = PARTNER_REWARDS[m.kind][m.won ? "win" : "loss"];
+      if (used < t.dailyCap) partnerLine(m.partnerId ?? d.trainingPartnerId, pr.growth, pr.chemistry);
       else {
         out.capped = true;
         out.lines.push("Progress used today — play for fun");
@@ -493,8 +530,45 @@ export class MetaStore {
       coinsLine("coins", m.won ? QUICK_PLAY_REWARDS.winCoins : QUICK_PLAY_REWARDS.lossCoins, "", m.won ? "Win" : "Loss");
       analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won });
     }
+    if (!m.singles) this.fadeOthers(m.partnerId ?? (m.kind === "career" ? d.activePartnerId : m.kind === "quick" ? this.quickPartner() : d.trainingPartnerId), m, src, now);
     this.save();
     return out;
+  }
+
+  // CHEMISTRY FADE (match end only): the partner who played resets their
+  // "apart" counter; every other signed partner's +1, and every 3rd → −1
+  // Chemistry, never below the highest multiple of 25 that pairing reached.
+  private fadeOthers(playedId: string, m: { kind: MatchKind; matchId: string }, src: Source, now: number) {
+    const d = this.docState!;
+    for (const id of Object.keys(d.partners)) {
+      if (!d.partners[id].signed) continue;
+      const key = pairingKey(id);
+      if (id === playedId) {
+        d.apart[key] = 0;
+        continue;
+      }
+      const n = (d.apart[key] ?? 0) + 1;
+      d.apart[key] = n;
+      if (n % CHEMISTRY_FADE_EVERY !== 0) continue;
+      const cur = (d.chemistryHalves[key] ?? 0) / 2;
+      const floor = Math.floor((d.chemistryPeakHalves[key] ?? 0) / 2 / CHEMISTRY_FLOOR_STEP) * CHEMISTRY_FLOOR_STEP;
+      const drop = Math.min(1, cur - floor);
+      if (drop > 0) this.applyLedger(`${m.kind}:${m.matchId}:fade:${key}`, "chemistry", -drop, { sourceType: "chemistry_fade", sourceId: src.sourceId }, now, key);
+    }
+  }
+
+  // Quick Play partner: its own choice (defaults to the Career partner).
+  quickPartner(): string {
+    const d = this.doc;
+    return d.quickPartnerId && d.partners[d.quickPartnerId]?.signed ? d.quickPartnerId : d.activePartnerId;
+  }
+
+  setQuickPartner(partnerId: string): boolean {
+    const d = this.docState!;
+    if (!d.partners[partnerId]?.signed || d.quickPartnerId === partnerId) return false;
+    d.quickPartnerId = partnerId;
+    this.save();
+    return true;
   }
 
   // ---- Partners / flags (each saves once) --------------------------------

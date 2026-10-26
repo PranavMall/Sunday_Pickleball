@@ -62,18 +62,18 @@ ok(r1.coins === CAREER_REWARDS.win.coins && r1.fans === CAREER_REWARDS.win.fans,
 const cs = careerSetup(careerMatch("mumbai.community.02"), "anli", 3).config;
 ok(cs.matchType === "career" && cs.court === "bandra_garden" && cs.far.players.map((p) => p.profileId).join() === "ROOKIE,ROOKIE" && cs.far.players.map((p) => p.personality).join() === "KITCHEN,TACTICAL" && cs.far.players[0].name === "Upsi" && cs.ruleModifiers === undefined, "career setup: per-slot AI, recruit name, to 11");
 const c4 = careerSetup(careerMatch("mumbai.local.04"), "anli", 3).config;
-ok(c4.court === "mumbai_local" && c4.far.players.map((p) => p.profileId).join() === "ROOKIE,CLUB", "career 4: Mumbai Local court, ROOKIE + CLUB");
+ok(c4.court === "mumbai_local" && c4.far.players.map((p) => p.profileId).join() === "CLUB,CLUB", "career 4: Mumbai Local court, CLUB + CLUB (Session D 7.8)");
 for (const mode of ["training", "scrimmage"] as const) {
   const t = trainingSetup(mode, "upsi", 3).config;
   ok(t.ruleModifiers?.pointsToWin === 7 && t.ruleModifiers?.winBy === 2 && t.court === "bandra_garden" && t.near.players[1].personality === "KITCHEN" && t.near.players[1].profileId === PARTNER_DIFFICULTY, `${mode}: first to 7 win by 2 with the training partner`);
 }
 
 const base = freshSave(0, () => 0.5);
-ok(inboxMessages(base).length === 0 && !hasUnread(base), "fresh save: empty inbox, no dot");
+ok(inboxMessages(base).map((m) => m.id).join() === "inbox.welcome" && hasUnread(base), "fresh save: Welcome message + dot (Session D 7.9)");
 const s2 = { ...base, career: { ...base.career, cleared: ["mumbai.community.01", "mumbai.community.02"] } };
-ok(inboxMessages(s2).map((m) => m.id).join() === "inbox.met_upsi" && hasUnread(s2), "after Match 2: 'You met Upsi in Dadar' + dot");
-const s5 = { ...base, career: { ...base.career, cleared: CAREER_MATCH_IDS.slice(0, 5) as unknown as string[] }, inboxRead: ["inbox.met_upsi", "inbox.upsi_signable"] };
-ok(inboxMessages(s5).length === 3 && hasUnread(s5), "after Match 5: three messages, Local Final unread");
+ok(inboxMessages(s2).map((m) => m.id).join() === "inbox.welcome,inbox.met_upsi" && hasUnread(s2), "after Match 2: Welcome + Met Upsi + dot");
+const s5 = { ...base, career: { ...base.career, cleared: CAREER_MATCH_IDS.slice(0, 5) as unknown as string[] }, inboxRead: ["inbox.welcome", "inbox.met_upsi", "inbox.upsi_signable", "inbox.new_court_local", "inbox.matz_watching"] };
+ok(inboxMessages(s5).length === 6 && hasUnread(s5) && inboxMessages(s5).every((m) => m.cta.label && m.cta.path), "after Match 5: six messages each with a CTA, Match 6 unread");
 ok(!hasUnread({ ...s5, inboxRead: [...s5.inboxRead, "inbox.local_final_soon"] }), "all read → no dot");
 
 ok(discoveredPartners(base).join() === "anli" && rosterStatus(base, "anli").kind === "active", "fresh roster: Anli only, ACTIVE");

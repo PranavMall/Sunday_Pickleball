@@ -63,11 +63,13 @@ export function parseDifficulty(d: string | undefined): Difficulty {
 }
 
 // Route params → setup. Partners come from the save (read once at match build).
-export function buildSetup(p: LaunchParams, seed: number, save: { activePartnerId: string; trainingPartnerId: string; partners?: Record<string, { signed: boolean }> } | null): MatchSetup {
+export function buildSetup(p: LaunchParams, seed: number, save: { activePartnerId: string; trainingPartnerId: string; quickPartnerId?: string; partners?: Record<string, { signed: boolean }> } | null): MatchSetup {
   if (p.mode === "career") return careerSetup(careerMatch(p.careerId), save?.activePartnerId ?? STARTER_PARTNER_ID, seed, (id) => !!save?.partners?.[id]?.signed);
   if (p.mode === "training" || p.mode === "scrimmage") return trainingSetup(p.mode, save?.trainingPartnerId ?? STARTER_PARTNER_ID, seed);
   const devCourt = __DEV__ && p.court === "mumbai_local" ? ("mumbai_local" as CourtId) : undefined;
-  return quickPlaySetup(parseDifficulty(p.difficulty), p.singles === "1", save?.activePartnerId ?? STARTER_PARTNER_ID, seed, devCourt);
+  // Quick Play partner: its own saved choice, defaulting to the Career partner.
+  const qp = save?.quickPartnerId && save.partners?.[save.quickPartnerId]?.signed ? save.quickPartnerId : save?.activePartnerId;
+  return quickPlaySetup(parseDifficulty(p.difficulty), p.singles === "1", qp ?? STARTER_PARTNER_ID, seed, devCourt);
 }
 
 function nearTeam(partnerId: string) {

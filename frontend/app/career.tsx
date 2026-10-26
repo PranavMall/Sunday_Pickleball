@@ -14,6 +14,8 @@ import {
   type CareerMatchDef,
 } from "@/src/game/meta/economyConfig";
 import { partnerOf } from "@/src/game/meta/matchSetup";
+import { levelView } from "@/src/game/meta/levels";
+import { teamCode } from "@/src/game/services/profile";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions } from "@/src/ui/HeaderActions";
 import { Badge, Card, Coin, GoldButton, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
@@ -39,7 +41,8 @@ export default function Career() {
   const stage = STAGE_NAMES[next.stageKey];
   const reward = careerRewardPreview(next, replay);
   const partner = partnerOf(save?.activePartnerId);
-  const growth = save?.partners[partner.id]?.growth ?? 0;
+  const lv = levelView(save?.partners[partner.id]?.growth ?? 0, save?.career.nextMatchId ?? next.id);
+  const myCode = teamCode(identity?.teamName ?? "", next.code);
   const chem = Math.floor((save?.chemistryHalves[`player+${partner.id}`] ?? 0) / 2);
 
   return (
@@ -86,7 +89,10 @@ export default function Career() {
                               <Ionicons name="star" size={12} color={current ? UI.goldInk : "#8B826C"} />
                             ) : null}
                           </View>
-                          <Text style={[styles.nodeNum, !m.enabled && { color: UI.muted }]}>{n}</Text>
+                          <View style={styles.numRow}>
+                            <Text style={[styles.nodeNum, !m.enabled && { color: UI.muted }]}>{n}</Text>
+                            {done ? <Ionicons name="refresh" size={9} color={UI.green} testID={`replay-${n}`} /> : null}
+                          </View>
                         </Pressable>
                       </React.Fragment>
                     );
@@ -96,6 +102,7 @@ export default function Career() {
             );
           })}
         </View>
+        {cleared.length ? <Text style={styles.caption} testID="replay-caption">Tap ✓ to replay</Text> : null}
       </Card>
 
       <Card style={styles.pad} testID="next-match-card">
@@ -114,14 +121,15 @@ export default function Career() {
           <View style={{ flex: 1 }}>
             <View style={styles.vsRow}>
               <View style={styles.side}>
-                <Badge name={identity?.playerName ?? "P"} color={PLAYER_BADGE_COLOR} size={50} />
-                <Text style={styles.sideName} numberOfLines={2} testID="nm-player-name">{identity?.playerName ?? ""}</Text>
-                <Text style={styles.sideName} numberOfLines={2} testID="nm-team-name">Team {identity?.teamName ?? ""}</Text>
+                <Badge name={identity?.playerName ?? "P"} color={PLAYER_BADGE_COLOR} size={44} />
+                <Text style={styles.sideName} numberOfLines={1} adjustsFontSizeToFit testID="nm-player-name">{identity?.playerName ?? ""}</Text>
+                <Text style={styles.code} testID="nm-team-code">{myCode}</Text>
               </View>
               <Text style={styles.vs}>VS</Text>
               <View style={styles.side}>
-                <Badge name={next.rival} color={next.color} size={50} testID="rival-badge" />
-                <Text style={styles.sideName} numberOfLines={2} testID="rival-name">{next.rival}</Text>
+                <Badge name={next.rival} color={next.color} size={44} testID="rival-badge" />
+                <Text style={styles.code} testID="rival-code">{next.code}</Text>
+                <Text style={styles.rivalFull} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} testID="rival-name">{next.rival}</Text>
                 {next.namedRival ? (
                   <View style={styles.rivalTag} testID="badge-rival">
                     <Text style={styles.rivalTagText}>RIVAL TEAM</Text>
@@ -150,7 +158,14 @@ export default function Career() {
           </View>
           {next.court ? (
             <View style={{ marginLeft: 8, alignItems: "center" }}>
-              <CourtThumb court={next.court} width={width < 385 ? 96 : 118} />
+              <View>
+                <CourtThumb court={next.court} width={width < 385 ? 96 : 118} />
+                {save && !(save.courtsPlayed ?? []).includes(next.court) ? (
+                  <View style={styles.newTag} testID="court-new">
+                    <Text style={styles.newText}>NEW</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={styles.courtName} testID="court-name">{COURT_NAMES[next.court]}</Text>
             </View>
           ) : null}
@@ -179,7 +194,7 @@ export default function Career() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Text style={styles.partnerName}>{partner.name}</Text>
               <View style={styles.activeChip}>
-                <Text style={styles.activeText}>Active</Text>
+                <Text style={styles.activeText}>LV {lv.level}</Text>
               </View>
             </View>
             <Text style={styles.arch}>{partner.archetype}</Text>
@@ -193,7 +208,7 @@ export default function Career() {
             <Text style={styles.viewText}>VIEW{"\n"}IN TEAM ›</Text>
           </Pressable>
         </View>
-        <MeterRow icon="star" label="Growth" value={growth} color={UI.growth} testID="partner-growth" />
+        <MeterRow icon="star" label="Growth" value={lv.frac * 100} num={lv.max ?? lv.text} color={UI.growth} testID="partner-growth" />
         <MeterRow icon="heart" label="Chemistry" value={chem} color={UI.chem} testID="partner-chem" />
       </Card>
     </DestinationScreen>
@@ -217,7 +232,13 @@ const styles = StyleSheet.create({
   nodeHit: { alignItems: "center", minWidth: 28, minHeight: 44 },
   soon: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 58, borderRadius: 16, marginTop: 10, backgroundColor: UI.creamDeep, borderWidth: 1, borderColor: UI.line },
   soonText: { color: UI.muted, fontSize: 20, fontWeight: "900", letterSpacing: 1 },
-  nodeNum: { color: UI.ink, fontSize: 11, marginTop: 3 },
+  nodeNum: { color: UI.ink, fontSize: 11 },
+  numRow: { flexDirection: "row", alignItems: "center", gap: 1, marginTop: 3 },
+  caption: { color: UI.inkSoft, fontSize: 11, textAlign: "center", marginTop: 2 },
+  code: { color: UI.ink, fontSize: 15, fontWeight: "900", letterSpacing: 1.5, marginTop: 2 },
+  rivalFull: { color: UI.inkSoft, fontSize: 11, textAlign: "center", alignSelf: "stretch" },
+  newTag: { position: "absolute", top: -6, right: -6, backgroundColor: UI.red, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: UI.cream },
+  newText: { color: "#fff", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   nmHead: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   nmOf: { color: UI.inkSoft, fontSize: 13 },
   nmStage: { color: UI.inkSoft, fontSize: 13 },

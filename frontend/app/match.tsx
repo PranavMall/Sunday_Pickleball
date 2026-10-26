@@ -22,6 +22,7 @@ import { newMatchId, type MatchOutcome } from "@/src/game/meta/metaStore";
 import { nextGoal } from "@/src/game/meta/goals";
 import { careerMatch, PARTNERS, type PartnerId } from "@/src/game/meta/economyConfig";
 import { careerMatchLabel } from "@/src/game/meta/goals";
+import { levelView } from "@/src/game/meta/levels";
 import { Celebration, momentChip, ResultCard, type ResultButton, type ResultPartner } from "@/src/ui/MatchEnd";
 import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
@@ -332,7 +333,7 @@ export default function Match() {
         const setup = match.setup;
         const won = sim.winner === "near";
         initMeta().then(() => {
-          const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: setup.partnerId }, Date.now());
+          const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court }, Date.now());
           const d = meta.doc;
           setOutcome({ ...o, goal: setup.mode === "career" ? nextGoal(d) : null, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
         });
@@ -655,7 +656,7 @@ export default function Match() {
             loading={!outcome}
             coins={outcome?.coins}
             fans={outcome?.fans}
-            partner={outcome?.partner ? partnerRow(outcome.partner) : undefined}
+            partner={outcome?.partner ? partnerRow(outcome.partner, outcome.nextCareerId) : undefined}
             chips={(outcome?.moments ?? []).map(momentChip)}
             lines={outcome?.capped ? outcome.lines : []}
             next={outcome?.goal}
@@ -705,17 +706,21 @@ function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
-function partnerRow(pd: NonNullable<MatchOutcome["partner"]>): ResultPartner {
+function partnerRow(pd: NonNullable<MatchOutcome["partner"]>, nextMatchId: string): ResultPartner {
   const p = PARTNERS[pd.id as PartnerId];
   const g = pd.growthAfter - pd.growthBefore;
   const c = pd.chemAfter - pd.chemBefore;
+  const lb = levelView(pd.growthBefore, nextMatchId);
+  const la = levelView(pd.growthAfter, nextMatchId);
+  const up = la.level > lb.level;
   return {
     id: pd.id,
     name: p?.name ?? pd.id,
     color: p?.color ?? "#2E7D4F",
-    level: "LV 1",
+    level: `LV ${la.level}`,
+    lvUp: up ? `LV UP · Lv ${la.level}` : undefined,
     gain: [`+${fmt(g)} Growth`, `+${fmt(c)} Chemistry`].join(" · "),
-    growth: { from: pd.growthBefore / 100, to: pd.growthAfter / 100, text: `${Math.floor(pd.growthAfter)} / 100` },
+    growth: { from: up ? 0 : lb.frac, to: la.frac, text: la.text, max: la.max },
     chem: { from: pd.chemBefore / 100, to: pd.chemAfter / 100, text: `${Math.floor(pd.chemAfter)} / 100` },
   };
 }
