@@ -2,7 +2,7 @@
 # Paste into the browser_automation tool (runs inside an async fn with `page`). Viewport 375x667.
 import json
 
-BASE = "https://pickle-team-up.preview.emergentagent.com"  # = frontend/.env EXPO_PACKAGER_PROXY_URL
+BASE = "https://pickle-sprites.preview.emergentagent.com"  # = frontend/.env EXPO_PACKAGER_PROXY_URL
 
 # Career Match 3 clean path seed (localStorage key 'pb.meta', schemaVersion 1)
 SEED_M3 = {

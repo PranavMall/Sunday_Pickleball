@@ -1,0 +1,29 @@
+{
+  "summary": "Commit 8.2 frontend-only verification on web preview (390x844). Tested all 7 fixes. Fix 1: capped Training ('Progress used today — play for fun') with Upsi left Anli's chemistryHalves (20) and apart ({}) unchanged. Fix 2: NEXT MATCH (M3->M4 Mumbai Local, M4->M5), REMATCH (Quick), PLAY AGAIN (Training), TRY AGAIN (Career loss) all show loading-cover again. With asset requests delayed 2.5s, the cover was still up at 1.5s and the new sim's time stayed at 0 (held); it moved to ~2.8s once ready. Fix 3: chemistryHalves 13 shows '6.5 / 100' and 12 shows '6 / 100' on partner-chem, chem-anli and stats-chem. Fix 4: training-gains reads 'Win ★+15 / ♥+2 · Loss ★+4 / ♥+0.5' and scrimmage-gains 'Win ★+10 / ♥+1 · Loss ★+2 / ♥+0.5', each on one line (15px tall). Fix 5: a live PRO rally ran ~20s with no page errors; the smash pose itself was not visually checked. Fix 6: expo-asset ~57.0.20 is in package.json. Fix 7: Upsi routes (a) M3 pop-up SIGN IN TEAM -> sign (750) -> Career partner -> PLAY MATCH, (b) NEXT MATCH with Upsi, (c) act-quick-upsi -> Quick Play, (d) act-train-upsi plus training/scrimmage-start all show 'sprites: loaded qt + upsi'. Anli routes (career, quick, try again) show 'sprites: loaded qt + anli'. Blocking the upsi sheet request gives 'sprites: failed – upsi: [object Event]', falls back to the dot and the cover still lifts. No red screens or page errors on any screen tested.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "sprite-status failure reason", "issue": "On web, when a sheet fails to load, the rejection reason is a DOM Event, so the DEV line shows 'sprites: failed – upsi: [object Event]' instead of a useful reason. Reference: /app/frontend/src/game/render/spriteSheets.ts:50"}
+    ]
+  },
+  "test_report_links": ["/app/tests/pw_helpers.py"],
+  "action_items": [
+    "(Minor, DEV only) spriteSheets.ts:50: format non-Error rejections, e.g. reason instanceof Event ? `load error (${reason.type})` : String(reason), so the failure reason in sprite-status is readable on web."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx: readyId === matchId plus matchIdRef inside onCourtReady correctly resets the cover for each match. The loop's idle check (!readyRef.current) holds the sim, which the runs confirmed.",
+    "CourtRenderer passes key=matchKey to GameCanvas on both native and web, so useSpriteSheets and courtLoaded remount for each match.",
+    "spriteLoadStatus is a module-level mutable object, not React state. The DEV overlay only picks it up on the next render, which is fine for DEV use.",
+    "Deprecation warnings in the console (shadow* -> boxShadow, props.pointerEvents, Skia SkPath.moveTo/lineTo -> PathBuilder) are not blocking. No deprecated expo-av, expo-barcode-scanner or expo-background-fetch."
+  ],
+  "updated_files": ["/app/tests/pw_helpers.py (new, test helper snippets only)"],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100% of requested checks (1 minor DEV-only cosmetic issue)"},
+  "seed_data_creation": "None persisted; each browser run patched localStorage 'pb.meta' (career progress, partners, chemistryHalves, daily caps, coins).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Force a win: s=globalThis.__pwSim; s.score.nearScore=s.pointsToWin-1; s.score.farScore=0; s.score.servingTeam='near'; s.registerFault({reason:'OUT',faultingTeam:'far',x:0,y:0,message:'qa'}). The step loop then moves to game_over. debugPlayPoint alone never reaches game_over. Pop-ups: celebration-later / celebration-continue / celebration-sign. To test that the sim is held: page.route('**/assets/**') with a 2.5s delay before clicking REMATCH/NEXT, then check __pwSim.time stays 0 while loading-cover is present. To force a sheet failure: page.route('**partner_upsi_back*', abort). The identity prompt shows on first load ('Skip for now').",
+  "rca_of_issue": ""
+}
