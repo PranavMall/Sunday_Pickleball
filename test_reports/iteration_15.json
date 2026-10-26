@@ -1,0 +1,31 @@
+{
+  "summary": "Commit 8.1 sprite-loading fix (expo-asset -> Skia.Data.fromURI -> MakeImageFromEncoded) tested on the web preview at 375x667. Everything requested PASSES with 0 page errors and no '[sprites]' warnings. /match?mode=quick&difficulty=CLUB: loading-cover is gone after ~0.5 s, with no error boundary. DEV sprite-status reads exactly 'sprites: loaded'. During a rally (started by swiping up) both near players are drawn as pixel sprites (QT plus Anli), not round placeholders. In the pause menu, sprites-toggle switches 'Sprites: On' -> 'Off' (placeholder bodies shown in play) -> 'On' with no errors. After a forced game over (__pwSim 11-5 near), end-sequence-skip, then REMATCH: no loading cover, status 'sprites: loaded', 0 new sheet requests (the session cache works), and sprites show in the rally. Career (/career play-match, M3 vs CCK) and Training (/training training-start, DRL) both show sprites with status loaded. With Upsi signed (activePartnerId/trainingPartnerId 'upsi'), partner_upsi_back.png loads and the Upsi sprite is drawn in Career and Training. Expo Go native could NOT be tested here (web only).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "expo-asset dependency", "issue": "spriteSheets.ts imports 'expo-asset', but expo-asset is not listed in frontend/package.json. It only resolves because the expo package pulls it in (node_modules/expo-asset 57.0.18). Expo recommends adding it as a direct dependency. Reference: /app/frontend/src/game/render/spriteSheets.ts:5"}
+    ]
+  },
+  "test_report_links": ["/app/tests/e2e_session_d_helpers.py"],
+  "action_items": [
+    "Add expo-asset as a direct dependency (npx expo install expo-asset, or yarn add expo-asset@~57.0.18) so the Expo Go/native build does not depend on hoisting.",
+    "Verify on a real device in Expo Go that DEV shows 'sprites: loaded'. The web preview cannot reproduce the original Expo Go decode bug."
+  ],
+  "critical_code_review_comments": [
+    "spriteSheets.ts is clean: there is one in-flight promise per module, results are cached by module id, a failed load is removed from 'pending' so the next match retries, and Promise.allSettled lets one sheet fail without blocking the other. The 4 s cover fallback in GameCanvas still guards against a hang.",
+    "On web each sheet is fetched twice per cold load (once by Asset.downloadAsync, once by Skia.Data.fromURI), both returning 200. This is harmless and served from the HTTP cache, but you could skip downloadAsync on web.",
+    "spriteLoadStatus is a mutable module-level object, not React state. The DEV text only updates because the match screen re-renders often. That is fine for DEV, but it shows the status of the last load to finish, not necessarily the current match's.",
+    "If a hang happens (downloadAsync never settles), status stays 'sprites: loading' and the cover drops after 4 s with placeholders. This is acceptable, but a timeout that sets 'sprites: failed – timeout' would make it visible.",
+    "Risk for standalone/release Android builds: for embedded assets, expo-asset's localUri can be a resource name instead of a file:// URI, and Skia.Data.fromURI may then fail. Check the DEV status in a release build too."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100% (7/7 requested scenarios on web)"},
+  "seed_data_creation": "localStorage 'pb.meta' only (Career M3 seed with Anli; same seed with upsi signed + activePartnerId/trainingPartnerId 'upsi').",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Offline Expo app, no backend. Sprite status is in the DEV overlay (dev-toggle -> sprite-status). Sheets are requested from /assets/?unstable_path=./assets/images/{player_qt_back,partner_anli_back,partner_upsi_back}.png. Pause menu ids: resume-button, sprites-toggle. Training start id: training-start / scrimmage-start. Start a rally by dragging the mouse from (187,600) up 320px. A full page goto resets the session sprite cache (expected); in-app REMATCH reuses it.",
+  "rca_of_issue": "Not reproducible on web (the original bug is Expo Go-only). The fix path works end-to-end on web."
+}
