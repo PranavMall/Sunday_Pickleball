@@ -1,9 +1,11 @@
 // Shared code-drawn UI kit for the destination screens (Phase 1A Session B).
 // Everything here is drawn by code: badges, buttons, cards, chips, icons.
 import { Ionicons } from "@react-native-vector-icons/ionicons";
+import { Image } from "expo-image";
 import React from "react";
 import { Platform, Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Text } from "@/src/ui/Text";
+import { PORTRAITS } from "@/src/game/render/sprites";
 
 export type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -34,8 +36,9 @@ export const UI = {
 
 // Monogram badge: initial on a coloured disc.
 // `id` = character id (a portrait replaces the monogram when one exists).
-export function Badge({ name, color, size = 48, ring = false, testID }: { id?: string; name: string; color: string; size?: number; ring?: boolean; testID?: string }) {
+export function Badge({ id, name, color, size = 48, ring = false, testID }: { id?: string; name: string; color: string; size?: number; ring?: boolean; testID?: string }) {
   const letter = (name.trim().charAt(0) || "?").toUpperCase();
+  const portrait = id ? PORTRAITS[id] : undefined;
   return (
     <View
       testID={testID}
@@ -48,9 +51,14 @@ export function Badge({ name, color, size = 48, ring = false, testID }: { id?: s
         justifyContent: "center",
         borderWidth: ring ? Math.max(3, size * 0.06) : 0,
         borderColor: UI.cream,
+        overflow: "hidden",
       }}
     >
-      <Text style={{ color: "#FFFFFF", fontFamily: SERIF, fontWeight: "700", fontSize: size * 0.5 }}>{letter}</Text>
+      {portrait ? (
+        <Image source={portrait} style={{ width: "100%", height: "100%", borderRadius: size / 2 }} contentFit="contain" cachePolicy="memory-disk" testID={testID ? `${testID}-portrait` : "badge-portrait"} />
+      ) : (
+        <Text style={{ color: "#FFFFFF", fontFamily: SERIF, fontWeight: "700", fontSize: size * 0.5 }}>{letter}</Text>
+      )}
     </View>
   );
 }

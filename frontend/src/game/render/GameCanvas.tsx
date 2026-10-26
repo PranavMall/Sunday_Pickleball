@@ -1,14 +1,23 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Canvas, Path, Circle, Oval, Group, Skia } from "@shopify/react-native-skia";
+import { Atlas, Canvas, Path, Circle, Oval, Group, Skia, useImage } from "@shopify/react-native-skia";
 
 import { COURT, netHeightAt } from "../config/court";
 import type { GameSimulation } from "../sim/GameSimulation";
 import { IMAGE_H, IMAGE_W, type Projector } from "../render/perspective";
 import { Character, type CharacterColors, type CharacterView } from "./character";
 import { courtVisual } from "./courts";
+import { CHARACTER_SHEETS, PLAYER_CHARACTER_ID, SPRITE_META, SPRITE_SCALE } from "./sprites";
+import type { NearSpriteAnimator } from "./spriteAnim";
+
+export interface SpriteProps {
+  anim: NearSpriteAnimator; // updated by match.tsx before each render
+  partnerId: string;
+  humanSlot: number;
+  on: boolean; // DEV A/B switch (always on in release)
+}
 import { useTheme } from "@/src/theme";
 
 interface Props {
@@ -18,16 +27,39 @@ interface Props {
   height: number;
   frame: number; // bump to force re-render each simulation tick
   court?: string; // config.court → painted court image + edge fill
-  onReady?: () => void; // fired once the court image has loaded
+  onReady?: () => void; // fired once the court image (and sprite sheets) have loaded
+  sprites?: SpriteProps;
 }
+const CW = SPRITE_META.cell[0], CH = SPRITE_META.cell[1], FX = SPRITE_META.feet[0], FY = SPRITE_META.feet[1];
 
 // PerspectiveRenderer: projects logical court coordinates onto the painted
 // court. Code-drawn lines/kitchen/net sit at the OFFICIAL projected positions
 // so what the player sees always matches RuleManager. z (height) reads as a
 // depth-scaled screen offset so the ball and its shadow separate as it rises.
-export function GameCanvas({ sim, projector, width, height, court, onReady }: Props) {
+export function GameCanvas({ sim, projector, width, height, court, onReady, sprites }: Props) {
   const { colors } = useTheme();
   const cv = courtVisual(court);
+  // Only the two sheets this match needs (player + current partner), loaded
+  // behind the loading cover. A sheet that fails falls back to the placeholder.
+  const [sheetErr, setSheetErr] = useState(false);
+  const playerSheet = useImage(CHARACTER_SHEETS[PLAYER_CHARACTER_ID], () => setSheetErr(true));
+  const partnerSrc = sprites ? CHARACTER_SHEETS[sprites.partnerId] : undefined;
+  const partnerSheet = useImage(partnerSrc ?? null, () => setSheetErr(true));
+  const [courtLoaded, setCourtLoaded] = useState(false);
+  const readySent = useRef(false);
+  const sheetsReady = sheetErr || (!!playerSheet && (!partnerSrc || !!partnerSheet));
+  useEffect(() => {
+    if (!courtLoaded || readySent.current) return;
+    const send = () => {
+      if (readySent.current) return;
+      readySent.current = true;
+      onReady?.();
+    };
+    if (sheetsReady) return send();
+    const t = setTimeout(send, 4000); // never trap the player behind the cover
+    return () => clearTimeout(t);
+  }, [courtLoaded, sheetsReady, onReady]);
+  const sheetOf = (slot: number) => (!sprites?.on ? null : slot === sprites.humanSlot ? playerSheet : partnerSrc ? partnerSheet : null);
 
   const seg = (
     pts: [number, number][],
@@ -111,7 +143,31 @@ export function GameCanvas({ sim, projector, width, height, court, onReady }: Pr
 
   const flash = sim.messages.find((m) => m.color === "error");
 
+  // Near pair with a sheet: court shadow + ONE Atlas call per sheet (frame
+  // rect + RSXform rebuilt per frame; no image / path / shader created).
+  const drawSprite = (slot: number, sheet: NonNullable<ReturnType<typeof useImage>>) => {
+    const a = sprites!.anim;
+    const x = a.drawX[slot], y = a.drawY[slot];
+    const g = projector.ground(x, y);
+    const ppf = projector.pxPerFootAt(y);
+    const k = SPRITE_SCALE * ppf;
+    const scale = ppf * 0.9;
+    const bodyW = scale * 1.05;
+    return (
+      <Group key={slot}>
+        <Oval x={g.x - bodyW * 0.7} y={g.y - scale * 0.25} width={bodyW * 1.4} height={scale * 0.5} color={colors.ballShadow} opacity={0.28} />
+        <Atlas
+          image={sheet}
+          sprites={[Skia.XYWHRect(a.frame[slot] * CW, a.row[slot] * CH, CW, CH)]}
+          transforms={[Skia.RSXform(k, 0, g.x - FX * k, g.y - FY * k)]}
+        />
+      </Group>
+    );
+  };
+
   const drawPlayer = (slot: number) => {
+    const sheet = sheetOf(slot);
+    if (sheet && sim.players[slot].team === "near") return drawSprite(slot, sheet);
     const p = sim.players[slot];
     const g = projector.ground(p.x, p.y);
     const ppf = projector.pxPerFootAt(p.y);
@@ -217,7 +273,12 @@ export function GameCanvas({ sim, projector, width, height, court, onReady }: Pr
   const cueR = cue ? projector.pxPerFootAt(sim.bounceCueSpot!.y) * 0.9 : 0;
 
   const farPlayers = sim.players.filter((p) => p.team === "far").map((p) => p.slot);
+  // Near pair drawn farther-first (smaller y first) so teammates overlap correctly.
   const nearPlayers = sim.players.filter((p) => p.team === "near").map((p) => p.slot);
+  if (nearPlayers.length === 2 && sprites?.on) {
+    const yOf = (s: number) => sprites.anim.drawY[s];
+    if (yOf(nearPlayers[0]) > yOf(nearPlayers[1])) nearPlayers.reverse();
+  }
   const ballFar = sim.ball.y < COURT.NET_Y;
 
   return (
@@ -242,10 +303,10 @@ export function GameCanvas({ sim, projector, width, height, court, onReady }: Pr
           height: IMAGE_H * projector.scale,
         }}
         contentFit="fill"
-        onLoad={onReady}
+        onLoad={() => setCourtLoaded(true)}
         onError={(e) => {
           console.warn("[court] background image failed to load", e);
-          onReady?.(); // never trap the player behind the loading cover
+          setCourtLoaded(true); // never trap the player behind the loading cover
         }}
       />
       <Canvas style={{ width, height, backgroundColor: "transparent" }}>

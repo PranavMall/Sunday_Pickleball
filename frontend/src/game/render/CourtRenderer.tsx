@@ -4,6 +4,7 @@ import { Text } from "@/src/ui/Text";
 
 import type { GameSimulation } from "../sim/GameSimulation";
 import type { Projector } from "./perspective";
+import type { SpriteProps } from "./GameCanvas";
 
 export interface CourtRendererProps {
   sim: GameSimulation;
@@ -13,6 +14,7 @@ export interface CourtRendererProps {
   frame: number;
   court?: string; // config.court (selects the painted court)
   onReady?: () => void; // court image decoded (first frame can be shown)
+  sprites?: SpriteProps;
 }
 
 // On native, Skia is ready immediately — render the canvas directly. On web,

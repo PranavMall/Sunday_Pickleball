@@ -13,6 +13,7 @@ import { buildSetup, type LaunchParams, type MatchSetup } from "@/src/game/meta/
 import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
+import { END_SEQ_S, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
 import { courtVisual } from "@/src/game/render/courts";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
@@ -29,9 +30,8 @@ import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_LABEL_SECONDS, faultLabelFor } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
 
-// END SEQUENCE: render-only time between game over and the pop-ups / result
-// (the sim is over; nothing steps). A tap skips it.
-const END_SEQ_S = 0;
+// END SEQUENCE (END_SEQ_S, spriteAnim): render-only time between game over and
+// the pop-ups / result (the sim is over; nothing steps). A tap skips it.
 
 // Reserve a small edge margin from game swipe input. (The focused back handler
 // is the real Android-back protection — not this margin.)
@@ -208,6 +208,10 @@ export default function Match() {
   const gestureT0 = useRef(0); // touch-down time (ms) for the stable speed signal
 
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
+  // Sprite animation state for the near pair: one preallocated animator per match.
+  const spriteAnim = useMemo(() => new NearSpriteAnimator(), [sim]);
+  const [spritesOn, setSpritesOn] = useState(true); // DEV A/B switch (pause menu)
+  const spriteProps = useMemo(() => ({ anim: spriteAnim, partnerId: match.setup.partnerId, humanSlot, on: spritesOn }), [spriteAnim, match.setup.partnerId, humanSlot, spritesOn]);
   const projector = useMemo(() => {
     perf.current.projBuilds++;
     return makeProjector(width, height);
@@ -298,7 +302,9 @@ export default function Match() {
       }
       if (sim.phase === "game_over" && loggedRef.current) {
         // Sim is over: render the end sequence only, then stop the loop.
-        if ((performance.now() - endT0.current) / 1000 >= END_SEQ_S || skipSeq.current) {
+        const e = (performance.now() - endT0.current) / 1000;
+        spriteAnim.update(sim, skipSeq.current ? END_SEQ_S : e);
+        if (e >= END_SEQ_S || skipSeq.current) {
           setSeqDone(true);
           setFrame((f) => (f + 1) % 1000000);
           return;
@@ -316,6 +322,7 @@ export default function Match() {
       // One sound per real contact (mishits included) + one per real bounce.
       for (const ev of sim.consumeContactEvents()) {
         sfx.playForContact(ev);
+        spriteAnim.onContact(ev, sim);
         if (ev.slot === humanSlot && Platform.OS !== "web") {
           Haptics.impactAsync(
             ev.power > 0.55 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
@@ -323,6 +330,7 @@ export default function Match() {
         }
       }
       for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
+      if (sim.phase !== "game_over") spriteAnim.update(sim, -1);
 
       if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
@@ -345,7 +353,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, matchId, match.setup]);
+  }, [sim, config, difficulty, humanSlot, matchId, match.setup, spriteAnim]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time
@@ -507,7 +515,7 @@ export default function Match() {
       <Fullscreen />
       <GestureDetector gesture={pan}>
         <View style={styles.canvasWrap}>
-          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} court={config.court} onReady={onCourtReady} />
+          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} court={config.court} onReady={onCourtReady} sprites={spriteProps} />
         </View>
       </GestureDetector>
 
@@ -619,6 +627,11 @@ export default function Match() {
             {SFX_ENABLED && (
               <Pressable testID="mute-button" style={styles.pauseSecondaryBtn} onPress={toggleMute}>
                 <Text style={styles.secondaryText}>Sound: {muted ? "Off" : "On"}</Text>
+              </Pressable>
+            )}
+            {__DEV__ && (
+              <Pressable testID="sprites-toggle" style={styles.pauseSecondaryBtn} onPress={() => setSpritesOn((v) => !v)}>
+                <Text style={styles.secondaryText}>Sprites: {spritesOn ? "On" : "Off"}</Text>
               </Pressable>
             )}
             <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
