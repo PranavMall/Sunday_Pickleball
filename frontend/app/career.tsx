@@ -1,5 +1,4 @@
 import { Ionicons } from "@react-native-vector-icons/ionicons";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
@@ -19,11 +18,8 @@ import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions } from "@/src/ui/HeaderActions";
 import { Badge, Card, Coin, GoldButton, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
+import { CourtThumb } from "@/src/ui/CourtThumb";
 
-const COURT_IMG = {
-  bandra_garden: require("@/assets/images/court_bandra_garden.webp"),
-  mumbai_local: require("@/assets/images/court_mumbai_local.webp"),
-};
 const GROUPS: { key: CareerMatchDef["stageKey"]; nums: number[] }[] = [
   { key: "community", nums: [1, 2, 3] },
   { key: "local", nums: [4, 5, 6] },
@@ -32,6 +28,7 @@ const GROUPS: { key: CareerMatchDef["stageKey"]; nums: number[] }[] = [
 
 export default function Career() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { save, identity, refresh } = useSave();
   const nextOpen = careerMatch(save?.career.nextMatchId);
   const cleared = save?.career.cleared ?? [];
@@ -153,7 +150,7 @@ export default function Career() {
           </View>
           {next.court ? (
             <View style={{ marginLeft: 8, alignItems: "center" }}>
-              <CourtThumb court={next.court} />
+              <CourtThumb court={next.court} width={width < 385 ? 96 : 118} />
               <Text style={styles.courtName} testID="court-name">{COURT_NAMES[next.court]}</Text>
             </View>
           ) : null}
@@ -177,7 +174,7 @@ export default function Career() {
       <Card style={styles.pad} testID="partner-block">
         <Kicker style={{ color: UI.ink }}>YOUR PARTNER</Kicker>
         <View style={styles.partnerRow}>
-          <Badge name={partner.name} color={partner.color} size={52} />
+          <Badge id={partner.id} name={partner.name} color={partner.color} size={42} />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Text style={styles.partnerName}>{partner.name}</Text>
@@ -203,21 +200,8 @@ export default function Career() {
   );
 }
 
-// Thumbnail cropped from the match's OWN court image (its upper scenery band).
-const CROP = { x: 112, y: 0, w: 800, h: 560 };
-function CourtThumb({ court }: { court: keyof typeof COURT_IMG }) {
-  const { width } = useWindowDimensions();
-  const W = width < 385 ? 96 : 118; // narrow phones: leave the names room
-  const s = W / CROP.w;
-  return (
-    <View style={[styles.thumb, { width: W, height: CROP.h * s }]} testID="court-thumb">
-      <Image source={COURT_IMG[court]} style={{ position: "absolute", left: -CROP.x * s, top: -CROP.y * s, width: 1024 * s, height: 1536 * s }} contentFit="fill" />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  pad: { padding: 12 },
+  pad: { padding: 10 },
   groups: { flexDirection: "row", marginTop: 8 },
   group: { paddingHorizontal: 4 },
   groupDivider: { borderLeftWidth: 1, borderLeftColor: UI.line },
@@ -251,7 +235,6 @@ const styles = StyleSheet.create({
   reward: { flex: 1, flexDirection: "row", alignItems: "center" },
   rewardNum: { color: UI.ink, fontSize: 18, fontWeight: "800" },
   rewardSub: { color: UI.inkSoft, fontSize: 10 },
-  thumb: { borderRadius: 10, overflow: "hidden", borderWidth: 2, borderColor: UI.cream },
   courtName: { color: UI.inkSoft, fontSize: 11, marginTop: 3, fontWeight: "600" },
   arch: { color: UI.inkSoft, fontSize: 14 },
   partnerRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },

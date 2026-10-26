@@ -36,10 +36,10 @@ export default function Training() {
         </>
       }
     >
-      <Card style={{ padding: 12 }} testID="training-with">
+      <Card style={{ padding: 10 }} testID="training-with">
         <Kicker style={{ fontSize: 11 }}>TRAINING WITH</Kicker>
         <View style={styles.withRow}>
-          <Badge name={tp.name} color={tp.color} size={52} />
+          <Badge id={tp.id} name={tp.name} color={tp.color} size={42} />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.name} numberOfLines={1} testID="training-partner-name">{tp.name}</Text>
             <Text style={styles.arch}>{tp.archetype}</Text>
@@ -98,7 +98,7 @@ export default function Training() {
                 setPicker(false);
               }}
             >
-              <Badge name={p.name} color={p.color} size={40} />
+              <Badge id={p.id} name={p.name} color={p.color} size={40} />
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={styles.pickName}>{p.name}</Text>
                 <Text style={styles.arch}>{p.archetype}</Text>
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   arch: { color: UI.inkSoft, fontSize: 14 },
   change: { flexDirection: "row", alignItems: "center", gap: 2, borderWidth: 1, borderColor: UI.line, backgroundColor: "#fff", borderRadius: 10, paddingHorizontal: 12, minHeight: 44 },
   changeText: { color: UI.ink, fontSize: 15, fontWeight: "700" },
-  modeCard: { flexDirection: "row", alignItems: "center", padding: 12 },
+  modeCard: { flexDirection: "row", alignItems: "center", padding: 10 },
   art: { width: 84, height: 84 },
   modeDivider: { width: 1, alignSelf: "stretch", backgroundColor: UI.line, marginHorizontal: 10 },
   modeTitle: { color: "#1E4D33", fontFamily: SERIF, fontWeight: "700", fontSize: 18 },

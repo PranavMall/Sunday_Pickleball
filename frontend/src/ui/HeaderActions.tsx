@@ -11,7 +11,8 @@ import { hasUnread, inboxMessages } from "@/src/game/meta/inbox";
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import type { SaveDoc } from "@/src/game/meta/metaStore";
 import { getMatchResults, type MatchResultRecord } from "@/src/game/services/matchLog";
-import { Badge, Card, IconSquare, MeterRow, SERIF, UI } from "./kit";
+import { Ionicons } from "@react-native-vector-icons/ionicons";
+import { Badge, Card, Coin, IconSquare, MeterRow, SERIF, UI } from "./kit";
 
 export function HeaderActions({ save, onChange }: { save: SaveDoc | null; onChange?: () => void }) {
   const [open, setOpen] = useState<null | "inbox" | "stats">(null);
@@ -70,17 +71,18 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
         <Stat label="Career losses" value={String(losses)} testID="stat-losses" />
         <Stat label="Win rate" value={`${rate}%`} testID="stat-rate" />
         <Stat label="Longest rally" value={String(longest)} testID="stat-rally" />
-        <Stat label="Fans" value={String(save?.fans ?? 0)} testID="stat-fans" />
+        <Stat icon={<Ionicons name="people" size={16} color={UI.fans} />} label="Fans" value={String(save?.fans ?? 0)} testID="stat-fans" />
+        <Stat icon={<Coin size={16} />} label="Coins" value={String(save?.coins ?? 0)} testID="stat-coins" />
       </View>
       <View style={styles.partner}>
-        <Badge name={partner.name} color={partner.color} size={40} />
+        <Badge id={partner.id} name={partner.name} color={partner.color} size={40} />
         <View style={{ marginLeft: 10 }}>
           <Text style={styles.partnerName}>{partner.name}</Text>
           <Text style={styles.partnerSub}>Active partner · {partner.archetype}</Text>
         </View>
       </View>
-      <MeterRow icon="star" label="Growth" value={growth} color={UI.growth} />
-      <MeterRow icon="heart" label="Chemistry" value={chem} color={UI.chem} />
+      <MeterRow icon="star" value={growth} color={UI.growth} testID="stats-growth" />
+      <MeterRow icon="heart" value={chem} color={UI.chem} testID="stats-chem" />
       <Pressable
         testID="stats-history-link"
         style={styles.link}
@@ -95,11 +97,15 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
   );
 }
 
-function Stat({ label, value, testID }: { label: string; value: string; testID: string }) {
+// Icon in place of the word wherever one exists (Coins, Fans).
+function Stat({ label, value, testID, icon }: { label: string; value: string; testID: string; icon?: React.ReactNode }) {
   return (
-    <View style={styles.stat} testID={testID}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={styles.stat} testID={testID} accessibilityLabel={`${label} ${value}`}>
+      <View style={styles.statTop}>
+        {icon}
+        <Text style={styles.statValue}>{value}</Text>
+      </View>
+      {icon ? null : <Text style={styles.statLabel}>{label}</Text>}
     </View>
   );
 }
@@ -141,7 +147,8 @@ const styles = StyleSheet.create({
   msgText: { flex: 1, color: UI.ink, fontSize: 15, fontWeight: "600" },
   unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: UI.red },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  stat: { width: "31.5%", backgroundColor: UI.creamDeep, borderRadius: 12, paddingVertical: 10, alignItems: "center", borderWidth: 1, borderColor: UI.line },
+  stat: { width: "31.5%", backgroundColor: UI.creamDeep, borderRadius: 12, paddingVertical: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: UI.line, minHeight: 56 },
+  statTop: { flexDirection: "row", alignItems: "center", gap: 5 },
   statValue: { color: UI.ink, fontSize: 20, fontWeight: "800" },
   statLabel: { color: UI.muted, fontSize: 11, marginTop: 2, fontWeight: "600" },
   partner: { flexDirection: "row", alignItems: "center", marginTop: 14 },

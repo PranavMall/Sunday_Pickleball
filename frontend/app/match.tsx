@@ -20,11 +20,17 @@ import { logMatchResult } from "@/src/game/services/matchLog";
 import { initMeta, meta } from "@/src/game/meta";
 import { newMatchId, type MatchOutcome } from "@/src/game/meta/metaStore";
 import { nextGoal } from "@/src/game/meta/goals";
-import { careerMatch } from "@/src/game/meta/economyConfig";
+import { careerMatch, PARTNERS, type PartnerId } from "@/src/game/meta/economyConfig";
+import { careerMatchLabel } from "@/src/game/meta/goals";
+import { Celebration, momentChip, ResultCard, type ResultButton, type ResultPartner } from "@/src/ui/MatchEnd";
 import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_LABEL_SECONDS, faultLabelFor } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
+
+// END SEQUENCE: render-only time between game over and the pop-ups / result
+// (the sim is over; nothing steps). A tap skips it.
+const END_SEQ_S = 0;
 
 // Reserve a small edge margin from game swipe input. (The focused back handler
 // is the real Android-back protection — not this margin.)
@@ -163,6 +169,12 @@ export default function Match() {
 
   const [match, setMatch] = useState(() => buildMatch(launch));
   const [outcome, setOutcome] = useState<(MatchOutcome & { goal: string | null; nextCareerId: string; nextEnabled: boolean }) | null>(null);
+  // Match end: the loop stops once the end sequence is over (seqDone); then
+  // the pop-ups (one per moment) and the result card show.
+  const [seqDone, setSeqDone] = useState(false);
+  const [popIndex, setPopIndex] = useState(0);
+  const endT0 = useRef(0);
+  const skipSeq = useRef(false);
   const sim = match.sim;
   const config = match.config;
   const matchId = match.matchId;
@@ -283,6 +295,17 @@ export default function Match() {
         fpsAcc = 0;
         fpsCount = 0;
       }
+      if (sim.phase === "game_over" && loggedRef.current) {
+        // Sim is over: render the end sequence only, then stop the loop.
+        if ((performance.now() - endT0.current) / 1000 >= END_SEQ_S || skipSeq.current) {
+          setSeqDone(true);
+          setFrame((f) => (f + 1) % 1000000);
+          return;
+        }
+        setFrame((f) => (f + 1) % 1000000);
+        raf = requestAnimationFrame(loop);
+        return;
+      }
       acc += dt;
       let guard = 0;
       while (acc >= MATCH.FIXED_DT && guard++ < 5) {
@@ -302,6 +325,7 @@ export default function Match() {
 
       if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
+        endT0.current = performance.now();
         logMatchResult(config, sim);
         // Match end: the only meta save point for a match (idempotent by
         // matchId). Quitting / app-kill before this point grants nothing.
@@ -310,8 +334,7 @@ export default function Match() {
         initMeta().then(() => {
           const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: setup.partnerId }, Date.now());
           const d = meta.doc;
-          const training = setup.mode === "training" || setup.mode === "scrimmage";
-          setOutcome({ ...o, goal: training ? null : nextGoal(d), nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
+          setOutcome({ ...o, goal: setup.mode === "career" ? nextGoal(d) : null, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
         });
         analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
       }
@@ -395,11 +418,17 @@ export default function Match() {
     [onGestureUpdate, onGestureEnd, resetArmed, onGestureBegin],
   );
 
+  const resetEnd = () => {
+    setOutcome(null);
+    setSeqDone(false);
+    setPopIndex(0);
+    skipSeq.current = false;
+  };
   const rematch = () => {
     analytics.track("rematch_selected", { difficulty });
     loggedRef.current = false;
     armedRef.current = false;
-    setOutcome(null);
+    resetEnd();
     setMatch(buildMatch(launch));
     setPaused(false);
   };
@@ -409,7 +438,7 @@ export default function Match() {
     const l: LaunchParams = { mode: "career", careerId: outcome.nextCareerId };
     loggedRef.current = false;
     armedRef.current = false;
-    setOutcome(null);
+    resetEnd();
     setLaunch(l);
     setMatch(buildMatch(l));
     setPaused(false);
@@ -601,89 +630,94 @@ export default function Match() {
         </View>
       )}
 
-      {gameOver && (
+      {gameOver && !seqDone && (
+        <Pressable style={styles.skipLayer} onPress={() => (skipSeq.current = true)} testID="end-sequence-skip" accessibilityLabel="Skip" />
+      )}
+      {gameOver && seqDone && outcome && popIndex < outcome.moments.length && (
+        <Celebration
+          moments={outcome.moments}
+          index={popIndex}
+          onContinue={() => setPopIndex((i) => i + 1)}
+          onSign={(id) => {
+            if (router.canDismiss()) router.dismissAll();
+            router.replace({ pathname: "/team", params: { highlight: id } });
+          }}
+        />
+      )}
+      {gameOver && seqDone && (!outcome || popIndex >= outcome.moments.length) && (
         <View style={[styles.modalWrap, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]} testID="result-overlay">
-          <View style={styles.modal}>
-            <Text style={[styles.resultKicker, !nearWon && styles.defeatKicker]} testID="result-title">{nearWon ? "VICTORY" : "DEFEAT"}</Text>
-            <Text style={[styles.finalScore, !nearWon && { color: "#1F2A22" }]} testID="final-score">
-              {sim.score.nearScore} – {sim.score.farScore}
-            </Text>
-            <Text style={styles.teamName} numberOfLines={2} testID="result-team-name">
-              Team {identity?.teamName ?? ""} vs {match.setup.rivalName}
-            </Text>
-            <View style={styles.rewardBox} testID="result-rewards">
-              {!outcome ? (
-                <ActivityIndicator color="#2E7D4F" />
-              ) : (
-                <>
-                  {outcome.lines.map((l, i) => (
-                    <Text key={`l${i}`} style={[styles.rewardLine, outcome.capped && styles.rewardMuted]} testID={`reward-line-${i}`}>{l}</Text>
-                  ))}
-                  {outcome.events.map((e, i) => (
-                    <Text key={`e${i}`} style={styles.eventLine} testID={`event-line-${i}`}>★ {e}</Text>
-                  ))}
-                  {outcome.goal ? <Text style={styles.goalLine} testID="next-goal">{outcome.goal}</Text> : null}
-                </>
-              )}
-            </View>
-            <View style={styles.statsRow}>
-              <Stat label="Longest rally" value={sim.stats.longestRally} />
-              <Stat label="Rallies" value={sim.stats.totalRallies} />
-              <Stat label="My dinks" value={sim.stats.myDinks} />
-            </View>
-            {(() => {
-              const mode = match.setup.mode;
-              const primary =
-                mode === "career"
-                  ? nearWon
-                    ? outcome?.nextEnabled
-                      ? { label: "NEXT MATCH", id: "next-match-button", fn: nextMatch }
-                      : { label: "BACK TO CAREER", id: "back-career-button", fn: goMenu }
-                    : { label: "TRY AGAIN", id: "try-again-button", fn: rematch }
-                  : mode === "quick"
-                    ? { label: "REMATCH", id: "rematch-button", fn: rematch }
-                    : { label: "PLAY AGAIN", id: "play-again-button", fn: rematch };
-              const secondary = mode === "career" ? "CAREER" : mode === "quick" ? "HOME" : "BACK";
-              return (
-                <>
-                  <Pressable testID={primary.id} style={[styles.primaryBtn, !outcome && { opacity: 0.6 }]} disabled={!outcome} onPress={primary.fn}>
-                    <Text style={styles.primaryText}>{primary.label}</Text>
-                  </Pressable>
-                  <View style={styles.resultRow}>
-                    <Pressable testID="menu-button" style={styles.secondaryBtn} onPress={goMenu}>
-                      <Text style={styles.secondaryText}>{secondary}</Text>
-                    </Pressable>
-                    <Pressable
-                      testID="share-button"
-                      style={styles.secondaryBtn}
-                      onPress={() => {
-                        analytics.track("share_clicked", { difficulty });
-                        Share.share({
-                          message: `I ${nearWon ? "won" : "lost"} ${sim.score.nearScore}-${sim.score.farScore} vs ${match.setup.rivalName} in Pickle-Ballers! 🥒`,
-                        });
-                      }}
-                    >
-                      <Text style={styles.secondaryText}>Share</Text>
-                    </Pressable>
-                  </View>
-                </>
-              );
-            })()}
-          </View>
+          <ResultCard
+            won={nearWon}
+            title={resultTitle(match.setup.mode, nearWon)}
+            score={`${sim.score.nearScore} – ${sim.score.farScore}`}
+            sub={`${myCode} vs ${match.setup.rivalCode} · ${stageLabel(match.setup.mode, match.setup.careerId, difficulty)}`}
+            stats={{ longest: sim.stats.longestRally, rallies: sim.stats.totalRallies, dinks: sim.stats.myDinks }}
+            loading={!outcome}
+            coins={outcome?.coins}
+            fans={outcome?.fans}
+            partner={outcome?.partner ? partnerRow(outcome.partner) : undefined}
+            chips={(outcome?.moments ?? []).map(momentChip)}
+            lines={outcome?.capped ? outcome.lines : []}
+            next={outcome?.goal}
+            buttons={resultButtons()}
+          />
         </View>
       )}
     </View>
   );
+
+  function resultButtons(): ResultButton[] {
+    const mode = match.setup.mode;
+    const share: ResultButton = {
+      label: "Share",
+      testID: "share-button",
+      kind: "share",
+      onPress: () => {
+        analytics.track("share_clicked", { difficulty });
+        Share.share({ message: `I won ${sim.score.nearScore}-${sim.score.farScore} vs ${match.setup.rivalName} in Pickle-Ballers! 🥒` });
+      },
+    };
+    const btn = (label: string, testID: string, onPress: () => void, kind: ResultButton["kind"] = "secondary"): ResultButton => ({ label, testID, onPress, kind });
+    if (mode === "career") {
+      if (!nearWon) return [btn("CAREER", "menu-button", goMenu), btn("TRY AGAIN", "try-again-button", rematch, "primary")];
+      if (!outcome?.nextEnabled) return [btn("BACK TO CAREER", "back-career-button", goMenu, "primary"), share];
+      return [btn("CAREER", "menu-button", goMenu), btn("NEXT MATCH", "next-match-button", nextMatch, "primary"), share];
+    }
+    if (mode === "quick") return [btn("HOME", "menu-button", goMenu), btn("REMATCH", "rematch-button", rematch, "primary"), ...(nearWon ? [share] : [])];
+    return [btn("BACK", "menu-button", goMenu), btn("PLAY AGAIN", "play-again-button", rematch, "primary")];
+  }
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  const styles = useStyles();
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
+function resultTitle(mode: string, won: boolean): string {
+  if (mode === "training") return "SESSION COMPLETE";
+  if (mode === "scrimmage") return "SCRIMMAGE COMPLETE";
+  return won ? "VICTORY" : "DEFEAT";
+}
+
+function stageLabel(mode: string, careerId: string | undefined, difficulty: string): string {
+  if (mode === "career") return careerMatchLabel(careerMatch(careerId));
+  if (mode === "training") return "Training";
+  if (mode === "scrimmage") return "Scrimmage";
+  return `Quick Play · ${difficulty}`;
+}
+
+function fmt(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function partnerRow(pd: NonNullable<MatchOutcome["partner"]>): ResultPartner {
+  const p = PARTNERS[pd.id as PartnerId];
+  const g = pd.growthAfter - pd.growthBefore;
+  const c = pd.chemAfter - pd.chemBefore;
+  return {
+    id: pd.id,
+    name: p?.name ?? pd.id,
+    color: p?.color ?? "#2E7D4F",
+    level: "LV 1",
+    gain: [`+${fmt(g)} Growth`, `+${fmt(c)} Chemistry`].join(" · "),
+    growth: { from: pd.growthBefore / 100, to: pd.growthAfter / 100, text: `${Math.floor(pd.growthAfter)} / 100` },
+    chem: { from: pd.chemBefore / 100, to: pd.chemAfter / 100, text: `${Math.floor(pd.chemAfter)} / 100` },
+  };
 }
 
 const useStyles = makeStyles((c) => ({
@@ -758,6 +792,7 @@ const useStyles = makeStyles((c) => ({
   kitchenCdFill: { height: 3, backgroundColor: "#FBF6E9" },
   loadingCover: { ...abs(), backgroundColor: c.surfaceInverse, alignItems: "center", justifyContent: "center" },
   loadingTitle: { color: c.accentGold, fontSize: 30, fontWeight: "900", letterSpacing: 6 },
+  skipLayer: { ...abs() },
   rotate: { flex: 1, backgroundColor: c.surfaceInverse, alignItems: "center", justifyContent: "center", padding: 32 },
   rotateEmoji: { fontSize: 48, marginBottom: 16 },
   rotateText: { color: c.onSurfaceInverse, fontSize: 18, fontWeight: "600", textAlign: "center" },

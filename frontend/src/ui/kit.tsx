@@ -15,7 +15,7 @@ export const UI = {
   inkSoft: "#4A4534",
   muted: "#7C735E",
   cream: "#FBF4E2",
-  cardBg: "rgba(251,244,226,0.9)", // cards: same cream at 90%, painting shows through
+  cardBg: "rgba(251,244,226,0.8)", // list cards: same cream at 80%, painting shows through
   creamDeep: "#F1E6CB",
   line: "#E2D3AE",
   gold: "#F6C94A",
@@ -33,7 +33,8 @@ export const UI = {
 };
 
 // Monogram badge: initial on a coloured disc.
-export function Badge({ name, color, size = 48, ring = false, testID }: { name: string; color: string; size?: number; ring?: boolean; testID?: string }) {
+// `id` = character id (a portrait replaces the monogram when one exists).
+export function Badge({ name, color, size = 48, ring = false, testID }: { id?: string; name: string; color: string; size?: number; ring?: boolean; testID?: string }) {
   const letter = (name.trim().charAt(0) || "?").toUpperCase();
   return (
     <View
@@ -96,33 +97,34 @@ export function GoldButton({ label, onPress, testID, big = false, disabled = fal
 }
 
 // Square cream icon button with optional red dot (header actions, back arrow).
-export function IconSquare({ icon, label, onPress, dot = false, testID, size = 50 }: { icon: IoniconName; label: string; onPress: () => void; dot?: boolean; testID?: string; size?: number }) {
+export function IconSquare({ icon, label, onPress, dot = false, testID, size = 42 }: { icon: IoniconName; label: string; onPress: () => void; dot?: boolean; testID?: string; size?: number }) {
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={4}
+      hitSlop={Math.max(4, (44 - size) / 2 + 2)}
       onPress={onPress}
       style={({ pressed }) => [kit.square, { width: size, height: size }, pressed && kit.pressed]}
     >
-      <Ionicons name={icon} size={size * 0.48} color={UI.woodDark} />
+      <Ionicons name={icon} size={Math.round(size * 0.52)} color={UI.woodDark} />
       {dot ? <View style={kit.dot} testID={testID ? `${testID}-dot` : undefined} /> : null}
     </Pressable>
   );
 }
 
 // Labelled x/100 bar with numbers.
-export function MeterRow({ icon, label, value, color, testID }: { icon: IoniconName; label: string; value: number; color: string; testID?: string }) {
+// label omitted -> icon only. `num` overrides the "v / 100" text.
+export function MeterRow({ icon, label, value, color, testID, num }: { icon: IoniconName; label?: string; value: number; color: string; testID?: string; num?: string }) {
   const v = Math.max(0, Math.min(100, Math.floor(value)));
   return (
     <View style={kit.meterRow} testID={testID}>
       <Ionicons name={icon} size={16} color={color} />
-      <Text style={kit.meterLabel}>{label}</Text>
+      {label ? <Text style={kit.meterLabel}>{label}</Text> : null}
       <View style={kit.meterTrack}>
         <View style={[kit.meterFill, { width: `${v}%`, backgroundColor: color }]} />
       </View>
-      <Text style={kit.meterNum}>{v} / 100</Text>
+      <Text style={kit.meterNum} numberOfLines={1}>{num ?? `${v} / 100`}</Text>
     </View>
   );
 }
@@ -131,7 +133,7 @@ export const kit = StyleSheet.create({
   card: {
     backgroundColor: UI.cardBg,
     borderRadius: 18,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: UI.line,
     shadowColor: "#000",
@@ -180,5 +182,5 @@ export const kit = StyleSheet.create({
   meterLabel: { color: UI.inkSoft, fontSize: 13, width: 72 },
   meterTrack: { flex: 1, height: 10, borderRadius: 5, backgroundColor: UI.track, overflow: "hidden" },
   meterFill: { height: 10, borderRadius: 5 },
-  meterNum: { color: UI.ink, fontSize: 13, fontWeight: "700", width: 62, textAlign: "right" },
+  meterNum: { color: UI.ink, fontSize: 13, fontWeight: "700", minWidth: 62, textAlign: "right" },
 });

@@ -10,6 +10,7 @@
 import { analytics } from "../services/analytics";
 import {
   CAREER_MATCH_IDS,
+  CAREER_MATCHES,
   CAREER_REWARDS,
   CAREER_UNLOCKS,
   CHEMISTRY_HALVE_AT,
@@ -90,7 +91,28 @@ export interface MatchOutcome {
   lines: string[];
   events: string[];
   capped?: boolean; // training/scrimmage after the daily cap
+  // Result-screen data, all taken from this match's ledger entries.
+  coins?: CurrencyTile; // only when Coins changed
+  fans?: CurrencyTile; // only when Fans changed
+  partner?: PartnerDelta;
+  moments: Moment[]; // celebration pop-ups, in order (max 3)
 }
+export interface CurrencyTile {
+  before: number;
+  after: number;
+  parts: string[]; // "Win +100", "Rival +100", ...
+}
+export interface PartnerDelta {
+  id: string;
+  growthBefore: number;
+  growthAfter: number;
+  chemBefore: number;
+  chemAfter: number;
+}
+export type Moment =
+  | { kind: "stage"; stageKey: string; rival: string; milestone?: string }
+  | { kind: "court"; court: string }
+  | { kind: "partner"; partnerId: string; flag: "discovered" | "signable"; event: string };
 
 export interface Source {
   sourceType: string;
@@ -358,22 +380,33 @@ export class MetaStore {
     now: number,
   ): MatchOutcome {
     const doneId = `${m.kind}:${m.matchId}:completed`;
-    const out: MatchOutcome = { applied: false, lines: [], events: [] };
+    const out: MatchOutcome = { applied: false, lines: [], events: [], moments: [] };
     if (this.rewardSet.has(doneId)) return out;
     out.applied = true;
     const d = this.docState!;
     const src: Source = { sourceType: m.kind, sourceId: m.careerMatchId ?? m.matchId };
+    const entries: LedgerEntry[] = [];
     const give = (key: string, currency: Currency, amount: number, target?: string): number => {
       const r = this.applyLedger(`${m.kind}:${m.matchId}:${key}`, currency, amount, src, now, target);
+      if (r.ok && r.applied) entries.push(r.entry!);
       return r.ok && r.applied ? r.entry!.delta : 0;
     };
-    const coinsLine = (key: string, amount: number, suffix = "") => {
+    const tile = (cur: "coins" | "fans", label: string, v: number) => {
+      if (v <= 0) return;
+      const e = entries[entries.length - 1];
+      const t = (out[cur] ??= { before: e.valueBefore, after: e.valueAfter, parts: [] });
+      t.after = e.valueAfter;
+      t.parts.push(`${label} +${v}`);
+    };
+    const coinsLine = (key: string, amount: number, suffix = "", label = "Win") => {
       const v = give(key, "coins", amount);
       if (v > 0) out.lines.push(`+${v} Coins${suffix}`);
+      tile("coins", label, v);
     };
-    const fansLine = (key: string, amount: number, suffix = "") => {
+    const fansLine = (key: string, amount: number, suffix = "", label = "Win") => {
       const v = give(key, "fans", amount);
       if (v > 0) out.lines.push(`+${v} Fans${suffix}`);
+      tile("fans", label, v);
     };
     // Partner progress: Growth caps at 100; Chemistry is halved at 50+ (stored
     // in half points). The line shows the base reward, as the cards do.
@@ -381,8 +414,10 @@ export class MetaStore {
       if (!d.partners[partnerId]) return;
       const key = pairingKey(partnerId);
       const chemNow = (d.chemistryHalves[key] ?? 0) / 2;
+      const gBefore = d.partners[partnerId].growth;
       const g = give(`growth:${partnerId}`, "growth", growth, partnerId);
       const c = give(`chemistry:${key}`, "chemistry", chemNow >= CHEMISTRY_HALVE_AT ? chemistry / 2 : chemistry, key);
+      out.partner = { id: partnerId, growthBefore: gBefore, growthAfter: d.partners[partnerId].growth, chemBefore: chemNow, chemAfter: (d.chemistryHalves[key] ?? 0) / 2 };
       const parts = [g > 0 ? `+${g} Growth` : "", c > 0 ? `+${chemistry} Chemistry` : ""].filter(Boolean);
       if (parts.length) out.lines.push(`${PARTNERS[partnerId as PartnerId]?.name ?? partnerId} ${parts.join(" · ")}`);
     };
@@ -399,16 +434,19 @@ export class MetaStore {
         fansLine("fans", R.win.fans);
         if (def.namedRival && !d.namedRivals[id]) {
           d.namedRivals[id] = true;
-          coinsLine("rival.coins", R.namedRival.coins, " · Rival defeated");
-          fansLine("rival.fans", R.namedRival.fans, " · Rival defeated");
+          coinsLine("rival.coins", R.namedRival.coins, " · Rival defeated", "Rival");
+          fansLine("rival.fans", R.namedRival.fans, " · Rival defeated", "Rival");
+          out.moments.push({ kind: "stage", stageKey: def.stageKey, rival: def.rival });
         }
         d.career.firstClearWins++;
         d.career.cleared.push(id);
         const ms = milestoneFor(d.career.firstClearWins);
         if (ms && !d.milestones[ms.id]) {
           d.milestones[ms.id] = true;
-          coinsLine(`${ms.id}.coins`, ms.coins, ` · ${ms.label}`);
+          coinsLine(`${ms.id}.coins`, ms.coins, ` · ${ms.label}`, ms.label);
           out.events.push(`${ms.label} reached`);
+          const st = out.moments.find((x) => x.kind === "stage");
+          if (st && st.kind === "stage") st.milestone = ms.label;
           analytics.track("milestone_completed", { id: ms.id });
         }
         const unlock = CAREER_UNLOCKS[def.number];
@@ -418,17 +456,23 @@ export class MetaStore {
             p.discovered = true;
             if (unlock.flag === "signable") p.signable = true;
             out.events.push(unlock.event);
+            out.moments.push({ kind: "partner", partnerId: unlock.partnerId, flag: unlock.flag, event: unlock.event });
             analytics.track(unlock.flag === "signable" ? "partner_signable" : "partner_discovered", { partner: unlock.partnerId });
           }
         }
         const next = CAREER_MATCH_IDS.find((cid) => !d.career.cleared.includes(cid));
         if (next) d.career.nextMatchId = next;
+        // New court: the next match opens on a court no earlier match used.
+        const nm = next ? careerMatch(next) : null;
+        if (nm?.enabled && nm.court && !CAREER_MATCHES.some((x) => x.number < nm.number && x.court === nm.court)) {
+          out.moments.splice(out.moments[0]?.kind === "stage" ? 1 : 0, 0, { kind: "court", court: nm.court });
+        }
       } else if (firstAttempt) {
         d.career.firstClearLosses++;
-        coinsLine("coins", R.loss.coins);
-        fansLine("fans", R.loss.fans);
+        coinsLine("coins", R.loss.coins, "", "Loss");
+        fansLine("fans", R.loss.fans, "", "Loss");
       } else {
-        coinsLine("coins", m.won ? R.replay.winCoins : R.replay.lossCoins);
+        coinsLine("coins", m.won ? R.replay.winCoins : R.replay.lossCoins, "", m.won ? "Replay win" : "Replay");
       }
       const pr = m.won ? R.partnerWin : R.partnerLoss;
       partnerLine(m.partnerId ?? d.activePartnerId, pr.growth, pr.chemistry);
@@ -446,7 +490,7 @@ export class MetaStore {
       }
       analytics.track(m.kind === "training" ? "training_completed" : "scrimmage_completed", { matchId: m.matchId, won: m.won, capped: !!out.capped });
     } else {
-      coinsLine("coins", m.won ? QUICK_PLAY_REWARDS.winCoins : QUICK_PLAY_REWARDS.lossCoins);
+      coinsLine("coins", m.won ? QUICK_PLAY_REWARDS.winCoins : QUICK_PLAY_REWARDS.lossCoins, "", m.won ? "Win" : "Loss");
       analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won });
     }
     this.save();

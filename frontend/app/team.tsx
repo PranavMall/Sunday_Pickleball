@@ -36,7 +36,7 @@ export default function Team() {
         <>
           <View style={styles.headRight}>
             <View style={styles.coinChip} testID="team-coins">
-              <Coin size={26} />
+              <Coin size={22} />
               <Text style={styles.coinText}>{save?.coins ?? "–"}</Text>
             </View>
             <HeaderActions save={save} onChange={refresh} />
@@ -44,15 +44,15 @@ export default function Team() {
         </>
       }
     >
-      <Card style={{ padding: 12, alignSelf: "stretch" }} testID="roster">
-        <Kicker style={{ color: "#1E4D33", marginBottom: 4 }}>YOUR TEAM</Kicker>
-        {ids.map((id, i) => {
+      <View style={styles.roster} testID="roster">
+        <Kicker style={{ color: "#1E4D33", marginLeft: 4 }}>YOUR TEAM</Kicker>
+        {ids.map((id) => {
           const p = PARTNERS[id];
           const st = rosterStatus(save!, id);
           return (
-            <View key={id} style={[styles.row, i > 0 && styles.rowDivider, highlight === id && styles.rowHi]} testID={`roster-${id}`}>
+            <Card key={id} style={[styles.row, highlight === id && styles.rowHi]} testID={`roster-${id}`}>
               <View style={styles.rowTop}>
-                <Badge name={p.name} color={p.color} size={52} />
+                <Badge id={id} name={p.name} color={p.color} size={42} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -66,10 +66,10 @@ export default function Team() {
               </View>
               <MeterRow icon="star" label="Growth" value={save!.partners[id]?.growth ?? 0} color={UI.growth} />
               <MeterRow icon="heart" label="Chemistry" value={Math.floor((save!.chemistryHalves[`player+${id}`] ?? 0) / 2)} color={UI.chem} />
-            </View>
+            </Card>
           );
         })}
-      </Card>
+      </View>
 
       <Overlay visible={!!signing} title={signing?.step === 1 ? "Sign partner" : "Active partner"} onClose={() => setSigning(null)} testID="sign-dialog">
         {sp && signing ? (
@@ -147,10 +147,10 @@ function StatusPill({ st, onPress, testID }: { st: RosterStatus; onPress: () => 
 
 const styles = StyleSheet.create({
   headRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  coinChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: UI.cardBg, borderRadius: 14, paddingHorizontal: 10, height: 50, borderWidth: 1, borderColor: UI.line },
-  coinText: { color: UI.ink, fontSize: 18, fontWeight: "800" },
-  row: { paddingVertical: 12, paddingHorizontal: 4, borderRadius: 12 },
-  rowDivider: { borderTopWidth: 1, borderTopColor: UI.line },
+  coinChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: UI.cardBg, borderRadius: 12, paddingHorizontal: 10, height: 36, borderWidth: 1, borderColor: UI.line },
+  coinText: { color: UI.ink, fontSize: 15, fontWeight: "800" },
+  roster: { gap: 10, alignSelf: "stretch" },
+  row: { paddingVertical: 10, paddingHorizontal: 10 },
   rowHi: { backgroundColor: "rgba(246,201,74,0.18)", borderWidth: 2, borderColor: UI.gold },
   rowTop: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
   name: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 20 },

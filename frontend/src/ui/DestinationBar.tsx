@@ -71,7 +71,7 @@ export function DestinationBar({ active }: { active: Destination }) {
                 if (!sel && it.path) router.replace(it.path);
               }}
             >
-              {it.key === "training" ? <PickleballIcon size={26} color={color} /> : <Ionicons name={it.icon} size={26} color={color} />}
+              {it.key === "training" ? <PickleballIcon size={22} color={color} /> : <Ionicons name={it.icon} size={22} color={color} />}
               <Text style={[styles.label, { color }]} numberOfLines={1}>
                 {it.label}
               </Text>
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   item: { flex: 1, height: BAR_HEIGHT - 12, alignItems: "center", justifyContent: "center", borderRadius: 12, minWidth: 48 },
   itemSel: { backgroundColor: "rgba(0,0,0,0.22)" },
-  label: { fontSize: 13, fontWeight: "800", marginTop: 2 },
+  label: { fontSize: 12, fontWeight: "800", marginTop: 2 },
   underline: { position: "absolute", bottom: 3, width: "62%", height: 3, borderRadius: 2, backgroundColor: UI.gold },
   toast: { position: "absolute", bottom: BAR_HEIGHT + 16, alignSelf: "center", backgroundColor: "rgba(31,42,34,0.92)", borderRadius: 14, paddingHorizontal: 16, paddingVertical: 8, zIndex: 5 },
   toastText: { color: "#FBF4E2", fontSize: 14, fontWeight: "700" },

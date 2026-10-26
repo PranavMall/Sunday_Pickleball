@@ -36,9 +36,9 @@ export default function QuickPlay() {
       <View style={[StyleSheet.absoluteFill, { backgroundColor: DIM }]} pointerEvents="none" />
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.headRow}>
-          <IconSquare testID="back-button" icon="chevron-back" label="Back" onPress={() => router.back()} size={48} />
+          <IconSquare testID="back-button" icon="chevron-back" label="Back" onPress={() => router.back()} />
         </View>
-        <Text style={[styles.title, compact && { fontSize: 38, marginTop: -6 }]}>Quick Play</Text>
+        <Text style={styles.title}>Quick Play</Text>
 
         <View style={styles.toggle} testID="format-toggle">
           {(["DOUBLES", "1v1"] as const).map((k) => {
@@ -49,6 +49,7 @@ export default function QuickPlay() {
                 testID={k === "1v1" ? "toggle-singles" : "toggle-doubles"}
                 accessibilityRole="button"
                 accessibilityState={{ selected: sel }}
+                hitSlop={4}
                 style={[styles.seg, sel && styles.segSel]}
                 onPress={() => setSingles(k === "1v1")}
               >
@@ -69,14 +70,14 @@ export default function QuickPlay() {
         <View style={{ gap: compact ? 10 : 14, marginTop: compact ? 10 : 14 }}>
           {LEVELS.map((l) => (
             <Pressable key={l.key} testID={`difficulty-${l.key.toLowerCase()}`} accessibilityRole="button" accessibilityLabel={`${l.title}. ${l.blurb}`} onPress={() => start(l.key)} style={({ pressed }) => [pressed && { transform: [{ scale: 0.98 }] }]}>
-              <Card style={[styles.level, compact && { paddingVertical: 8 }]}>
-                <Image source={l.icon} style={[styles.levelIcon, compact && { width: 84, height: 74 }]} contentFit="contain" />
+              <Card style={[styles.level, compact && { paddingVertical: 6 }]}>
+                <Image source={l.icon} style={styles.levelIcon} contentFit="contain" />
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={[styles.levelTitle, compact && { fontSize: 24 }]}>{l.title}</Text>
+                  <Text style={styles.levelTitle}>{l.title}</Text>
                   <Text style={styles.levelBlurb}>{l.blurb}</Text>
                 </View>
                 <View style={styles.chev}>
-                  <Ionicons name="chevron-forward" size={22} color={UI.goldInk} />
+                  <Ionicons name="chevron-forward" size={18} color={UI.goldInk} />
                 </View>
               </Card>
             </Pressable>
@@ -110,20 +111,20 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "transparent" },
   content: { paddingHorizontal: 18, alignItems: "stretch" },
   headRow: { flexDirection: "row" },
-  title: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 46, textAlign: "center", textShadowColor: "rgba(255,255,255,0.7)", textShadowRadius: 8 },
+  title: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 30, textAlign: "center", textShadowColor: "rgba(255,255,255,0.7)", textShadowRadius: 8 },
   toggle: { flexDirection: "row", alignSelf: "center", width: "76%", backgroundColor: UI.cream, borderRadius: 14, padding: 3, marginTop: 8, borderWidth: 1, borderColor: UI.line },
-  seg: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 11 },
+  seg: { flex: 1, minHeight: 36, alignItems: "center", justifyContent: "center", borderRadius: 11 },
   segSel: { backgroundColor: UI.gold, borderWidth: 1, borderColor: UI.goldDeep },
   segText: { color: UI.ink, fontSize: 16, fontWeight: "700" },
   segTextSel: { fontWeight: "900" },
   partnerRow: { flexDirection: "row", alignItems: "center", gap: 14, alignSelf: "center", marginTop: 12, paddingVertical: 8, paddingHorizontal: 22 },
   partnerLabel: { color: UI.ink, fontFamily: SERIF, fontSize: 17 },
   partnerName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 22 },
-  level: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
-  levelIcon: { width: 100, height: 88 },
-  levelTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 28 },
-  levelBlurb: { color: UI.inkSoft, fontFamily: SERIF, fontSize: 14, lineHeight: 19, marginTop: 2 },
-  chev: { width: 46, height: 46, borderRadius: 10, backgroundColor: UI.gold, borderWidth: 1, borderColor: UI.goldDeep, alignItems: "center", justifyContent: "center", marginLeft: 8 },
+  level: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
+  levelIcon: { width: 72, height: 64 },
+  levelTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 20 },
+  levelBlurb: { color: UI.inkSoft, fontFamily: SERIF, fontSize: 12.5, lineHeight: 17, marginTop: 1 },
+  chev: { width: 36, height: 36, borderRadius: 10, backgroundColor: UI.gold, borderWidth: 1, borderColor: UI.goldDeep, alignItems: "center", justifyContent: "center", marginLeft: 8 },
   note: { flexDirection: "row", alignItems: "center", alignSelf: "center", marginTop: 16, paddingVertical: 10, paddingHorizontal: 18, gap: 12 },
   noteDivider: { width: 1, alignSelf: "stretch", backgroundColor: UI.line },
   noteText: { color: UI.ink, fontSize: 14, lineHeight: 20 },

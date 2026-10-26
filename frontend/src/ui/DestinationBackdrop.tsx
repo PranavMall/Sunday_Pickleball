@@ -28,7 +28,7 @@ export function DestinationBackdrop() {
   useEffect(() => {
     try {
       const uris = [BG_HOME, BG_CAREER].map((m) => RNImage.resolveAssetSource(m)?.uri).filter(Boolean) as string[];
-      if (uris.length) Image.prefetch(uris, "memory").catch(() => {});
+      if (uris.length) Image.prefetch(uris, "memory-disk").catch(() => {});
     } catch {
       // resolveAssetSource unavailable (web): the first render decodes it.
     }
@@ -37,5 +37,5 @@ export function DestinationBackdrop() {
   // In a match nothing is drawn behind the court: the image is released from
   // the view tree and comes back from the memory cache on leaving.
   if (pathname === "/match") return null;
-  return <Image source={last.current} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory" transition={200} testID="destination-backdrop" />;
+  return <Image source={last.current} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={200} testID="destination-backdrop" />;
 }
