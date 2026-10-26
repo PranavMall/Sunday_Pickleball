@@ -14,6 +14,7 @@ import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { END_SEQ_S, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
+import { spriteLoadStatus } from "@/src/game/render/sprites";
 import { courtVisual } from "@/src/game/render/courts";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
@@ -597,6 +598,7 @@ export default function Match() {
           <Text style={styles.debugText}>
             {fps} fps · {sim.phase} · z{sim.ball.z.toFixed(1)} · sfx {sfx.ready ? "rdy" : "…"} {sfx.lastLatencyMs.toFixed(1)}ms · snd{sfx.playedCount}
           </Text>
+          <Text style={styles.debugText} testID="sprite-status">{spriteLoadStatus.text}</Text>
           <Text style={styles.debugText} testID="perf-probe">
             renders/s {perf.current.rendersPerSec} · work {perf.current.workMs.toFixed(1)}ms · proj {perf.current.projBuilds} · resize {perf.current.sizeChanges} · {width}x{height}
           </Text>

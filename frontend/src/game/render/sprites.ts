@@ -27,5 +27,9 @@ export const PORTRAITS: Record<string, number> = {
   upsi: require("@/assets/images/portrait_upsi.png"),
 };
 
+// Sheet load status, read by the DEV overlay (kept here, outside the Skia
+// module, so match.tsx can read it before Skia loads on web).
+export const spriteLoadStatus = { text: "sprites: loading" };
+
 // On-court size: k = 2.38 × pxPerFoot × 1.3 / body_px.
 export const SPRITE_SCALE = (2.38 * 1.3) / SPRITE_META.body_px;

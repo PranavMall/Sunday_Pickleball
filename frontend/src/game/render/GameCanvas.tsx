@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Atlas, Canvas, Path, Circle, Oval, Group, Skia, useImage } from "@shopify/react-native-skia";
+import { Atlas, Canvas, Path, Circle, Oval, Group, Skia, type SkImage } from "@shopify/react-native-skia";
 
 import { COURT, netHeightAt } from "../config/court";
 import type { GameSimulation } from "../sim/GameSimulation";
@@ -11,6 +11,7 @@ import { Character, type CharacterColors, type CharacterView } from "./character
 import { courtVisual } from "./courts";
 import { CHARACTER_SHEETS, PLAYER_CHARACTER_ID, SPRITE_META, SPRITE_SCALE } from "./sprites";
 import type { NearSpriteAnimator } from "./spriteAnim";
+import { useSpriteSheets } from "./spriteSheets";
 
 export interface SpriteProps {
   anim: NearSpriteAnimator; // updated by match.tsx before each render
@@ -40,14 +41,15 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
   const { colors } = useTheme();
   const cv = courtVisual(court);
   // Only the two sheets this match needs (player + current partner), loaded
-  // behind the loading cover. A sheet that fails falls back to the placeholder.
-  const [sheetErr, setSheetErr] = useState(false);
-  const playerSheet = useImage(CHARACTER_SHEETS[PLAYER_CHARACTER_ID], () => setSheetErr(true));
+  // via expo-asset behind the loading cover and cached for the session. A sheet
+  // that fails falls back to the placeholder (reason in the DEV overlay).
   const partnerSrc = sprites ? CHARACTER_SHEETS[sprites.partnerId] : undefined;
-  const partnerSheet = useImage(partnerSrc ?? null, () => setSheetErr(true));
+  const sheets = useSpriteSheets(sprites ? CHARACTER_SHEETS[PLAYER_CHARACTER_ID] : undefined, partnerSrc);
+  const playerSheet = sheets.a;
+  const partnerSheet = sheets.b;
   const [courtLoaded, setCourtLoaded] = useState(false);
   const readySent = useRef(false);
-  const sheetsReady = sheetErr || (!!playerSheet && (!partnerSrc || !!partnerSheet));
+  const sheetsReady = !sprites || sheets.done;
   useEffect(() => {
     if (!courtLoaded || readySent.current) return;
     const send = () => {
@@ -145,7 +147,7 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
 
   // Near pair with a sheet: court shadow + ONE Atlas call per sheet (frame
   // rect + RSXform rebuilt per frame; no image / path / shader created).
-  const drawSprite = (slot: number, sheet: NonNullable<ReturnType<typeof useImage>>) => {
+  const drawSprite = (slot: number, sheet: SkImage) => {
     const a = sprites!.anim;
     const x = a.drawX[slot], y = a.drawY[slot];
     const g = projector.ground(x, y);
