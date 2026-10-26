@@ -15,7 +15,7 @@ const MANAGER = "Team Manager";
 export function inboxMessages(d: Pick<SaveDoc, "career" | "partners">): InboxMessage[] {
   const cleared = d.career.cleared;
   const out: InboxMessage[] = [
-    { id: "inbox.welcome", sender: MANAGER, subject: "Your Community Cup starts now", line: "Three matches in Bandra. Win the final.", cta: { label: "PLAY MATCH 1", path: "/career" } },
+    { id: "inbox.welcome", sender: MANAGER, subject: "Your Community Cup starts now", line: "Three matches in Bandra. Win the final.", cta: { label: cleared.length ? "VIEW CAREER" : "PLAY MATCH 1", path: "/career" } },
   ];
   if (cleared.includes("mumbai.community.02") || d.partners.upsi?.discovered)
     out.push({ id: "inbox.met_upsi", sender: "Upsi", senderId: "upsi", subject: "Nice game in Dadar.", line: "Win the Community Cup and come find me.", cta: { label: "VIEW CAREER", path: "/career" } });

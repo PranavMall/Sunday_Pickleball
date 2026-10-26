@@ -202,6 +202,7 @@ export default function Match() {
   const perf = useRef({ renders: 0, rendersPerSec: 0, workMs: 0, projBuilds: 0, sizeChanges: 0, lastW: 0, lastH: 0 });
   perf.current.renders++;
   if (__DEV__) (globalThis as any).__pwPerf = perf.current; // read by the dev pause/resume probe
+  if (__DEV__) (globalThis as any).__pwSim = match.sim; // DEV test hook (web QA: force a game over)
   const gameOverRef = useRef(false);
   const loggedRef = useRef(false);
   const armedRef = useRef(false); // one armed swipe per physical gesture
@@ -688,7 +689,7 @@ export default function Match() {
       kind: "share",
       onPress: () => {
         analytics.track("share_clicked", { difficulty });
-        Share.share({ message: `I won ${sim.score.nearScore}-${sim.score.farScore} vs ${match.setup.rivalName} in Pickle-Ballers! 🥒` });
+        Share.share({ message: `I won ${sim.score.nearScore}-${sim.score.farScore} vs ${match.setup.rivalName} in Pickle-Ballers! 🥒` }).catch(() => {});
       },
     };
     const btn = (label: string, testID: string, onPress: () => void, kind: ResultButton["kind"] = "secondary"): ResultButton => ({ label, testID, onPress, kind });
@@ -734,7 +735,7 @@ function partnerRow(pd: NonNullable<MatchOutcome["partner"]>, nextMatchId: strin
     lvUp: up ? `LV UP · Lv ${la.level}` : undefined,
     gain: [`+${fmt(g)} Growth`, `+${fmt(c)} Chemistry`].join(" · "),
     growth: { from: up ? 0 : lb.frac, to: la.frac, text: la.text, max: la.max },
-    chem: { from: pd.chemBefore / 100, to: pd.chemAfter / 100, text: `${Math.floor(pd.chemAfter)} / 100` },
+    chem: { from: pd.chemBefore / 100, to: pd.chemAfter / 100, text: `${fmt(pd.chemAfter)} / 100` },
   };
 }
 

@@ -76,6 +76,7 @@ export default function Career() {
                         {i > 0 ? <View style={[styles.link, done && styles.linkDone]} /> : null}
                         <Pressable
                           style={styles.nodeHit}
+                          hitSlop={{ left: 8, right: 8 }}
                           testID={`node-${n}`}
                           disabled={!tappable}
                           accessibilityRole="button"
@@ -146,6 +147,7 @@ export default function Career() {
                   <Text style={styles.rewardSub} numberOfLines={2}>Coins ({reward.coinParts.join(" + ")})</Text>
                 </View>
               </View>
+              {reward.fans > 0 ? (
               <View style={styles.reward}>
                 <Ionicons name="people" size={24} color={UI.fans} />
                 <View style={{ marginLeft: 6, flexShrink: 1 }}>
@@ -153,6 +155,7 @@ export default function Career() {
                   <Text style={styles.rewardSub} numberOfLines={2}>Fans ({reward.fanParts.join(" + ")})</Text>
                 </View>
               </View>
+              ) : null}
             </View>
             ) : null}
           </View>

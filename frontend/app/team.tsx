@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   coinText: { color: UI.ink, fontSize: 15, fontWeight: "800" },
   roster: { gap: 10, alignSelf: "stretch" },
   row: { paddingVertical: 10, paddingHorizontal: 10 },
-  rowHi: { backgroundColor: "rgba(246,201,74,0.18)", borderWidth: 2, borderColor: UI.gold },
+  rowHi: { backgroundColor: "rgba(252,240,205,0.9)", borderWidth: 2, borderColor: UI.gold },
   rowTop: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
   kRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   infoBtn: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 44, paddingHorizontal: 10, borderRadius: 12, backgroundColor: UI.cardBg },

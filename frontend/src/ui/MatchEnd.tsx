@@ -257,7 +257,7 @@ function Bar({ icon, color, bar, t, testID }: { icon: IoniconName; color: string
 }
 
 const styles = StyleSheet.create({
-  popWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(16,34,30,0.86)", alignItems: "center", justifyContent: "center", padding: 24 },
+  popWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(16,34,30,0.94)", alignItems: "center", justifyContent: "center", padding: 24 },
   popCard: { width: "100%", maxWidth: 380, alignItems: "center", gap: 10 },
   popKicker: { color: UI.gold, fontSize: 12, fontWeight: "800", letterSpacing: 3 },
   popTitle: { color: "#FBF4E2", fontFamily: SERIF, fontWeight: "700", fontSize: 24, textAlign: "center", marginTop: 6 },
