@@ -192,11 +192,17 @@ export default function Match() {
   pausedRef.current = paused;
   // LOADING COVER: held until the court image has decoded AND a first frame
   // has been drawn; the sim does not run underneath it.
-  const [ready, setReady] = useState(false);
+  // Ready is per match: NEXT MATCH / REMATCH shows the cover again and holds
+  // the sim until the new court (and sheets) have loaded.
+  const [readyId, setReadyId] = useState<string | null>(null);
+  const ready = readyId === matchId;
   const readyRef = useRef(false);
   readyRef.current = ready;
+  const matchIdRef = useRef(matchId);
+  matchIdRef.current = matchId;
   const onCourtReady = useCallback(() => {
-    requestAnimationFrame(() => setReady(true));
+    const id = matchIdRef.current;
+    requestAnimationFrame(() => setReadyId(id));
   }, []);
   // DEV perf probe (pause/resume diagnosis): renders/s, loop work ms/frame,
   // projector rebuilds, window-size changes.
@@ -517,7 +523,7 @@ export default function Match() {
       <Fullscreen />
       <GestureDetector gesture={pan}>
         <View style={styles.canvasWrap}>
-          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} court={config.court} onReady={onCourtReady} sprites={spriteProps} />
+          <CourtRenderer sim={sim} projector={projector} width={width} height={height} frame={0} court={config.court} onReady={onCourtReady} sprites={spriteProps} matchKey={matchId} />
         </View>
       </GestureDetector>
 

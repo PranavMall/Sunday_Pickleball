@@ -44,7 +44,7 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
   // via expo-asset behind the loading cover and cached for the session. A sheet
   // that fails falls back to the placeholder (reason in the DEV overlay).
   const partnerSrc = sprites ? CHARACTER_SHEETS[sprites.partnerId] : undefined;
-  const sheets = useSpriteSheets(sprites ? CHARACTER_SHEETS[PLAYER_CHARACTER_ID] : undefined, partnerSrc);
+  const sheets = useSpriteSheets(sprites ? PLAYER_CHARACTER_ID : undefined, partnerSrc ? sprites!.partnerId : undefined);
   const playerSheet = sheets.a;
   const partnerSheet = sheets.b;
   const [courtLoaded, setCourtLoaded] = useState(false);

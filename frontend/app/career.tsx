@@ -18,7 +18,7 @@ import { levelView } from "@/src/game/meta/levels";
 import { teamCode } from "@/src/game/services/profile";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions } from "@/src/ui/HeaderActions";
-import { Badge, Card, Coin, GoldButton, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
+import { Badge, Card, chemOf, Coin, GoldButton, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 import { CourtThumb } from "@/src/ui/CourtThumb";
 
@@ -43,7 +43,7 @@ export default function Career() {
   const partner = partnerOf(save?.activePartnerId);
   const lv = levelView(save?.partners[partner.id]?.growth ?? 0, save?.career.nextMatchId ?? next.id);
   const myCode = teamCode(identity?.teamName ?? "", next.code);
-  const chem = Math.floor((save?.chemistryHalves[`player+${partner.id}`] ?? 0) / 2);
+  const chem = chemOf(save?.chemistryHalves[`player+${partner.id}`]);
 
   return (
     <DestinationScreen

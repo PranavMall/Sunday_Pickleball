@@ -123,8 +123,15 @@ export function IconSquare({ icon, label, onPress, dot = false, testID, size = 4
 
 // Labelled x/100 bar with numbers.
 // label omitted -> icon only. `num` overrides the "v / 100" text.
+// Chemistry moves in halves: whole numbers show as "6", halves as "6.5".
+export const fmtHalf = (n: number) => {
+  const h = Math.floor(n * 2) / 2;
+  return Number.isInteger(h) ? String(h) : h.toFixed(1);
+};
+export const chemOf = (halves: number | undefined) => (halves ?? 0) / 2;
+
 export function MeterRow({ icon, label, value, color, testID, num }: { icon: IoniconName; label?: string; value: number; color: string; testID?: string; num?: string }) {
-  const v = Math.max(0, Math.min(100, Math.floor(value)));
+  const v = Math.max(0, Math.min(100, value));
   return (
     <View style={kit.meterRow} testID={testID}>
       <Ionicons name={icon} size={16} color={color} />
@@ -132,7 +139,7 @@ export function MeterRow({ icon, label, value, color, testID, num }: { icon: Ion
       <View style={kit.meterTrack}>
         <View style={[kit.meterFill, { width: `${v}%`, backgroundColor: color }]} />
       </View>
-      <Text style={kit.meterNum} numberOfLines={1}>{num ?? `${v} / 100`}</Text>
+      <Text style={kit.meterNum} numberOfLines={1}>{num ?? `${fmtHalf(v)} / 100`}</Text>
     </View>
   );
 }

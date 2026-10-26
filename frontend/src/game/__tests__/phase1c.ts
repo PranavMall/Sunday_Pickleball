@@ -183,6 +183,16 @@ async function sessionD() {
   (s.doc as any).chemistryPeakHalves["player+anli"] = 60; // 30 → floor 25
   for (let i = 0; i < 6; i++) s.completeMatch({ matchId: `fl${i}`, kind: "scrimmage", won: true, partnerId: "upsi" }, T0 + 2 * DAY);
   ok(s.chemistry("anli") === 25, "fade floor 25");
+  // 8.2: "play for fun" (capped Training / Scrimmage with Upsi) never fades Anli.
+  {
+    const day = T0 + 5 * DAY;
+    for (let i = 0; i < 3; i++) s.completeMatch({ matchId: `cu${i}`, kind: "scrimmage", won: true, partnerId: "upsi" }, day); // uses today's 3
+    for (let i = 0; i < 2; i++) s.completeMatch({ matchId: `ct${i}`, kind: "training", won: false, partnerId: "upsi" }, day); // uses today's 2
+    const ch = s.doc.chemistryHalves["player+anli"], apart = s.doc.apart["player+anli"], fades = s.doc.ledger.filter((e) => e.sourceType === "chemistry_fade").length;
+    let allCapped = true;
+    for (let i = 0; i < 6; i++) allCapped = s.completeMatch({ matchId: `cc${i}`, kind: i % 2 ? "training" : "scrimmage", won: true, partnerId: "upsi" }, day).capped === true && allCapped;
+    ok(allCapped && s.doc.chemistryHalves["player+anli"] === ch && s.doc.apart["player+anli"] === apart && s.doc.ledger.filter((e) => e.sourceType === "chemistry_fade").length === fades, "capped sessions with Upsi leave Anli's Chemistry (and apart count) unchanged");
+  }
   // 1v1: no fade.
   const h = s.doc.chemistryHalves["player+anli"], ap = s.doc.apart["player+anli"];
   s.completeMatch({ matchId: "solo", kind: "quick", won: true, singles: true }, T0);

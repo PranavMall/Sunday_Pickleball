@@ -15,6 +15,7 @@ export interface CourtRendererProps {
   court?: string; // config.court (selects the painted court)
   onReady?: () => void; // court image decoded (first frame can be shown)
   sprites?: SpriteProps;
+  matchKey?: string; // matchId: a new match remounts the canvas (court + sheets reload behind the cover)
 }
 
 // On native, Skia is ready immediately — render the canvas directly. On web,
@@ -24,7 +25,7 @@ export interface CourtRendererProps {
 export function CourtRenderer(props: CourtRendererProps) {
   if (Platform.OS !== "web") {
     const { GameCanvas } = require("./GameCanvas");
-    return <GameCanvas {...props} />;
+    return <GameCanvas key={props.matchKey} {...props} />;
   }
   return <WebCanvas {...props} />;
 }
@@ -59,5 +60,5 @@ function WebCanvas(props: CourtRendererProps) {
       </View>
     );
   }
-  return <Comp {...props} />;
+  return <Comp key={props.matchKey} {...props} />;
 }

@@ -13,7 +13,7 @@ import { levelView } from "@/src/game/meta/levels";
 import type { SaveDoc } from "@/src/game/meta/metaStore";
 import { getMatchResults, type MatchResultRecord } from "@/src/game/services/matchLog";
 import { Ionicons } from "@react-native-vector-icons/ionicons";
-import { Badge, Card, Coin, IconSquare, MeterRow, SERIF, UI } from "./kit";
+import { Badge, Card, chemOf, Coin, IconSquare, MeterRow, SERIF, UI } from "./kit";
 
 export function HeaderActions({ save, onChange }: { save: SaveDoc | null; onChange?: () => void }) {
   const [open, setOpen] = useState<null | "inbox" | "stats">(null);
@@ -83,7 +83,7 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
   const longest = (log ?? []).reduce((m, r) => Math.max(m, r.rallyStats?.longestRally ?? 0), 0);
   const partner = partnerOf(save?.activePartnerId);
   const lv = levelView(save?.partners[partner.id]?.growth ?? 0, save?.career.nextMatchId ?? "mumbai.community.01");
-  const chem = Math.floor((save?.chemistryHalves[`player+${partner.id}`] ?? 0) / 2);
+  const chem = chemOf(save?.chemistryHalves[`player+${partner.id}`]);
   return (
     <View testID="stats-body">
       <View style={styles.grid}>

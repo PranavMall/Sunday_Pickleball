@@ -96,7 +96,10 @@ export class NearSpriteAnimator {
       const human = p.controller === "LOCAL_HUMAN";
       if (human && p.windUpCue > p.swingCue && p.windUpCue > this.strokeT[s] && t - p.windUpCue < 1) {
         const ball = sim.ball;
-        const row = sim.phase !== "rally" && sim.humanIsServer() ? R.serve : sim.lobArmed ? R.lob : ball.x < p.x ? R.backhand : R.forehand;
+        // Smash cue in its "smash" phase (or a smash-latched swipe) → the
+        // overhead smash row, so the paddle goes up before contact.
+        const smash = sim.smashLatched || sim.humanSmashCuePhase() === "smash";
+        const row = sim.phase !== "rally" && sim.humanIsServer() ? R.serve : sim.lobArmed ? R.lob : smash ? R.smash : ball.x < p.x ? R.backhand : R.forehand;
         this.row[s] = row;
         this.frame[s] = Math.min(cfOfRow(row) - 1, Math.floor((t - p.windUpCue) / WINDUP_FRAME));
         continue;

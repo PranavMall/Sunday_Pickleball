@@ -11,7 +11,7 @@ import { pairingKey } from "@/src/game/meta/metaStore";
 import { discoveredPartners, rosterStatus, type RosterStatus } from "@/src/game/meta/team";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions, Overlay } from "@/src/ui/HeaderActions";
-import { Badge, Card, Coin, Kicker, MeterRow, SERIF, UI, type IoniconName } from "@/src/ui/kit";
+import { Badge, Card, chemOf, Coin, Kicker, MeterRow, SERIF, UI, type IoniconName } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
 const INFO =
@@ -89,7 +89,7 @@ export default function Team() {
           const ps = save!.partners[id];
           const lv = levelView(ps?.growth ?? 0, save!.career.nextMatchId);
           const key = pairingKey(id);
-          const chem = Math.floor((save!.chemistryHalves[key] ?? 0) / 2);
+          const chem = chemOf(save!.chemistryHalves[key]);
           const rusty = (save!.chemistryHalves[key] ?? 0) < (save!.chemistryPeakHalves?.[key] ?? 0);
           const isCareer = save!.activePartnerId === id;
           const isTraining = save!.trainingPartnerId === id;

@@ -10,7 +10,7 @@ import { PARTNER_IDS, PARTNER_REWARDS, PARTNERS, TRAINING_MODES } from "@/src/ga
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { HeaderActions, Overlay } from "@/src/ui/HeaderActions";
-import { Badge, Card, GoldButton, Kicker, SERIF, UI } from "@/src/ui/kit";
+import { Badge, Card, fmtHalf, GoldButton, Kicker, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
 const ART = { training: require("@/assets/images/art_quickplay.webp"), scrimmage: require("@/assets/images/icon_scrimmage.webp") };
@@ -52,7 +52,8 @@ export default function Training() {
       </Card>
 
       {(["training", "scrimmage"] as const).map((mode) => {
-        const t = { ...TRAINING_MODES[mode], ...PARTNER_REWARDS[mode].win };
+        const win = PARTNER_REWARDS[mode].win, loss = PARTNER_REWARDS[mode].loss;
+        const t = TRAINING_MODES[mode];
         const left = Math.max(0, t.dailyCap - usage[mode]);
         return (
           <Card key={mode} style={styles.modeCard} testID={`${mode}-card`}>
@@ -61,13 +62,12 @@ export default function Training() {
             <View style={{ flex: 1 }}>
               <Text style={styles.modeTitle}>{mode.toUpperCase()}</Text>
               <View style={styles.gains}>
-                <Ionicons name="star" size={15} color={UI.growth} />
-                <Text style={styles.gainText} numberOfLines={1}>
-                  <Text style={{ fontWeight: "800" }}>+{t.growth}</Text> Growth ·{" "}
-                </Text>
-                <Ionicons name="heart" size={15} color={UI.chem} />
-                <Text style={styles.gainText} numberOfLines={1}>
-                  <Text style={{ fontWeight: "800" }}>+{t.chemistry}</Text> Chemistry
+                <Text style={styles.gainText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} testID={`${mode}-gains`}>
+                  Win <Ionicons name="star" size={13} color={UI.growth} />
+                  <Text style={{ fontWeight: "800" }}>+{win.growth}</Text> / <Ionicons name="heart" size={13} color={UI.chem} />
+                  <Text style={{ fontWeight: "800" }}>+{fmtHalf(win.chemistry)}</Text> · Loss <Ionicons name="star" size={13} color={UI.growth} />
+                  <Text style={{ fontWeight: "800" }}>+{loss.growth}</Text> / <Ionicons name="heart" size={13} color={UI.chem} />
+                  <Text style={{ fontWeight: "800" }}>+{fmtHalf(loss.chemistry)}</Text>
                 </Text>
               </View>
               <Text style={styles.vs}>First to 7 vs {t.vs}</Text>

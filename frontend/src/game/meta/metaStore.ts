@@ -530,7 +530,8 @@ export class MetaStore {
       coinsLine("coins", m.won ? QUICK_PLAY_REWARDS.winCoins : QUICK_PLAY_REWARDS.lossCoins, "", m.won ? "Win" : "Loss");
       analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won });
     }
-    if (!m.singles) this.fadeOthers(m.partnerId ?? (m.kind === "career" ? d.activePartnerId : m.kind === "quick" ? this.quickPartner() : d.trainingPartnerId), m, src, now);
+    // "Play for fun" (a capped Training / Scrimmage) never fades anyone.
+    if (!m.singles && !out.capped) this.fadeOthers(m.partnerId ?? (m.kind === "career" ? d.activePartnerId : m.kind === "quick" ? this.quickPartner() : d.trainingPartnerId), m, src, now);
     this.save();
     return out;
   }
