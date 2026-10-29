@@ -138,3 +138,8 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 ## Commit 8.2 (06055f5) — seven fixes
 - Capped Training/Scrimmage never fades Chemistry; per-match loading cover (CourtRenderer keyed by matchId); Chemistry halves shown; Training/Scrimmage win/loss line; smash wind-up uses smash row; expo-asset direct dep; DEV sprite line names sheets.
 - STOP: awaiting Pranav phone test.
+
+## Release 9: Commit 8.3 (1407ac1) + Commit 9 (8d5bc27, fit 2nd commit)
+- 8.3: receivers hold depth on serve return (new frozen baseline: b3 md5 097a6010…, shotMix 12388643…); court memory-disk cache + next-court prefetch; portrait onError + DEV faces line.
+- 9: 14 rival front sprites with per-match looks, 4-sheet loader, FarSpriteAnimator; stage trophies; Matz face; short team names; Maharashtra Championship.
+- STOP: awaiting Pranav phone test. Open question: Quick Play may show a signed Upsi/Matz on the rival side.
