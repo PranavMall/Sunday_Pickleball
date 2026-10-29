@@ -91,7 +91,7 @@ export default function Home() {
           <View style={styles.careerTop}>
             <View style={{ flex: 1 }}>
               <Kicker>CAREER</Kicker>
-              <Text style={styles.careerStage} numberOfLines={1} testID="career-card-stage">{stage}</Text>
+              <Text style={[styles.careerStage, stage.length > 20 && { fontSize: 19 }]} numberOfLines={1} testID="career-card-stage">{stage}</Text>
               <Text style={styles.careerSub} numberOfLines={1}>Continue your journey in Mumbai</Text>
             </View>
             <Image source={TROPHY_BY_STAGE[(save?.career.nextMatchId ?? "mumbai.community.01").split(".")[1]] ?? TROPHY_BY_STAGE.community} style={styles.trophy} contentFit="contain" />

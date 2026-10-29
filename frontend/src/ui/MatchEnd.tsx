@@ -188,7 +188,7 @@ export function ResultCard(props: {
               ))}
             </Animated.View>
           ) : null}
-          {props.next ? <Text style={styles.next} numberOfLines={1} adjustsFontSizeToFit testID="next-goal">{props.next}</Text> : null}
+          {props.next ? <Text style={styles.next} numberOfLines={2} adjustsFontSizeToFit testID="next-goal">{props.next}</Text> : null}
         </>
       )}
       <View style={styles.btnRow}>
