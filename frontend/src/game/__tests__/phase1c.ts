@@ -5,7 +5,7 @@
 import { CAREER_MATCH_IDS, careerMatch } from "../meta/economyConfig";
 import { nextGoal } from "../meta/goals";
 import { MetaStore } from "../meta/metaStore";
-import { buildSetup } from "../meta/matchSetup";
+import { buildSetup, careerSetup, quickPlaySetup } from "../meta/matchSetup";
 
 let pass = 0;
 let fail = 0;
@@ -201,10 +201,46 @@ async function sessionD() {
   ok(s.setQuickPartner("upsi") && s.doc.activePartnerId === "anli" && s.doc.trainingPartnerId === "upsi" && buildSetup({ mode: "quick", difficulty: "CLUB" }, 1, s.doc).config.near.players[1].name === "Upsi", "Quick Play partner Upsi; Career partner stays Anli");
 }
 
+// Commit 9: rival looks (config only). RIVAL_SHEETS keys are read from
+// sprites.ts (its require()s of .png can't load under node) and each must
+// have its sheet file.
+function commit9() {
+  const fs = require("fs") as typeof import("fs");
+  const path = require("path") as typeof import("path");
+  const root = path.resolve(__dirname, "../../..");
+  const src = fs.readFileSync(path.join(root, "src/game/render/sprites.ts"), "utf8");
+  const block = src.slice(src.indexOf("export const RIVAL_SHEETS"), src.indexOf("};", src.indexOf("export const RIVAL_SHEETS")));
+  const keys = new Set([...block.matchAll(/^\s+(rival_\w+):/gm)].map((m) => m[1]));
+  ok(keys.size === 14 && [...keys].every((k) => fs.existsSync(path.join(root, `assets/images/${k}.png`))), "14 RIVAL_SHEETS keys, each with its sheet file");
+  const yes = () => true, no = () => false;
+  const looksOf = (n: number, signed: (id: string) => boolean = no) => careerSetup(careerMatch(CAREER_MATCH_IDS[n - 1]), "anli", 1, signed).rivalLooks;
+  ok(CAREER_MATCH_IDS.map(careerMatch).filter((m) => m.enabled).every((m) => { const l = careerSetup(m, "anli", 1).rivalLooks; return l.length === 2 && l.every((k) => keys.has(k)); }), "every enabled Career match resolves both looks to a RIVAL_SHEETS key");
+  eq(looksOf(1), ["rival_man1_ban", "rival_woman1_ban"], "Match 1 looks");
+  eq(looksOf(2), ["rival_upsi_front", "rival_man2_dad"], "Match 2: Upsi unsigned plays her own look");
+  const m2 = careerSetup(careerMatch(CAREER_MATCH_IDS[1]), "anli", 1, (id) => id === "upsi");
+  ok(m2.rivalLooks[0] === "rival_woman1_dad" && m2.config.far.players[0].name === "Kiran", "Upsi signed → Match 2 slot 0 rival_woman1_dad (Kiran)");
+  const m5 = careerSetup(careerMatch(CAREER_MATCH_IDS[4]), "anli", 1, (id) => id === "matz");
+  ok(m5.rivalLooks[0] === "rival_man1_juh" && m5.config.far.players[0].name === "Vikram", "Matz signed → Match 5 slot 0 rival_man1_juh (Vikram)");
+  ok(looksOf(5, yes)[1] === "rival_woman2_juh", "reserve rule touches only the recruit slot");
+  // Quick Play: deterministic by seed (Career match (seed mod 6) + 1); singles = slot-1 look.
+  let qpOk = true, singlesOk = true;
+  for (let seed = 0; seed < 60; seed++) {
+    const d = quickPlaySetup("CLUB", false, "anli", seed).rivalLooks;
+    qpOk = qpOk && d.join() === quickPlaySetup("CLUB", false, "anli", seed).rivalLooks.join() && d.join() === careerMatch(CAREER_MATCH_IDS[seed % 6]).looks!.join();
+    const sl = quickPlaySetup("CLUB", true, "anli", seed).rivalLooks;
+    singlesOk = singlesOk && sl.length === 1 && sl[0] !== "rival_upsi_front" && sl[0] !== "rival_matz_front";
+  }
+  ok(qpOk, "Quick Play looks deterministic by seed (Matches 1–6)");
+  ok(singlesOk, "Quick Play singles never uses Upsi or Matz");
+  eq(buildSetup({ mode: "training" }, 1, null).rivalLooks, ["rival_man1_ban", "rival_woman1_ban"], "Training uses Match 1 looks");
+  eq(buildSetup({ mode: "scrimmage" }, 1, null).rivalLooks, ["rival_woman1_and", "rival_woman2_and"], "Scrimmage uses Match 4 looks");
+}
+
 (async () => {
   await commit4();
   await commit5();
   await sessionD();
+  commit9();
   console.log(`=== PHASE 1C RESULT: ${pass} passed, ${fail} failed ===`);
   if (fail) process.exitCode = 1;
 })();

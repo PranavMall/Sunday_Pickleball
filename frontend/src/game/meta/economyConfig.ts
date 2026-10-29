@@ -74,7 +74,7 @@ export const FIRST_CAREER_MATCH_ID = CAREER_MATCH_IDS[0];
 export const STAGE_NAMES: Record<string, string> = {
   community: "Community Cup",
   local: "Mumbai Local Series",
-  district: "District Championship",
+  district: "Maharashtra Championship",
 };
 export function stageNameOf(careerMatchId: string): string {
   return STAGE_NAMES[careerMatchId.split(".")[1]] ?? STAGE_NAMES.community;
@@ -97,25 +97,28 @@ export interface CareerMatchDef {
   court: CourtId | null; // null = no court yet
   enabled: boolean;
   recruit?: { slot: 0 | 1; partnerId: PartnerId }; // that AI slot IS the recruit
+  looks: [string, string] | null; // RIVAL_SHEETS keys (far slot 0, slot 1); null → placeholder
+  reserveLook?: string; // the recruit slot's look once that partner is signed (with reserveName)
 }
 const M = (
   n: number, round: CareerMatchDef["round"], rival: string, code: string, color: string, namedRival: boolean,
-  ai: [AiDiff, AiDiff], personalities: [AiPers, AiPers], court: CourtId | null, recruit?: CareerMatchDef["recruit"],
+  ai: [AiDiff, AiDiff], personalities: [AiPers, AiPers], court: CourtId | null, looks: CareerMatchDef["looks"],
+  recruit?: CareerMatchDef["recruit"], reserveLook?: string,
 ): CareerMatchDef => {
   const id = CAREER_MATCH_IDS[n - 1];
-  return { id, number: n, stageKey: id.split(".")[1] as CareerMatchDef["stageKey"], round, rival, code, color, namedRival, ai, personalities, court, enabled: n <= 5, recruit };
+  return { id, number: n, stageKey: id.split(".")[1] as CareerMatchDef["stageKey"], round, rival, code, color, namedRival, ai, personalities, court, enabled: n <= 5, recruit, looks, reserveLook };
 };
 export const CAREER_MATCHES: CareerMatchDef[] = [
-  M(1, "", "Bandra Gully Smashers", "BGS", "#3E7CB1", false, ["ROOKIE", "ROOKIE"], ["DEFENSIVE", "TACTICAL"], "bandra_garden"),
-  M(2, "", "Dadar Dinkers", "DAD", "#8E5BA8", false, ["ROOKIE", "ROOKIE"], ["KITCHEN", "TACTICAL"], "bandra_garden", { slot: 0, partnerId: "upsi" }),
-  M(3, "FINAL", "Colaba Causeway Kings", "CCK", "#2F5DA8", true, ["ROOKIE", "CLUB"], ["AGGRESSIVE", "KITCHEN"], "bandra_garden"),
-  M(4, "", "Andheri Local Express", "ALX", "#C77D2E", false, ["CLUB", "CLUB"], ["DEFENSIVE", "TACTICAL"], "mumbai_local"),
-  M(5, "", "Juhu Beach Bouncers", "JBB", "#2A9D8F", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "AGGRESSIVE"], "mumbai_local", { slot: 0, partnerId: "matz" }),
-  M(6, "FINAL", "Worli Sea Face Strikers", "WSF", "#B23A48", true, ["CLUB", "CLUB"], ["AGGRESSIVE", "AGGRESSIVE"], "mumbai_local"),
-  M(7, "", "Powai Lake Lobbers", "PLL", "#5B8C3A", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "TACTICAL"], null),
-  M(8, "", "Marine Drive Volleyers", "MDV", "#4A6FA5", false, ["CLUB", "CLUB"], ["TACTICAL", "KITCHEN"], null),
-  M(9, "SEMIFINAL", "Malabar Hill Masters", "MHM", "#7A5230", false, ["CLUB", "PRO"], ["DEFENSIVE", "TACTICAL"], null),
-  M(10, "FINAL", "Gateway Champions", "GWC", "#B08D2F", true, ["PRO", "PRO"], ["AGGRESSIVE", "TACTICAL"], null),
+  M(1, "", "Bandra Bashers", "BAN", "#3E7CB1", false, ["ROOKIE", "ROOKIE"], ["DEFENSIVE", "TACTICAL"], "bandra_garden", ["rival_man1_ban", "rival_woman1_ban"]),
+  M(2, "", "Dadar Dinkers", "DAD", "#8E5BA8", false, ["ROOKIE", "ROOKIE"], ["KITCHEN", "TACTICAL"], "bandra_garden", ["rival_upsi_front", "rival_man2_dad"], { slot: 0, partnerId: "upsi" }, "rival_woman1_dad"),
+  M(3, "FINAL", "Colaba Kings", "COL", "#2F5DA8", true, ["ROOKIE", "CLUB"], ["AGGRESSIVE", "KITCHEN"], "bandra_garden", ["rival_man1_col", "rival_man2_col"]),
+  M(4, "", "Andheri Locals", "AND", "#C77D2E", false, ["CLUB", "CLUB"], ["DEFENSIVE", "TACTICAL"], "mumbai_local", ["rival_woman1_and", "rival_woman2_and"]),
+  M(5, "", "Juhu Bouncers", "JUH", "#2A9D8F", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "AGGRESSIVE"], "mumbai_local", ["rival_matz_front", "rival_woman2_juh"], { slot: 0, partnerId: "matz" }, "rival_man1_juh"),
+  M(6, "FINAL", "Worli Strikers", "WOR", "#B23A48", true, ["CLUB", "CLUB"], ["AGGRESSIVE", "AGGRESSIVE"], "mumbai_local", ["rival_man2_wor", "rival_woman1_wor"]),
+  M(7, "", "Satara Winds", "SAT", "#5B8C3A", false, ["CLUB", "CLUB"], ["AGGRESSIVE", "TACTICAL"], null, null),
+  M(8, "", "Nashik Vines", "NAS", "#4A6FA5", false, ["CLUB", "CLUB"], ["TACTICAL", "KITCHEN"], null, null),
+  M(9, "SEMIFINAL", "Pune Pacers", "PUN", "#7A5230", false, ["CLUB", "PRO"], ["DEFENSIVE", "TACTICAL"], null, null),
+  M(10, "FINAL", "Gateway Champs", "GAT", "#B08D2F", true, ["PRO", "PRO"], ["AGGRESSIVE", "TACTICAL"], null, null),
 ];
 export function careerMatch(id: string | undefined): CareerMatchDef {
   return CAREER_MATCHES.find((m) => m.id === id) ?? CAREER_MATCHES[0];

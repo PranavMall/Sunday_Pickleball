@@ -5,7 +5,7 @@
 import { PARTNER_DIFFICULTY } from "../config/ai";
 import { buildMatchConfig, devSinglesConfig, type MatchConfig } from "../config/matchConfig";
 import type { Difficulty } from "../sim/types";
-import { careerMatch, PARTNERS, QUICK_PLAY_COURT, SHORT_FORMAT, STARTER_PARTNER_ID, TRAINING_MODES, type CareerMatchDef, type CourtId, type PartnerId } from "./economyConfig";
+import { CAREER_MATCHES, careerMatch, PARTNERS, QUICK_PLAY_COURT, SHORT_FORMAT, STARTER_PARTNER_ID, TRAINING_MODES, type CareerMatchDef, type CourtId, type PartnerId } from "./economyConfig";
 
 export type MatchMode = "quick" | "career" | "training" | "scrimmage";
 
@@ -25,6 +25,19 @@ export interface MatchSetup {
   label: string; // analytics / share label
   partnerId: string; // the near-side partner (rewards go to them)
   careerId?: string;
+  rivalLooks: string[]; // RIVAL_SHEETS key per far player ("" → placeholder)
+}
+
+// Looks only (names, codes, difficulties unchanged): a Career match's pair,
+// with the recruit's slot switching to reserveLook once that partner is signed.
+function careerLooks(m: CareerMatchDef, signed: (id: string) => boolean): string[] {
+  if (!m.looks) return ["", ""];
+  return m.looks.map((l, i) => (m.recruit?.slot === i && m.reserveLook && signed(m.recruit.partnerId) ? m.reserveLook : l));
+}
+// Quick Play: Career match ((seed mod 6) + 1); singles uses that team's slot-1 look.
+export function quickPlayLooks(seed: number, singles: boolean): string[] {
+  const looks = CAREER_MATCHES[((seed % 6) + 6) % 6].looks!;
+  return singles ? [looks[1]] : [...looks];
 }
 
 const DIFFS: Difficulty[] = ["ROOKIE", "CLUB", "PRO"];
@@ -55,7 +68,7 @@ export function quickPlaySetup(difficulty: Difficulty, singles: boolean, partner
           names: ["Rival", "Rival"],
         },
       });
-  return { mode: "quick", config, rivalCode: "RIV", rivalName: "Rivals", label: difficulty, partnerId: partner.id };
+  return { mode: "quick", config, rivalCode: "RIV", rivalName: "Rivals", label: difficulty, partnerId: partner.id, rivalLooks: quickPlayLooks(seed, singles) };
 }
 
 export function parseDifficulty(d: string | undefined): Difficulty {
@@ -100,7 +113,7 @@ export function careerSetup(m: CareerMatchDef, partnerId: string, seed: number, 
     near: nearTeam(partnerId),
     far: { controllers: ["AI", "AI"], difficulties: [...m.ai], personalities: [...m.personalities], names },
   });
-  return { mode: "career", config, rivalCode: m.code, rivalName: m.rival, label: m.id, partnerId: partnerOf(partnerId).id, careerId: m.id };
+  return { mode: "career", config, rivalCode: m.code, rivalName: m.rival, label: m.id, partnerId: partnerOf(partnerId).id, careerId: m.id, rivalLooks: careerLooks(m, signed) };
 }
 
 // Training / Scrimmage: training partner vs drill / sparring pair, first to 7 win by 2.
@@ -115,5 +128,5 @@ export function trainingSetup(mode: "training" | "scrimmage", partnerId: string,
     far: { controllers: ["AI", "AI"], difficulties: [...t.ai], personalities: [...t.personalities], names: ["Drill", "Drill"] },
     ruleModifiers: { ...SHORT_FORMAT },
   });
-  return { mode, config, rivalCode: t.code, rivalName: mode === "training" ? "Drill pair" : "Sparring pair", label: mode, partnerId: partnerOf(partnerId).id };
+  return { mode, config, rivalCode: t.code, rivalName: mode === "training" ? "Drill pair" : "Sparring pair", label: mode, partnerId: partnerOf(partnerId).id, rivalLooks: [...CAREER_MATCHES[mode === "training" ? 0 : 3].looks!] };
 }

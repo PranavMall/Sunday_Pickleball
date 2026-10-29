@@ -21,10 +21,36 @@ export const CHARACTER_SHEETS: Record<string, number> = {
   upsi: require("@/assets/images/partner_upsi_back.png"),
 };
 
+// Front-view rival sheets (team colours baked in), keyed by file name.
+export const RIVAL_SHEETS: Record<string, number> = {
+  rival_man1_ban: require("@/assets/images/rival_man1_ban.png"),
+  rival_woman1_ban: require("@/assets/images/rival_woman1_ban.png"),
+  rival_man2_dad: require("@/assets/images/rival_man2_dad.png"),
+  rival_woman1_dad: require("@/assets/images/rival_woman1_dad.png"),
+  rival_upsi_front: require("@/assets/images/rival_upsi_front.png"),
+  rival_man1_col: require("@/assets/images/rival_man1_col.png"),
+  rival_man2_col: require("@/assets/images/rival_man2_col.png"),
+  rival_woman1_and: require("@/assets/images/rival_woman1_and.png"),
+  rival_woman2_and: require("@/assets/images/rival_woman2_and.png"),
+  rival_matz_front: require("@/assets/images/rival_matz_front.png"),
+  rival_woman2_juh: require("@/assets/images/rival_woman2_juh.png"),
+  rival_man1_juh: require("@/assets/images/rival_man1_juh.png"),
+  rival_man2_wor: require("@/assets/images/rival_man2_wor.png"),
+  rival_woman1_wor: require("@/assets/images/rival_woman1_wor.png"),
+};
+
+// Stage trophies (pop-up + Home Career card).
+export const TROPHY_BY_STAGE: Record<string, number> = {
+  community: require("@/assets/images/trophy_community_cup.webp"),
+  local: require("@/assets/images/trophy_mumbai.webp"),
+  district: require("@/assets/images/trophy_district_cup.webp"),
+};
+
 // Partner faces (Badge shows them on the partner colour, cropped to a circle).
 export const PORTRAITS: Record<string, number> = {
   anli: require("@/assets/images/portrait_anli.png"),
   upsi: require("@/assets/images/portrait_upsi.png"),
+  matz: require("@/assets/images/portrait_matz.png"),
 };
 
 // Sheet load status, read by the DEV overlay (kept here, outside the Skia

@@ -62,7 +62,7 @@ export default function Career() {
                 <View style={styles.groupHead}>
                   {locked ? <Ionicons name="lock-closed" size={11} color={UI.muted} /> : null}
                   <Text style={[styles.groupName, activeGroup && { color: "#1E4D33", fontWeight: "800" }, locked && { color: UI.muted }]} numberOfLines={1}>
-                    {g.key === "district" ? "District Champ." : STAGE_NAMES[g.key].replace(" Series", "")}
+                    {g.key === "district" ? "Maharashtra" : STAGE_NAMES[g.key].replace(" Series", "")}
                   </Text>
                 </View>
                 <View style={styles.nodes}>

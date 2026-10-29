@@ -46,7 +46,7 @@ ok(CAREER_MATCH_IDS.join() === "mumbai.community.01,mumbai.community.02,mumbai.c
 ok(CAREER_MATCHES.length === 10 && CAREER_MATCHES.every((m, i) => m.id === CAREER_MATCH_IDS[i] && m.number === i + 1), "career table aligned to IDs");
 ok(CAREER_MATCHES.filter((m) => m.enabled).map((m) => m.number).join() === "1,2,3,4,5", "matches 1–5 enabled, 6–10 disabled");
 ok(CAREER_MATCHES.filter((m) => m.round === "FINAL").map((m) => m.number).join() === "3,6,10" && careerMatch("mumbai.district.09").round === "SEMIFINAL", "★ finals on 3, 6, 10; 9 semifinal");
-ok(CAREER_MATCHES.filter((m) => m.namedRival).map((m) => m.code).join() === "CCK,WSF,GWC", "named rivals CCK / WSF / GWC");
+ok(CAREER_MATCHES.filter((m) => m.namedRival).map((m) => m.code).join() === "COL,WOR,GAT", "named rivals COL / WOR / GAT");
 const m2 = careerMatch("mumbai.community.02");
 ok(m2.recruit?.partnerId === "upsi" && m2.personalities[m2.recruit.slot] === "KITCHEN", "Match 2 KITCHEN slot = Upsi");
 const m5 = careerMatch("mumbai.local.05");

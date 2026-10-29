@@ -14,7 +14,7 @@ import { buildSetup, type LaunchParams, type MatchSetup } from "@/src/game/meta/
 import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
-import { END_SEQ_S, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
+import { END_SEQ_S, FarSpriteAnimator, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
 import { portraitLoadStatus, spriteLoadStatus } from "@/src/game/render/sprites";
 import { courtVisual } from "@/src/game/render/courts";
 import { analytics } from "@/src/game/services/analytics";
@@ -219,8 +219,12 @@ export default function Match() {
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
   // Sprite animation state for the near pair: one preallocated animator per match.
   const spriteAnim = useMemo(() => new NearSpriteAnimator(), [sim]);
+  const farAnim = useMemo(() => new FarSpriteAnimator(), [sim]);
   const [spritesOn, setSpritesOn] = useState(true); // DEV A/B switch (pause menu)
-  const spriteProps = useMemo(() => ({ anim: spriteAnim, partnerId: match.setup.partnerId, humanSlot, on: spritesOn }), [spriteAnim, match.setup.partnerId, humanSlot, spritesOn]);
+  const spriteProps = useMemo(
+    () => ({ anim: spriteAnim, farAnim, partnerId: match.setup.partnerId, rivalLooks: match.setup.rivalLooks, humanSlot, on: spritesOn }),
+    [spriteAnim, farAnim, match.setup.partnerId, match.setup.rivalLooks, humanSlot, spritesOn],
+  );
   const projector = useMemo(() => {
     perf.current.projBuilds++;
     return makeProjector(width, height);
@@ -313,6 +317,7 @@ export default function Match() {
         // Sim is over: render the end sequence only, then stop the loop.
         const e = (performance.now() - endT0.current) / 1000;
         spriteAnim.update(sim, skipSeq.current ? END_SEQ_S : e);
+        farAnim.update(sim, skipSeq.current ? END_SEQ_S : e);
         if (e >= END_SEQ_S || skipSeq.current) {
           setSeqDone(true);
           setFrame((f) => (f + 1) % 1000000);
@@ -332,6 +337,7 @@ export default function Match() {
       for (const ev of sim.consumeContactEvents()) {
         sfx.playForContact(ev);
         spriteAnim.onContact(ev, sim);
+        farAnim.onContact(ev, sim);
         if (ev.slot === humanSlot && Platform.OS !== "web") {
           Haptics.impactAsync(
             ev.power > 0.55 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
@@ -339,7 +345,10 @@ export default function Match() {
         }
       }
       for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
-      if (sim.phase !== "game_over") spriteAnim.update(sim, -1);
+      if (sim.phase !== "game_over") {
+        spriteAnim.update(sim, -1);
+        farAnim.update(sim, -1);
+      }
 
       if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
@@ -362,7 +371,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, matchId, match.setup, spriteAnim]);
+  }, [sim, config, difficulty, humanSlot, matchId, match.setup, spriteAnim, farAnim]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time

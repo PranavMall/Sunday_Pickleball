@@ -9,13 +9,15 @@ import type { GameSimulation } from "../sim/GameSimulation";
 import { IMAGE_H, IMAGE_W, type Projector } from "../render/perspective";
 import { Character, type CharacterColors, type CharacterView } from "./character";
 import { courtVisual } from "./courts";
-import { CHARACTER_SHEETS, PLAYER_CHARACTER_ID, SPRITE_META, SPRITE_SCALE } from "./sprites";
-import type { NearSpriteAnimator } from "./spriteAnim";
+import { CHARACTER_SHEETS, PLAYER_CHARACTER_ID, RIVAL_SHEETS, SPRITE_META, SPRITE_SCALE } from "./sprites";
+import type { FarSpriteAnimator, NearSpriteAnimator } from "./spriteAnim";
 import { useSpriteSheets } from "./spriteSheets";
 
 export interface SpriteProps {
   anim: NearSpriteAnimator; // updated by match.tsx before each render
+  farAnim: FarSpriteAnimator; // rivals (same update / contact loop)
   partnerId: string;
+  rivalLooks: string[]; // RIVAL_SHEETS key per far player ("" → placeholder)
   humanSlot: number;
   on: boolean; // DEV A/B switch (always on in release)
 }
@@ -40,13 +42,21 @@ const CW = SPRITE_META.cell[0], CH = SPRITE_META.cell[1], FX = SPRITE_META.feet[
 export function GameCanvas({ sim, projector, width, height, court, onReady, sprites }: Props) {
   const { colors } = useTheme();
   const cv = courtVisual(court);
-  // Only the two sheets this match needs (player + current partner), loaded
-  // via expo-asset behind the loading cover and cached for the session. A sheet
-  // that fails falls back to the placeholder (reason in the DEV overlay).
+  // Only the sheets this match needs (player, partner, rival 0, rival 1),
+  // loaded via expo-asset behind the loading cover and cached for the session.
+  // A sheet that fails falls back to the placeholder (reason in the DEV overlay).
   const partnerSrc = sprites ? CHARACTER_SHEETS[sprites.partnerId] : undefined;
-  const sheets = useSpriteSheets(sprites ? PLAYER_CHARACTER_ID : undefined, partnerSrc ? sprites!.partnerId : undefined);
-  const playerSheet = sheets.a;
-  const partnerSheet = sheets.b;
+  const rivalLooks = sprites?.rivalLooks;
+  const partnerId = partnerSrc ? sprites!.partnerId : undefined;
+  const hasSprites = !!sprites;
+  // Memoised (never rebuilt per frame).
+  const rivalIds = useMemo(() => (rivalLooks ?? []).map((l) => (l && RIVAL_SHEETS[l] ? l : undefined)), [rivalLooks]);
+  const sheetIds = useMemo(() => [hasSprites ? PLAYER_CHARACTER_ID : undefined, partnerId, rivalIds[0], rivalIds[1]], [hasSprites, partnerId, rivalIds]);
+  const sheets = useSpriteSheets(sheetIds);
+  const playerSheet = sheets.sheets[0];
+  const partnerSheet = sheets.sheets[1];
+  // Far player k (in slot order) → rival sheet k.
+  const farSlots = useMemo(() => sim.players.filter((p) => p.team === "far").map((p) => p.slot), [sim]);
   const [courtLoaded, setCourtLoaded] = useState(false);
   const readySent = useRef(false);
   const sheetsReady = !sprites || sheets.done;
@@ -61,7 +71,14 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
     const t = setTimeout(send, 4000); // never trap the player behind the cover
     return () => clearTimeout(t);
   }, [courtLoaded, sheetsReady, onReady]);
-  const sheetOf = (slot: number) => (!sprites?.on ? null : slot === sprites.humanSlot ? playerSheet : partnerSrc ? partnerSheet : null);
+  const sheetOf = (slot: number) => {
+    if (!sprites?.on) return null;
+    if (sim.players[slot].team === "far") {
+      const k = farSlots.indexOf(slot);
+      return k >= 0 && k < 2 && rivalIds[k] ? sheets.sheets[2 + k] : null;
+    }
+    return slot === sprites.humanSlot ? playerSheet : partnerSrc ? partnerSheet : null;
+  };
 
   const seg = (
     pts: [number, number][],
@@ -148,7 +165,7 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
   // Near pair with a sheet: court shadow + ONE Atlas call per sheet (frame
   // rect + RSXform rebuilt per frame; no image / path / shader created).
   const drawSprite = (slot: number, sheet: SkImage) => {
-    const a = sprites!.anim;
+    const a = sim.players[slot].team === "far" ? sprites!.farAnim : sprites!.anim;
     const x = a.drawX[slot], y = a.drawY[slot];
     const g = projector.ground(x, y);
     const ppf = projector.pxPerFootAt(y);
@@ -169,7 +186,7 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
 
   const drawPlayer = (slot: number) => {
     const sheet = sheetOf(slot);
-    if (sheet && sim.players[slot].team === "near") return drawSprite(slot, sheet);
+    if (sheet) return drawSprite(slot, sheet);
     const p = sim.players[slot];
     const g = projector.ground(p.x, p.y);
     const ppf = projector.pxPerFootAt(p.y);
@@ -275,6 +292,11 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
   const cueR = cue ? projector.pxPerFootAt(sim.bounceCueSpot!.y) * 0.9 : 0;
 
   const farPlayers = sim.players.filter((p) => p.team === "far").map((p) => p.slot);
+  // Far pair with sprites: farther-first (smaller y first).
+  if (farPlayers.length === 2 && sprites?.on) {
+    const yOf = (s: number) => sprites.farAnim.drawY[s];
+    if (yOf(farPlayers[0]) > yOf(farPlayers[1])) farPlayers.reverse();
+  }
   // Near pair drawn farther-first (smaller y first) so teammates overlap correctly.
   const nearPlayers = sim.players.filter((p) => p.team === "near").map((p) => p.slot);
   if (nearPlayers.length === 2 && sprites?.on) {

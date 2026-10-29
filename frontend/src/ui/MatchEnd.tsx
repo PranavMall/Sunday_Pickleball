@@ -9,12 +9,12 @@ import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, { cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 
 import { COURT_NAMES, PARTNERS, SIGN_COST, STAGE_NAMES, type CourtId, type PartnerId } from "@/src/game/meta/economyConfig";
+import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import type { Moment } from "@/src/game/meta/metaStore";
 import { COURT_IMG, CourtThumb } from "./CourtThumb";
 import { Text } from "./Text";
 import { Badge, Coin, SERIF, UI, type IoniconName } from "./kit";
 
-const TROPHY = require("@/assets/images/trophy_mumbai.webp");
 
 // ---- Pop-up copy -----------------------------------------------------------
 function momentCopy(m: Moment) {
@@ -49,7 +49,7 @@ export function Celebration({ moments, index, onContinue, onSign }: { moments: M
     <View style={styles.popWrap} testID={`celebration-${index}`}>
       <View style={styles.popCard}>
         <Text style={styles.popKicker} testID="celebration-kicker">{c.kicker}</Text>
-        {m.kind === "stage" ? <Image source={TROPHY} style={{ width: artW * 0.62, height: artW * 0.62 }} contentFit="contain" cachePolicy="memory-disk" /> : null}
+        {m.kind === "stage" ? <Image source={TROPHY_BY_STAGE[m.stageKey] ?? TROPHY_BY_STAGE.local} style={{ width: artW * 0.62, height: artW * 0.62 }} contentFit="contain" cachePolicy="memory-disk" /> : null}
         {m.kind === "court" && COURT_IMG[m.court] ? <CourtThumb court={m.court} width={artW} testID="celebration-court" /> : null}
         {m.kind === "partner" ? <Badge id={m.partnerId} name={PARTNERS[m.partnerId as PartnerId].name} color={PARTNERS[m.partnerId as PartnerId].color} size={128} ring /> : null}
         <Text style={styles.popTitle} testID="celebration-title">{c.title}</Text>

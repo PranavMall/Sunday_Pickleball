@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { IdentityEditor } from "@/src/components/identity-editor";
 import { PLAYER_BADGE_COLOR, stageNameOf } from "@/src/game/meta/economyConfig";
+import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import { hasIdentity, migrateLegacyTeamName, saveIdentity, skipIdentity } from "@/src/game/services/profile";
 import { DestinationBar } from "@/src/ui/DestinationBar";
 import { HeaderActions } from "@/src/ui/HeaderActions";
@@ -18,7 +19,6 @@ import { Badge, Card, Coin, GoldButton, Kicker, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
 const LOGO = require("@/assets/images/logo_pickleballers.webp");
-const TROPHY = require("@/assets/images/trophy_mumbai.webp");
 const ART_QP = require("@/assets/images/art_quickplay.webp");
 
 export default function Home() {
@@ -94,7 +94,7 @@ export default function Home() {
               <Text style={styles.careerStage} numberOfLines={1} testID="career-card-stage">{stage}</Text>
               <Text style={styles.careerSub} numberOfLines={1}>Continue your journey in Mumbai</Text>
             </View>
-            <Image source={TROPHY} style={styles.trophy} contentFit="contain" />
+            <Image source={TROPHY_BY_STAGE[(save?.career.nextMatchId ?? "mumbai.community.01").split(".")[1]] ?? TROPHY_BY_STAGE.community} style={styles.trophy} contentFit="contain" />
           </View>
           <GoldButton
             big
