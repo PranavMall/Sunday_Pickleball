@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend-only test of Release 9 (Commit 8.3 + Commit 9) on the web preview at 390x844 and 375x667, with 8 Playwright runs. Passing: DEV sprite-status lists the correct 4 sheets for every Career match (M1 to M6, plus M2 and M5 after the recruit is signed), Training, Scrimmage and Quick Play doubles. Quick Play singles lists 3 sheets, and over 4 seeds it never used upsi_front or matz_front. The Quick Play mapping (seed mod 6) + 1 checked out by hand for 7 seeds. Reserve names come through: Kiran on M2 and Vikram on M5 once the recruit is signed. face-status reads 'faces: ok', including after a visit to the Team screen. When portrait_anli is blocked, the Badge shows the monogram, console.warn('[portrait] anli ...') fires and face-status reads 'faces: failed – anli: ...'. Far players are drawn as front-view sprites (confirmed by screenshots in rally and serve). The pause-menu Sprites Off/On toggle also switches the rivals between sprites and placeholders. REMATCH and NEXT MATCH show the loading cover and hold the sim (time stays 0 while covered, also with a 2 s asset delay), then start with the right sheets. The Community Cup pop-up after an M3 win shows trophy_community_cup. The Home Career card trophy follows the stage (community, local=trophy_mumbai, district). After an M5 win the 'Matz is watching you' pop-up shows portrait_matz (badge-portrait), as do the Team Matz card and the Inbox sender. Short codes appear on the scoreboard and result screen, and the Career screen shows short names and the 'Maharashtra' label. No red screens or console errors on home, career, team, training, quickplay, profile, history or match. Failing: 2 text truncations (1 now, 1 latent) and 1 design gap, listed below.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Home Career card stage title", "issue": "When career.nextMatchId is in the district stage, 'Maharashtra Championship' is cut to 'Maharashtra Cham…' at both 375 and 390 wide (scrollWidth 293 vs clientWidth 235/250). The Text has numberOfLines={1} at fontSize 24. Fix with adjustsFontSizeToFit + minimumFontScale, or a smaller font for long names. Reference: /app/frontend/app/index.tsx:94, style careerStage at :169", "testID": "career-card-stage", "priority": "MEDIUM"},
+      {"component": "Result screen next-goal line (latent)", "issue": "At 375x667, after an M6 win the line reads 'Next: Maharashtra Championship · Match 7 — co…' (339 > 297 px). Only reachable today through a direct /match?careerId=mumbai.local.06 URL, because M6 is not enabled (enabled: n<=5). It will show for real once M6 ships. The M5 line 'Next: Mumbai Local Series Final — coming soon' fits. Reference: /app/frontend/src/game/meta/goals.ts:16 and the MatchEnd 'Next:' Text", "testID": "result-overlay", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Quick Play rivals", "issues": ["quickPlayLooks(seed) ignores signing. After Upsi or Matz is signed and picked as the Quick Play partner, a seed with mod 6 = 1 or 4 can put the same person on both sides (upsi_front or matz_front as a rival). Career avoids this with reserveLook. Reference: /app/frontend/src/game/meta/matchSetup.ts:38-41", "Quick Play singles still loads the partner sheet (sprite-status 'qt + anli + <rival>'), about 300 KB that no singles player uses. This matches the stated '3 sheets' spec, so FYI only."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/tests/pw_helpers.py"],
+  "action_items": [
+    "app/index.tsx:94: make the career-card-stage Text fit 'Maharashtra Championship' at 375 and 390 wide (adjustsFontSizeToFit/minimumFontScale or a smaller fontSize).",
+    "MatchEnd 'Next:' line: allow 2 lines or adjustsFontSizeToFit, so 'Next: Maharashtra Championship · Match 7 — coming soon' is not cut at 375 wide (latent until M6 is enabled).",
+    "(Design) matchSetup.quickPlayLooks: swap upsi_front/matz_front for the reserveLook when that partner is signed, or at least when it is the Quick Play partner, so a partner never appears on both teams."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx:464-473: the next-court prefetch depends on RNImage.resolveAssetSource. On web no court_mumbai_local request was seen after an M3 replay game over while NEXT MATCH was offered (only court_bandra_garden). The code comment admits it is a no-op on web, so the cachePolicy/prefetch benefit can only be checked on native.",
+    "GameCanvas: rivalIds and sheetIds are memoised, and farSlots is mapped by slot order. Far players are drawn farther-first using farAnim.drawY. Sheets fall back to the placeholder per slot. All of this looks correct.",
+    "spriteSheets.reasonText now formats a DOM Event as 'load error (type)', which fixes the iteration-16 '[object Event]' issue.",
+    "Scrimmage far players are named 'Drill' (the same as Training), while the rivalName is 'Sparring pair' (minor, not visible in the UI).",
+    "No deprecated expo-av, expo-barcode-scanner or expo-background-fetch. The console still shows non-blocking deprecation warnings (shadow* -> boxShadow, pointerEvents, Skia SkPath -> PathBuilder)."
+  ],
+  "updated_files": ["/app/tests/pw_helpers.py (added FORCE_WIN_FAULT_JS, SIM_NAMES_JS and a note on the async route handler)"],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "~95%: all 8 requested feature checks pass apart from 1 truncation now (Home card) and 1 latent one (M6 result line)"},
+  "seed_data_creation": "None persisted. Each run patched localStorage 'pb.meta' (career.cleared/nextMatchId, partners upsi/matz signed, coins).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Rival names live in __pwSim.players[i].name and the seed in __pwSim.config.seed. For a route delay, the handler must be async and must await route.continue_(). A sync lambda that does not await leaves the assets hanging and the loading cover stuck forever: a test artifact, not a bug. portraitLoadStatus and spriteLoadStatus are module-level, so face-status checks after the Team screen must use in-app navigation (tab bar -> Home -> menu-quick-match -> difficulty-club), not page.goto. M6 is disabled (enabled n<=5), so M6 is only reachable by direct URL.",
+  "rca_of_issue": "Home card truncation: index.tsx:94 renders the stage name in a single line at fontSize 24 next to a 72px trophy. 'Maharashtra Championship' (new STAGE_NAMES.district in Commit 9) needs about 293px, but the cell is 235px wide at 375 and 250px at 390."
+}
