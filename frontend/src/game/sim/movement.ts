@@ -143,7 +143,8 @@ export function updateMovement(
     for (const p of mates) {
       const isServer = info.serverSlot === p.slot;
       const humanRetriever = p === retriever && p.controller === "LOCAL_HUMAN";
-      if (p === retriever && overheadOk) {
+      // Two-bounce phase: the human never steps in for an overhead (it can't be volleyed).
+      if (p === retriever && overheadOk && !(humanRetriever && requireBounce)) {
         p.targetX = overhead!.x;
         p.targetY = overhead!.y;
         // never step into the kitchen for an unbounced ball
@@ -234,7 +235,7 @@ export function updateMovement(
             team === "near"
               ? COURT.LENGTH + PLAYER.SERVE_STANDOFF
               : -PLAYER.SERVE_STANDOFF;
-        } else if (info.serving && servingTeam && team !== servingTeam) {
+        } else if ((info.serving && servingTeam && team !== servingTeam) || (info.rallyStrikeCount === 1 && ball.lastHitTeam != null && ball.lastHitTeam !== team)) {
           // Receiving the serve: stand DEEP near the baseline to field a deep
           // serve and move forward into the bounce (reachable returns).
           p.targetX = coverX;

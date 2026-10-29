@@ -305,6 +305,7 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
           height: IMAGE_H * projector.scale,
         }}
         contentFit="fill"
+        cachePolicy="memory-disk"
         onLoad={() => setCourtLoaded(true)}
         onError={(e) => {
           console.warn("[court] background image failed to load", e);

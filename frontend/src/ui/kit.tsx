@@ -2,10 +2,10 @@
 // Everything here is drawn by code: badges, buttons, cards, chips, icons.
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
-import React from "react";
+import React, { useState } from "react";
 import { Platform, Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Text } from "@/src/ui/Text";
-import { PORTRAITS } from "@/src/game/render/sprites";
+import { PORTRAITS, portraitLoadStatus } from "@/src/game/render/sprites";
 
 export type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -38,7 +38,8 @@ export const UI = {
 // `id` = character id (a portrait replaces the monogram when one exists).
 export function Badge({ id, name, color, size = 48, ring = false, testID }: { id?: string; name: string; color: string; size?: number; ring?: boolean; testID?: string }) {
   const letter = (name.trim().charAt(0) || "?").toUpperCase();
-  const portrait = id ? PORTRAITS[id] : undefined;
+  const [failed, setFailed] = useState(false);
+  const portrait = id && !failed ? PORTRAITS[id] : undefined;
   return (
     <View
       testID={testID}
@@ -55,7 +56,14 @@ export function Badge({ id, name, color, size = 48, ring = false, testID }: { id
       }}
     >
       {portrait ? (
-        <Image source={portrait} style={{ width: "100%", height: "100%", borderRadius: size / 2 }} contentFit="contain" cachePolicy="memory-disk" testID={testID ? `${testID}-portrait` : "badge-portrait"} />
+        <Image source={portrait} style={{ width: "100%", height: "100%", borderRadius: size / 2 }} contentFit="contain" cachePolicy="memory-disk" testID={testID ? `${testID}-portrait` : "badge-portrait"}
+          onError={(e) => {
+            const reason = String((e as { error?: string })?.error ?? "load error");
+            console.warn("[portrait]", id, reason);
+            portraitLoadStatus.fail(id!, reason);
+            setFailed(true);
+          }}
+        />
       ) : (
         <Text style={{ color: "#FFFFFF", fontFamily: SERIF, fontWeight: "700", fontSize: size * 0.5 }}>{letter}</Text>
       )}

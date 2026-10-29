@@ -860,6 +860,48 @@ function b3KitchenTests() {
   for (const r of kitchenFootworkTests()) { if (r.info) console.log(`  ${r.name}: ${r.info}`); ok(r.ok, r.name); }
 }
 
+// 8.3 RECEIVE HOLD: on every opponent serve the near pair holds its depth
+// until the serve bounces (no walk-in to the rally spot, no step-in overhead).
+function receiveHoldTests() {
+  console.log("\n[Receive hold]");
+  let sum = 0, serves = 0, humanMax = 0;
+  for (let i = 0; i < 20; i++) {
+    const sim = new GameSimulation({ seed: 1000 + i, difficulty: "CLUB", controllers: ["LOCAL_HUMAN", "AI", "AI", "AI"] });
+    const near = sim.players.filter((p) => p.team === "near");
+    const y0 = [0, 0], minY = [0, 0];
+    let tracking = false, prevStrikes = 0, swung = -1;
+    for (let t = 0; t < 60 * 60 * 20 && sim.phase !== "game_over"; t++) {
+      if (sim.humanIsServer() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 0, dy: -100, power: 0.5, tap: false });
+      else if (sim.humanCanHit() && swung !== sim.rallyStrikeCount && !sim.hasBufferedSwipe()) {
+        swung = sim.rallyStrikeCount;
+        sim.submitSwipe({ dx: 0, dy: -80, power: 0.5, tap: false, speed: 400 });
+      }
+      sim.step();
+      if (sim.rallyStrikeCount === 1 && prevStrikes === 0 && sim.ball.lastHitTeam === "far") {
+        tracking = true;
+        near.forEach((p, k) => (y0[k] = minY[k] = p.y));
+      }
+      if (sim.rallyStrikeCount < prevStrikes) swung = -1;
+      prevStrikes = sim.rallyStrikeCount;
+      if (!tracking) continue;
+      if (sim.ball.bouncesSinceHit > 0 || sim.rallyStrikeCount !== 1 || sim.phase !== "rally") {
+        tracking = false;
+        const steps = near.map((_, k) => y0[k] - minY[k]);
+        sum += Math.max(steps[0], steps[1]);
+        serves++;
+        humanMax = Math.max(humanMax, steps[near.findIndex((p) => p.controller === "LOCAL_HUMAN")]);
+        continue;
+      }
+      near.forEach((p, k) => (minY[k] = Math.min(minY[k], p.y)));
+    }
+  }
+  const avg = sum / serves;
+  console.log(`  opponent serves=${serves} avgForwardStep=${avg.toFixed(2)}ft humanMaxStep=${humanMax.toFixed(2)}ft`);
+  ok(serves > 50 && avg <= 1.0, `receive hold: avg forward step on opponent serves ≤ 1.0 ft (got ${avg.toFixed(2)})`);
+  ok(humanMax <= 2, `receive hold: the human returner never steps in > 2 ft (got ${humanMax.toFixed(2)})`);
+}
+
+
 console.log("=== Picklewood M1 test suite ===");
 rulesTests();
 serveRotationTests();
@@ -878,6 +920,7 @@ vocabularyTests();
 b3TwoBounceTests();
 b3NetTests();
 b3KitchenTests();
+receiveHoldTests();
 simTests();
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) {

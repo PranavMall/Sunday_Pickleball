@@ -1,6 +1,7 @@
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, Platform, Pressable, Share, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, BackHandler, Image as RNImage, Platform, Pressable, Share, useWindowDimensions, View } from "react-native";
+import { Image } from "expo-image";
 import { Text } from "@/src/ui/Text";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Haptics from "expo-haptics";
@@ -14,7 +15,7 @@ import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { END_SEQ_S, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
-import { spriteLoadStatus } from "@/src/game/render/sprites";
+import { portraitLoadStatus, spriteLoadStatus } from "@/src/game/render/sprites";
 import { courtVisual } from "@/src/game/render/courts";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
@@ -449,7 +450,18 @@ export default function Match() {
     setMatch(buildMatch(launch));
     setPaused(false);
   };
-  // Career win → the next open Career match, built from its config.
+  // Career match → the next open Career match, built from its config.
+  // When NEXT MATCH is offered, warm the next court into memory (errors ignored).
+  const nextCourt = outcome && match.setup.mode === "career" && sim.winner === "near" && outcome.nextEnabled ? careerMatch(outcome.nextCareerId).court ?? undefined : undefined;
+  useEffect(() => {
+    if (!nextCourt) return;
+    try {
+      const uri = RNImage.resolveAssetSource(courtVisual(nextCourt).image)?.uri;
+      if (uri) Image.prefetch([uri], "memory-disk").catch(() => {});
+    } catch {
+      // resolveAssetSource unavailable (web): the court decodes on mount.
+    }
+  }, [nextCourt]);
   const nextMatch = () => {
     if (!outcome?.nextCareerId) return;
     const l: LaunchParams = { mode: "career", careerId: outcome.nextCareerId };
@@ -605,6 +617,7 @@ export default function Match() {
             {fps} fps · {sim.phase} · z{sim.ball.z.toFixed(1)} · sfx {sfx.ready ? "rdy" : "…"} {sfx.lastLatencyMs.toFixed(1)}ms · snd{sfx.playedCount}
           </Text>
           <Text style={styles.debugText} testID="sprite-status">{spriteLoadStatus.text}</Text>
+          <Text style={styles.debugText} testID="face-status">{portraitLoadStatus.text}</Text>
           <Text style={styles.debugText} testID="perf-probe">
             renders/s {perf.current.rendersPerSec} · work {perf.current.workMs.toFixed(1)}ms · proj {perf.current.projBuilds} · resize {perf.current.sizeChanges} · {width}x{height}
           </Text>
