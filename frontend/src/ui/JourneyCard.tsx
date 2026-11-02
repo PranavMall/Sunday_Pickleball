@@ -53,7 +53,7 @@ export function JourneyCard({ cleared, nextOpen, picked, playerName, onPick }: {
                   </View>
                 ) : null}
               </View>
-              <Text style={[styles.name, current && styles.nameCurrent, !open && { color: UI.muted }]} testID={`stage-name-${st.key}`}>{twoLines(STAGE_NAMES[st.key])}</Text>
+              <Text style={[styles.name, current && styles.nameCurrent]} testID={`stage-name-${st.key}`}>{twoLines(STAGE_NAMES[st.key])}</Text>
               <View style={styles.nodes}>
                 {st.matches.map((m, i) => {
                   const done = cleared.includes(m.id);
@@ -64,7 +64,7 @@ export function JourneyCard({ cleared, nextOpen, picked, playerName, onPick }: {
                       {i > 0 ? <View style={[styles.link, done && styles.linkDone]} /> : null}
                       <Pressable
                         style={styles.hit}
-                        hitSlop={{ top: 6, bottom: 6, left: 2, right: 2 }}
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                         testID={`node-${m.number}`}
                         disabled={!done && !here}
                         accessibilityRole="button"
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   lock: { position: "absolute", top: 16, alignSelf: "center", backgroundColor: "rgba(255,255,255,0.85)", borderRadius: 9, width: 18, height: 18, alignItems: "center", justifyContent: "center" },
   won: { position: "absolute", bottom: -2, alignSelf: "center", backgroundColor: UI.green, borderRadius: 5, paddingHorizontal: 5 },
   wonText: { color: "#fff", fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  name: { color: UI.inkSoft, fontSize: 9.5, lineHeight: 12, textAlign: "center", marginTop: 4, minHeight: 24 },
+  name: { color: "#7D7462", fontSize: 9.5, lineHeight: 12, textAlign: "center", marginTop: 4, minHeight: 24 },
   nameCurrent: { color: "#1E4D33", fontWeight: "800" },
   nodes: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", marginTop: 4 },
   hit: { alignItems: "center", minHeight: 40, minWidth: NODE },

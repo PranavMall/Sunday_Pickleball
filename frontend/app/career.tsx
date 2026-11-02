@@ -84,8 +84,8 @@ export default function Career() {
               <View style={styles.reward}>
                 <Coin size={26} />
                 <View style={{ marginLeft: 6, flexShrink: 1 }}>
-                  <Text style={styles.rewardNum} testID="reward-coins">+{reward.coins}</Text>
-                  <Text style={styles.rewardSub} numberOfLines={2}>Coins ({reward.coinParts.join(" + ")})</Text>
+                  <Text style={styles.rewardNum} numberOfLines={1} testID="reward-coins">+{reward.coins}</Text>
+                  <Text style={styles.rewardSub}>Coins ({reward.coinParts.join(" + ")})</Text>
                 </View>
               </View>
               {reward.fans > 0 ? (
@@ -93,7 +93,7 @@ export default function Career() {
                 <Ionicons name="people" size={24} color={UI.fans} />
                 <View style={{ marginLeft: 6, flexShrink: 1 }}>
                   <Text style={styles.rewardNum} testID="reward-fans">+{reward.fans}</Text>
-                  <Text style={styles.rewardSub} numberOfLines={2}>Fans ({reward.fanParts.join(" + ")})</Text>
+                  <Text style={styles.rewardSub}>Fans ({reward.fanParts.join(" + ")})</Text>
                 </View>
               </View>
               ) : null}
@@ -101,7 +101,7 @@ export default function Career() {
             ) : null}
           </View>
           {next.court ? (
-            <View style={{ marginLeft: 8, alignItems: "center" }}>
+            <View style={{ marginLeft: 8, alignItems: "center", width: width < 385 ? 96 : 118 }}>
               <View>
                 <CourtThumb court={next.court} width={width < 385 ? 96 : 118} />
                 {save && !(save.courtsPlayed ?? []).includes(next.court) ? (
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   reward: { flex: 1, flexDirection: "row", alignItems: "center" },
   rewardNum: { color: UI.ink, fontSize: 18, fontWeight: "800" },
   rewardSub: { color: UI.inkSoft, fontSize: 10 },
-  courtName: { color: UI.inkSoft, fontSize: 11, marginTop: 3, fontWeight: "600" },
+  courtName: { color: UI.inkSoft, fontSize: 11, marginTop: 3, fontWeight: "600", textAlign: "center" },
   arch: { color: UI.inkSoft, fontSize: 14 },
   partnerRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   partnerName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 20 },
