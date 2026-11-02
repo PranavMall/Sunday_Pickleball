@@ -8,7 +8,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import Animated, { cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 
-import { COURT_NAMES, PARTNERS, SIGN_COST, STAGE_NAMES, type CourtId, type PartnerId } from "@/src/game/meta/economyConfig";
+import { CAREER_MATCHES, COURT_NAMES, PARTNERS, SIGN_COST, STAGE_NAMES, type CourtId, type PartnerId } from "@/src/game/meta/economyConfig";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import type { Moment } from "@/src/game/meta/metaStore";
 import { COURT_IMG, CourtThumb } from "./CourtThumb";
@@ -17,6 +17,10 @@ import { Badge, Coin, SERIF, UI, type IoniconName } from "./kit";
 
 
 // ---- Pop-up copy -----------------------------------------------------------
+const SIGNABLE_LINE: Partial<Record<PartnerId, string>> = {
+  upsi: "A Dinker who lives at the kitchen line.",
+  matz: "A Banger who hits hard from anywhere.",
+};
 function momentCopy(m: Moment) {
   if (m.kind === "stage") {
     const stage = STAGE_NAMES[m.stageKey] ?? "";
@@ -24,10 +28,11 @@ function momentCopy(m: Moment) {
   }
   if (m.kind === "court") {
     const name = COURT_NAMES[m.court as CourtId] ?? m.court;
-    return { kicker: "NEW COURT UNLOCKED", title: name, body: "The Mumbai Local Series is played here." };
+    const stageKey = CAREER_MATCHES.find((x) => x.court === m.court)?.stageKey;
+    return { kicker: "NEW COURT UNLOCKED", title: name, body: `The ${STAGE_NAMES[stageKey ?? "local"]} is played here.` };
   }
   const p = PARTNERS[m.partnerId as PartnerId];
-  if (m.flag === "signable") return { kicker: "NEW PARTNER", title: `${p.name} can now be signed`, body: `A ${p.archetype} who lives at the kitchen line.\nSign her in Team for ${SIGN_COST[p.id] ?? 0} Coins.` };
+  if (m.flag === "signable") return { kicker: "NEW PARTNER", title: `${p.name} can now be signed`, body: `${SIGNABLE_LINE[p.id] ?? `A ${p.archetype}.`}\nSign ${p.id === "matz" ? "him" : "her"} in Team for ${SIGN_COST[p.id] ?? 0} Coins.` };
   if (p.id === "matz") return { kicker: "SCOUT", title: "Matz is watching you", body: "A Banger from the Mumbai Local Series. Keep winning." };
   return { kicker: "NEW FRIEND", title: `You met ${p.name}`, body: "Nice game in Dadar. Win the Community Cup and come find me." };
 }

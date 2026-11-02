@@ -36,6 +36,7 @@ export default function QuickPlay() {
   const career = partnerOf(save?.activePartnerId);
   const lv = levelView(save?.partners[partner.id]?.growth ?? 0, save?.career.nextMatchId ?? "mumbai.community.01");
   const signed = save ? PARTNER_IDS.filter((id) => save.partners[id]?.signed) : [];
+  const paidLeft = save && meta.loaded ? meta.quickPaidLeft(Date.now()) : QUICK_PLAY_REWARDS.dailyCap;
 
   const start = (difficulty: string) =>
     router.push({ pathname: "/match", params: { mode: "quick", difficulty, ...(singles ? { singles: "1" } : {}) } });
@@ -111,6 +112,8 @@ export default function QuickPlay() {
           <Text style={styles.noteText}>
             <Text style={{ fontWeight: "800" }}>Quick Play earns Coins only:</Text>
             {"\n"}Win +{QUICK_PLAY_REWARDS.winCoins} · Loss +{QUICK_PLAY_REWARDS.lossCoins}.
+            {"\n"}
+            <Text style={{ fontWeight: "800" }} testID="qp-paid-left">{paidLeft > 0 ? `${paidLeft} paid ${paidLeft === 1 ? "match" : "matches"} left today` : "Play for fun"}</Text>
           </Text>
         </Card>
 

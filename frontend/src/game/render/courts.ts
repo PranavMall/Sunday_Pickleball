@@ -23,6 +23,30 @@ export const COURT_VISUALS: Record<string, CourtVisual> = {
     edgeBottom: "#EEB86D",
     scoreArea: { x0: 344, y0: 194, x1: 680, y1: 302 }, // face x 334–689, y 184–312
   },
+  nashik: {
+    image: require("@/assets/images/court_nashik.webp"),
+    edgeTop: "#9BBDB9",
+    edgeBottom: "#E6BA88",
+    scoreArea: { x0: 344, y0: 194, x1: 680, y1: 302 },
+  },
+  mahabaleshwar: {
+    image: require("@/assets/images/court_mahabaleshwar.webp"),
+    edgeTop: "#98A59E",
+    edgeBottom: "#C18E80",
+    scoreArea: { x0: 344, y0: 194, x1: 680, y1: 302 },
+  },
+  pune: {
+    image: require("@/assets/images/court_pune.webp"),
+    edgeTop: "#AA9871",
+    edgeBottom: "#EEB270",
+    scoreArea: { x0: 344, y0: 194, x1: 680, y1: 302 },
+  },
+  maharashtra_night: {
+    image: require("@/assets/images/court_maharashtra_night.webp"),
+    edgeTop: "#04347D",
+    edgeBottom: "#AF8773",
+    scoreArea: { x0: 344, y0: 198, x1: 676, y1: 301 },
+  },
 };
 
 export function courtVisual(court: string | undefined): CourtVisual {

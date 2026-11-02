@@ -25,8 +25,10 @@ export function inboxMessages(d: Pick<SaveDoc, "career" | "partners">): InboxMes
   }
   if (cleared.includes("mumbai.local.05")) {
     out.push({ id: "inbox.matz_watching", sender: "Matz", senderId: "matz", subject: "Saw your match. Not bad.", line: "Keep winning and we will talk.", cta: { label: "VIEW TEAM", path: "/team" } });
-    out.push({ id: "inbox.local_final_soon", sender: MANAGER, subject: "Match 6 coming soon", line: "The Mumbai Local Series Final arrives in an update.", cta: { label: "VIEW CAREER", path: "/career" } });
+    out.push({ id: "inbox.local_final_soon", sender: MANAGER, subject: "Match 6 is the final", line: "Beat the Worli Strikers to win the Mumbai Local Series.", cta: { label: "VIEW CAREER", path: "/career" } });
   }
+  if (cleared.includes("mumbai.local.06"))
+    out.push({ id: "inbox.matz_signable", sender: "Matz", senderId: "matz", subject: "Ready when you are.", line: "Sign me in Team for 1000 Coins.", cta: { label: "VIEW TEAM", path: "/team" } });
   return out;
 }
 

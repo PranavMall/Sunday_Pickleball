@@ -1,5 +1,5 @@
 // NEXT GOAL: one line for the result screen, derived from the save.
-import { SIGN_COST, STAGE_NAMES, careerMatch, type CareerMatchDef } from "./economyConfig";
+import { CAREER_MATCH_IDS, PARTNER_IDS, PARTNERS, SIGN_COST, STAGE_NAMES, careerMatch, type CareerMatchDef } from "./economyConfig";
 import type { SaveDoc } from "./metaStore";
 
 export function careerMatchLabel(m: CareerMatchDef): string {
@@ -10,8 +10,10 @@ export function careerMatchLabel(m: CareerMatchDef): string {
 }
 
 export function nextGoal(d: Pick<SaveDoc, "partners" | "coins" | "career">): string {
-  const upsi = d.partners.upsi;
-  if (upsi?.signable && !upsi.signed && d.coins >= (SIGN_COST.upsi ?? 0)) return "Sign Upsi in Team";
+  // Newest signable partner first (Matz after Match 6 even if Upsi is still unsigned).
+  const sign = [...PARTNER_IDS].reverse().find((id) => d.partners[id]?.signable && !d.partners[id].signed && d.coins >= (SIGN_COST[id] ?? 0));
+  if (sign) return `Sign ${PARTNERS[sign].name} in Team`;
+  if (CAREER_MATCH_IDS.every((id) => d.career.cleared.includes(id))) return "Mumbai Journey complete!";
   const m = careerMatch(d.career.nextMatchId);
   return m.enabled ? `Next: ${careerMatchLabel(m)}` : `Next: ${careerMatchLabel(m)} — coming soon`;
 }

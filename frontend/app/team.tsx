@@ -15,7 +15,7 @@ import { Badge, Card, chemOf, Coin, Kicker, MeterRow, SERIF, UI, type IoniconNam
 import { useSave } from "@/src/ui/useSave";
 
 const INFO =
-  "Growth: how good your partner is. Max Lv 3 in the Community Cup, Lv 5 in the Mumbai Local Series.\n\nChemistry: how well you two play together. It fades if you play many matches with someone else.\n\nBoth start to affect matches in a coming update.";
+  "Growth: how good your partner is. Max Lv 3 in the Community Cup, Lv 5 in the Mumbai Local Series, Lv 7 on the Maharashtra Tour and Lv 10 in the Maharashtra Championship.\n\nChemistry: how well you two play together. It fades if you play many matches with someone else.\n\nBoth start to affect matches in a coming update.";
 
 export default function Team() {
   const router = useRouter();

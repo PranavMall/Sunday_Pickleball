@@ -34,10 +34,13 @@ function careerLooks(m: CareerMatchDef, signed: (id: string) => boolean): string
   if (!m.looks) return ["", ""];
   return m.looks.map((l, i) => (m.recruit?.slot === i && m.reserveLook && signed(m.recruit.partnerId) ? m.reserveLook : l));
 }
-// Quick Play: Career match ((seed mod 6) + 1); singles uses that team's slot-1 look.
+// Quick Play: Career match ((seed mod 12) + 1), the recruit slot always on its
+// reserveLook (Upsi / Matz never appear as Quick Play rivals); singles uses
+// that team's slot-1 look.
 export function quickPlayLooks(seed: number, singles: boolean): string[] {
-  const looks = CAREER_MATCHES[((seed % 6) + 6) % 6].looks!;
-  return singles ? [looks[1]] : [...looks];
+  const n = CAREER_MATCHES.length;
+  const looks = careerLooks(CAREER_MATCHES[((seed % n) + n) % n], () => true);
+  return singles ? [looks[1]] : looks;
 }
 
 const DIFFS: Difficulty[] = ["ROOKIE", "CLUB", "PRO"];

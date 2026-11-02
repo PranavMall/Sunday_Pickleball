@@ -1,5 +1,5 @@
 // TEAM roster rules (display; signing goes through MetaStore.signPartner).
-import { PARTNER_IDS, SIGN_COST, type PartnerId } from "./economyConfig";
+import { CAREER_UNLOCKS, PARTNER_IDS, SIGN_COST, STAGE_NAMES, careerMatch, CAREER_MATCH_IDS, type PartnerId } from "./economyConfig";
 import type { SaveDoc } from "./metaStore";
 
 export type RosterStatus =
@@ -9,6 +9,13 @@ export type RosterStatus =
   | { kind: "need"; more: number }
   | { kind: "locked"; text: string };
 
+// "UNLOCKS AFTER <STAGE> FINAL", from the Career match whose win makes them signable.
+function unlockText(id: PartnerId): string {
+  const n = Object.keys(CAREER_UNLOCKS).map(Number).find((k) => CAREER_UNLOCKS[k].partnerId === id && CAREER_UNLOCKS[k].flag === "signable");
+  if (!n) return "LOCKED";
+  return `UNLOCKS AFTER ${STAGE_NAMES[careerMatch(CAREER_MATCH_IDS[n - 1]).stageKey].toUpperCase()} FINAL`;
+}
+
 // Discovered partners only (no silhouettes, no "?" rows).
 export function discoveredPartners(d: Pick<SaveDoc, "partners">): PartnerId[] {
   return PARTNER_IDS.filter((id) => d.partners[id]?.discovered);
@@ -17,8 +24,7 @@ export function discoveredPartners(d: Pick<SaveDoc, "partners">): PartnerId[] {
 export function rosterStatus(d: Pick<SaveDoc, "partners" | "activePartnerId" | "coins">, id: PartnerId): RosterStatus {
   const p = d.partners[id];
   if (p?.signed) return d.activePartnerId === id ? { kind: "active" } : { kind: "set_active" };
-  if (id === "matz") return { kind: "locked", text: "COMING SOON" }; // Matz in 1A
-  if (!p?.signable) return { kind: "locked", text: "UNLOCKS AFTER COMMUNITY CUP FINAL" };
+  if (!p?.signable) return { kind: "locked", text: unlockText(id) };
   const cost = SIGN_COST[id] ?? 0;
   return d.coins >= cost ? { kind: "sign", cost } : { kind: "need", more: cost - d.coins };
 }

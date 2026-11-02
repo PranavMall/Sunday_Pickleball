@@ -4,7 +4,7 @@ declare const require: any;
 declare const __dirname: string;
 const fs = require("fs");
 const path = require("path");
-import { faultLabelFor } from "../faultLabel";
+import { FAULT_HINT_SECONDS, faultLabelFor, showHintForPoint } from "../faultLabel";
 import { COURT } from "../config/court";
 import { INPUT, TACTIC } from "../config/tuning";
 import { buildMatchConfig, devSinglesConfig, quickMatchConfig, type MatchConfig } from "../config/matchConfig";
@@ -51,6 +51,29 @@ function faultLabelTests() {
   eq(faultLabelFor(null), null, "no fault → no label");
   eq(faultLabelFor(f("OUT", "near"))?.mine, true, "my fault → red (mine)");
   eq(faultLabelFor(f("OUT", "far"))?.mine, false, "rival fault → gold");
+  // Release 10: the rule hint, only for my team's faults.
+  const HINT: [FaultReason, string][] = [
+    ["TWO_BOUNCE", "Serve and return must bounce first"],
+    ["KITCHEN_VOLLEY", "No volleys from inside the kitchen"],
+    ["KITCHEN_MOMENTUM", "Your momentum carried you into the kitchen"],
+    ["KITCHEN_NOT_ESTABLISHED", "Both feet out of the kitchen before you volley"],
+    ["SERVE_WRONG_BOX", "Serve to the diagonal box"],
+    ["SERVE_KITCHEN", "The serve must land past the kitchen line"],
+    ["OWN_COURT", "The ball must cross the net"],
+  ];
+  for (const [r, h] of HINT) {
+    eq(faultLabelFor(f(r, "near"))?.hint, h, `${r} mine → hint`);
+    eq(faultLabelFor(f(r, "far"))?.hint, undefined, `${r} rivals → no hint`);
+  }
+  for (const r of ["NET", "OUT", "DOUBLE_BOUNCE", "DEAD_BALL"] as FaultReason[]) eq(faultLabelFor(f(r, "near"))?.hint, undefined, `${r} → no hint`);
+  eq(faultLabelFor(f("TWO_BOUNCE", "near"))?.text, "TWO-BOUNCE FAULT", "hinted label text unchanged");
+  {
+    const l = faultLabelFor(f("TWO_BOUNCE", "near"));
+    const shows = [1, 1, 2, 3, 4].map((t) => showHintForPoint(l, "TWO_BOUNCE", t));
+    eq(shows, [true, true, true, true, false], "hint: decided once per point, first 3 points per type, then stops");
+    ok(showHintForPoint(faultLabelFor(f("OUT", "near")), "OUT", 5) === false && showHintForPoint(faultLabelFor(f("SERVE_KITCHEN", "near")), "SERVE_KITCHEN", 6), "no-hint reasons never show; other types count separately");
+    ok(FAULT_HINT_SECONDS === 2.0, "hinted pill stays 2.0 s");
+  }
 }
 
 export const suites: { name: string; run: () => void | Promise<void> }[] = [
@@ -116,7 +139,7 @@ async function metaTests() {
   ok(d.form === "normal" && d.formStreak === 0, "fresh: Form Normal");
   ok(d.homeCity === "mumbai" && d.firstSession === "not_started", "fresh: homeCity mumbai, firstSession not_started");
   ok(d.activePartnerId === "anli" && d.trainingPartnerId === "anli" && d.partners.anli.signed, "fresh: Anli signed, active, training partner");
-  ok(d.career.nextMatchId === "mumbai.community.01" && CAREER_MATCH_IDS.length === 10 && CAREER_MATCH_IDS[9] === "mumbai.district.10", "fresh: career IDs + next match");
+  ok(d.career.nextMatchId === "mumbai.community.01" && CAREER_MATCH_IDS.length === 12 && CAREER_MATCH_IDS[11] === "mumbai.district.12", "fresh: career IDs + next match");
   ok(typeof d.guestId === "string" && d.guestId.length > 6, "fresh: guestId created");
   ok(mem.data.has(META_STORAGE_KEY), "fresh save written at app start");
   const doc = JSON.parse(mem.data.get(META_STORAGE_KEY)!);

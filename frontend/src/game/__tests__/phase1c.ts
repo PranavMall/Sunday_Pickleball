@@ -2,7 +2,7 @@
  * Run: npx tsx src/game/__tests__/phase1c.ts
  */
 (globalThis as any).__DEV__ = false;
-import { CAREER_MATCH_IDS, careerMatch } from "../meta/economyConfig";
+import { CAREER_MATCH_IDS, STAGE_NAMES, careerMatch } from "../meta/economyConfig";
 import { nextGoal } from "../meta/goals";
 import { MetaStore } from "../meta/metaStore";
 import { buildSetup, careerSetup, quickPlaySetup } from "../meta/matchSetup";
@@ -66,7 +66,20 @@ async function commit4() {
   career(s, 4, true);
   const o5 = career(s, 5, true);
   eq(o5.events, ["Matz is watching you"], "Match 5: Matz discovered");
-  ok(s.doc.partners.matz?.discovered && !careerMatch(s.doc.career.nextMatchId).enabled && s.doc.career.nextMatchId === CAREER_MATCH_IDS[5], "after Match 5: Match 6 next and locked");
+  ok(s.doc.partners.matz?.discovered && !s.doc.partners.matz.signable && s.doc.career.nextMatchId === CAREER_MATCH_IDS[5], "after Match 5: Matz discovered (not signable), Match 6 next");
+  {
+    // Release 10: clean path through Match 6 → Matz signable at 1000 Coins.
+    const { s: m } = await fresh();
+    for (let n = 1; n <= 5; n++) career(m, n, true);
+    const o6 = career(m, 6, true);
+    eq(o6.moments.map((x) => (x.kind === "court" ? `court:${x.court}` : x.kind === "stage" ? `stage:${x.stageKey}` : `partner:${x.partnerId}:${x.flag}`)), ["stage:local", "court:nashik", "partner:matz:signable"], "Match 6 win: Mumbai Local Series won → Nashik court → Matz signable");
+    ok(m.doc.coins === 1325 && m.doc.partners.matz.signable && !m.doc.partners.matz.signed, `clean path after Match 6: 1325 Coins, Matz signable (got ${m.doc.coins})`);
+    eq(nextGoal(m.doc), "Sign Matz in Team", "next goal: Sign Matz");
+    ok(m.signPartner("matz", T0) && m.doc.coins === 325 && m.doc.partners.matz.signed, "sign Matz for 1000 Coins: 1325 → 325");
+    const s5 = buildSetup({ mode: "career", careerId: CAREER_MATCH_IDS[4] }, 1, m.doc);
+    ok(s5.config.far.players[0].name === "Vikram" && s5.rivalLooks[0] === "rival_man1_juh", "Matz signed → Match 5 uses Vikram / rival_man1_juh");
+    ok(m.setActivePartner("matz") && buildSetup({ mode: "career", careerId: CAREER_MATCH_IDS[6] }, 1, m.doc).config.near.players[1].name === "Matz", "Matz plays as the Career partner");
+  }
 
   // Same matchId twice → nothing twice; quitting (no completeMatch) → nothing.
   const c1 = s.doc.coins;
@@ -83,6 +96,27 @@ async function commit4() {
   eq(s.completeMatch({ matchId: "q1", kind: "quick", won: true }, T0).lines, ["+40 Coins"], "Quick Play win");
   eq(s.completeMatch({ matchId: "q2", kind: "quick", won: false }, T0).lines, ["+20 Coins"], "Quick Play loss");
   ok(s.doc.coins === qc + 60 && s.doc.fans === qf && s.doc.partners.anli.growth === qg, "Quick Play pays Coins only");
+  {
+    // Release 10: first 7 Quick Play matches a day pay Coins; the 8th pays 0; a new day resets.
+    const { s: q, mem: qm } = await fresh();
+    const c0 = q.doc.coins;
+    let paid = 0;
+    for (let i = 0; i < 7; i++) paid += q.completeMatch({ matchId: `qc${i}`, kind: "quick", won: i % 2 === 0 }, T0).coins ? 1 : 0;
+    ok(paid === 7 && q.doc.coins === c0 + 4 * 40 + 3 * 20 && q.quickPaidLeft(T0) === 0, "Quick Play: first 7 matches of the day pay Coins");
+    const eighth = q.completeMatch({ matchId: "qc8", kind: "quick", won: true }, T0);
+    ok(eighth.capped === true && !eighth.coins && eighth.lines.join() === "Coins used today — play for fun" && q.doc.coins === c0 + 220, "8th Quick Play pays 0 with \"Coins used today\"");
+    ok(q.quickPaidLeft(T0 - DAY) === 0, "clock moved back: Quick Play cap holds");
+    eq(q.completeMatch({ matchId: "qd1", kind: "quick", won: true }, T0 + DAY).lines, ["+40 Coins"], "new day resets the Quick Play cap");
+    ok(q.quickPaidLeft(T0 + DAY) === 6 && q.doc.daily.quick === 1, "6 paid matches left on the new day");
+    // Old save without daily.quick loads as 0.
+    await q.flush();
+    const old = JSON.parse(qm.get("pb.meta")!);
+    delete old.daily.quick;
+    qm.set("pb.meta", JSON.stringify(old));
+    const reload = new MetaStore({ getItem: async (k) => qm.get(k) ?? null, setItem: async (k, v) => void qm.set(k, v) });
+    await reload.load(T0 + DAY);
+    ok(reload.doc.daily.quick === 0 && reload.quickPaidLeft(T0 + DAY) === 7, "old save without daily.quick loads as 0");
+  }
 
   // Every match config keeps engine chemistry unset (1.0) and stats unset.
   for (const p of [{ mode: "career", careerId: CAREER_MATCH_IDS[4] }, { mode: "quick", difficulty: "PRO" }, { mode: "quick", difficulty: "ROOKIE", singles: "1" }, { mode: "training" }, { mode: "scrimmage" }]) {
@@ -211,7 +245,7 @@ function commit9() {
   const src = fs.readFileSync(path.join(root, "src/game/render/sprites.ts"), "utf8");
   const block = src.slice(src.indexOf("export const RIVAL_SHEETS"), src.indexOf("};", src.indexOf("export const RIVAL_SHEETS")));
   const keys = new Set([...block.matchAll(/^\s+(rival_\w+):/gm)].map((m) => m[1]));
-  ok(keys.size === 14 && [...keys].every((k) => fs.existsSync(path.join(root, `assets/images/${k}.png`))), "14 RIVAL_SHEETS keys, each with its sheet file");
+  ok(keys.size === 26 && [...keys].every((k) => fs.existsSync(path.join(root, `assets/images/${k}.png`))), "26 RIVAL_SHEETS keys, each with its sheet file");
   const yes = () => true, no = () => false;
   const looksOf = (n: number, signed: (id: string) => boolean = no) => careerSetup(careerMatch(CAREER_MATCH_IDS[n - 1]), "anli", 1, signed).rivalLooks;
   ok(CAREER_MATCH_IDS.map(careerMatch).filter((m) => m.enabled).every((m) => { const l = careerSetup(m, "anli", 1).rivalLooks; return l.length === 2 && l.every((k) => keys.has(k)); }), "every enabled Career match resolves both looks to a RIVAL_SHEETS key");
@@ -222,16 +256,37 @@ function commit9() {
   const m5 = careerSetup(careerMatch(CAREER_MATCH_IDS[4]), "anli", 1, (id) => id === "matz");
   ok(m5.rivalLooks[0] === "rival_man1_juh" && m5.config.far.players[0].name === "Vikram", "Matz signed → Match 5 slot 0 rival_man1_juh (Vikram)");
   ok(looksOf(5, yes)[1] === "rival_woman2_juh", "reserve rule touches only the recruit slot");
-  // Quick Play: deterministic by seed (Career match (seed mod 6) + 1); singles = slot-1 look.
+  // Quick Play: deterministic by seed (Career match (seed mod 12) + 1, recruit slot on its reserve look); singles = slot-1 look.
   let qpOk = true, singlesOk = true;
   for (let seed = 0; seed < 60; seed++) {
     const d = quickPlaySetup("CLUB", false, "anli", seed).rivalLooks;
-    qpOk = qpOk && d.join() === quickPlaySetup("CLUB", false, "anli", seed).rivalLooks.join() && d.join() === careerMatch(CAREER_MATCH_IDS[seed % 6]).looks!.join();
+    const cm = careerMatch(CAREER_MATCH_IDS[seed % 12]);
+    const want = cm.looks!.map((l, i) => (cm.recruit?.slot === i ? cm.reserveLook! : l));
+    qpOk = qpOk && d.join() === quickPlaySetup("CLUB", false, "anli", seed).rivalLooks.join() && d.join() === want.join();
     const sl = quickPlaySetup("CLUB", true, "anli", seed).rivalLooks;
     singlesOk = singlesOk && sl.length === 1 && sl[0] !== "rival_upsi_front" && sl[0] !== "rival_matz_front";
   }
-  ok(qpOk, "Quick Play looks deterministic by seed (Matches 1–6)");
+  ok(qpOk, "Quick Play looks deterministic by seed (Matches 1–12, reserve looks)");
   ok(singlesOk, "Quick Play singles never uses Upsi or Matz");
+  // Release 10: Quick Play never shows Upsi / Matz, whoever the partner is (600 seeds).
+  let noRecruit = true;
+  for (const partner of ["anli", "upsi", "matz"])
+    for (let seed = 0; seed < 600; seed++)
+      for (const singles of [false, true]) noRecruit = noRecruit && quickPlaySetup("CLUB", singles, partner, seed).rivalLooks.every((k) => k !== "rival_upsi_front" && k !== "rival_matz_front" && keys.has(k));
+  ok(noRecruit, "Quick Play looks never include rival_upsi_front / rival_matz_front (600 seeds × Anli / Upsi / Matz)");
+  // Every Career match: both looks → RIVAL_SHEETS, court → COURT_VISUALS (signed or not).
+  const visuals = fs.readFileSync(path.join(root, "src/game/render/courts.ts"), "utf8");
+  const vBlock = visuals.slice(visuals.indexOf("export const COURT_VISUALS"), visuals.indexOf("export function courtVisual"));
+  const courtKeys = new Set([...vBlock.matchAll(/^  (\w+): \{/gm)].map((m) => m[1]));
+  ok(CAREER_MATCH_IDS.map(careerMatch).every((m) => [no, yes].every((sg) => careerSetup(m, "anli", 1, sg).rivalLooks.every((k) => keys.has(k))) && !!m.court && courtKeys.has(m.court)), "every Career match: looks in RIVAL_SHEETS, court in COURT_VISUALS");
+  const thumb = fs.readFileSync(path.join(root, "src/ui/CourtThumb.tsx"), "utf8");
+  ok([...courtKeys].every((k) => thumb.includes(`  ${k}: require(`) && fs.existsSync(path.join(root, `assets/images/court_${k}.webp`))), "every court has a thumbnail + image file");
+  // Stage keys: TROPHY_BY_STAGE and STAGE_NAMES cover all four.
+  const tBlock = src.slice(src.indexOf("export const TROPHY_BY_STAGE"), src.indexOf("};", src.indexOf("export const TROPHY_BY_STAGE")));
+  const trophyKeys = [...tBlock.matchAll(/^\s+(\w+): require\("@\/assets\/images\/(\w+)\.webp"\)/gm)];
+  const stageKeys = [...new Set(CAREER_MATCH_IDS.map((id) => id.split(".")[1]))];
+  ok(stageKeys.join() === "community,local,tour,district" && stageKeys.every((k) => !!STAGE_NAMES[k] && trophyKeys.some((t) => t[1] === k)) && trophyKeys.every((t) => fs.existsSync(path.join(root, `assets/images/${t[2]}.webp`))), "TROPHY_BY_STAGE + STAGE_NAMES cover community / local / tour / district");
+  ok(src.includes('matz: require("@/assets/images/partner_matz_back.png")') && fs.existsSync(path.join(root, "assets/images/partner_matz_back.png")), "CHARACTER_SHEETS.matz = partner_matz_back.png");
   eq(buildSetup({ mode: "training" }, 1, null).rivalLooks, ["rival_man1_ban", "rival_woman1_ban"], "Training uses Match 1 looks");
   eq(buildSetup({ mode: "scrimmage" }, 1, null).rivalLooks, ["rival_woman1_and", "rival_woman2_and"], "Scrimmage uses Match 4 looks");
 }

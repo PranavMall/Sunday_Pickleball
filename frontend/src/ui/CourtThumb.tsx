@@ -8,6 +8,10 @@ import { UI } from "./kit";
 export const COURT_IMG: Record<string, number> = {
   bandra_garden: require("@/assets/images/court_bandra_garden.webp"),
   mumbai_local: require("@/assets/images/court_mumbai_local.webp"),
+  nashik: require("@/assets/images/court_nashik.webp"),
+  mahabaleshwar: require("@/assets/images/court_mahabaleshwar.webp"),
+  pune: require("@/assets/images/court_pune.webp"),
+  maharashtra_night: require("@/assets/images/court_maharashtra_night.webp"),
 };
 const CROP = { x: 112, y: 0, w: 800, h: 560 };
 

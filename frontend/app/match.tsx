@@ -29,7 +29,7 @@ import { levelView } from "@/src/game/meta/levels";
 import { Celebration, momentChip, ResultCard, type ResultButton, type ResultPartner } from "@/src/ui/MatchEnd";
 import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
-import { FAULT_LABEL_SECONDS, faultLabelFor } from "@/src/game/faultLabel";
+import { FAULT_HINT_SECONDS, FAULT_LABEL_SECONDS, faultLabelFor, showHintForPoint } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
 
 // END SEQUENCE (END_SEQ_S, spriteAnim): render-only time between game over and
@@ -509,10 +509,11 @@ export default function Match() {
       : false;
   // FAULT LABEL: 1.2 s (sim time, so it freezes while paused) after each point
   // end; display only. lastPoint.time is set by the one point-ending path.
-  const faultLabel =
-    !paused && !gameOver && sim.time - sim.lastPoint.time < FAULT_LABEL_SECONDS
-      ? faultLabelFor(sim.lastFault, sim.players[humanSlot]?.team ?? "near")
-      : null;
+  // With the rule hint (my team's fault, first 3 per type this session): 2.0 s.
+  const sincePoint = sim.time - sim.lastPoint.time;
+  const faultCandidate = !paused && !gameOver && sincePoint < FAULT_HINT_SECONDS ? faultLabelFor(sim.lastFault, sim.players[humanSlot]?.team ?? "near") : null;
+  const faultHint = faultCandidate ? showHintForPoint(faultCandidate, sim.lastFault?.reason, sim.lastPoint.time) : false;
+  const faultLabel = faultCandidate && sincePoint < (faultHint ? FAULT_HINT_SECONDS : FAULT_LABEL_SECONDS) ? faultCandidate : null;
   const shotLabel =
     !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
       ? sim.lastHumanShot.type.toUpperCase()
@@ -600,7 +601,8 @@ export default function Match() {
           pointerEvents="none"
           testID="fault-label"
         >
-          <Text style={styles.bounceCueText}>{faultLabel.text}</Text>
+          <Text style={[styles.bounceCueText, { textAlign: "center" }]}>{faultLabel.text}</Text>
+          {faultHint && faultLabel.hint ? <Text style={styles.faultHintText} numberOfLines={1} testID="fault-hint">{faultLabel.hint}</Text> : null}
         </View>
       )}
       {shotLabel && (
@@ -790,6 +792,7 @@ const useStyles = makeStyles((c) => ({
   dinkCueText: { color: "#1c2417", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 },
   bounceCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.62)", borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: "rgba(197,160,40,0.8)" },
   bounceCueText: { color: c.accentGold, fontSize: 11, fontWeight: "800", letterSpacing: 1.5 },
+  faultHintText: { color: "#FBF4E2", fontSize: 12, fontWeight: "700", textAlign: "center", marginTop: 1 },
   faultMine: { borderColor: "rgba(214,72,60,0.95)", borderWidth: 1.5 },
   faultRivals: { borderColor: "rgba(197,160,40,0.95)", borderWidth: 1.5 },
   shotLabel: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(20,26,18,0.6)", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 4 },

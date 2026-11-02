@@ -11,7 +11,6 @@ import {
   STAGE_NAMES,
   careerMatch,
   careerRewardPreview,
-  type CareerMatchDef,
 } from "@/src/game/meta/economyConfig";
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { levelView } from "@/src/game/meta/levels";
@@ -21,12 +20,7 @@ import { HeaderActions } from "@/src/ui/HeaderActions";
 import { Badge, Card, chemOf, Coin, GoldButton, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 import { CourtThumb } from "@/src/ui/CourtThumb";
-
-const GROUPS: { key: CareerMatchDef["stageKey"]; nums: number[] }[] = [
-  { key: "community", nums: [1, 2, 3] },
-  { key: "local", nums: [4, 5, 6] },
-  { key: "district", nums: [7, 8, 9, 10] },
-];
+import { JourneyCard } from "@/src/ui/JourneyCard";
 
 export default function Career() {
   const router = useRouter();
@@ -51,65 +45,12 @@ export default function Career() {
       testID="career-screen"
       header={<HeaderActions save={save} onChange={refresh} />}
     >
-      <Card style={styles.pad} testID="career-progress">
-        <Kicker style={{ fontSize: 11 }}>TOURNAMENT PROGRESS</Kicker>
-        <View style={styles.groups}>
-          {GROUPS.map((g, gi) => {
-            const locked = CAREER_MATCHES[g.nums[0] - 1].enabled === false;
-            const activeGroup = g.key === next.stageKey;
-            return (
-              <View key={g.key} style={[styles.group, { flex: g.nums.length }, gi > 0 && styles.groupDivider]}>
-                <View style={styles.groupHead}>
-                  {locked ? <Ionicons name="lock-closed" size={11} color={UI.muted} /> : null}
-                  <Text style={[styles.groupName, activeGroup && { color: "#1E4D33", fontWeight: "800" }, locked && { color: UI.muted }]} numberOfLines={1}>
-                    {g.key === "district" ? "Maharashtra" : STAGE_NAMES[g.key].replace(" Series", "")}
-                  </Text>
-                </View>
-                <View style={styles.nodes}>
-                  {g.nums.map((n, i) => {
-                    const m = CAREER_MATCHES[n - 1];
-                    const done = cleared.includes(m.id);
-                    const current = m.id === next.id;
-                    const tappable = done || m.id === nextOpen.id;
-                    return (
-                      <React.Fragment key={n}>
-                        {i > 0 ? <View style={[styles.link, done && styles.linkDone]} /> : null}
-                        <Pressable
-                          style={styles.nodeHit}
-                          hitSlop={{ left: 8, right: 8 }}
-                          testID={`node-${n}`}
-                          disabled={!tappable}
-                          accessibilityRole="button"
-                          accessibilityLabel={done ? `Replay match ${n}` : `Match ${n}`}
-                          onPress={() => setPickedId(m.id === nextOpen.id ? null : m.id)}
-                        >
-                          <View style={[styles.node, done && styles.nodeDone, current && styles.nodeCurrent, !m.enabled && styles.nodeLocked]}>
-                            {done ? (
-                              <Ionicons name="checkmark" size={14} color="#fff" />
-                            ) : m.round === "FINAL" ? (
-                              <Ionicons name="star" size={12} color={current ? UI.goldInk : "#8B826C"} />
-                            ) : null}
-                          </View>
-                          <View style={styles.numRow}>
-                            <Text style={[styles.nodeNum, !m.enabled && { color: UI.muted }]}>{n}</Text>
-                            {done ? <Ionicons name="refresh" size={9} color={UI.green} testID={`replay-${n}`} /> : null}
-                          </View>
-                        </Pressable>
-                      </React.Fragment>
-                    );
-                  })}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-        {cleared.length ? <Text style={styles.caption} testID="replay-caption">Tap ✓ to replay</Text> : null}
-      </Card>
+      <JourneyCard cleared={cleared} nextOpen={nextOpen} picked={replay ? next.id : null} playerName={identity?.playerName ?? ""} onPick={setPickedId} />
 
       <Card style={styles.pad} testID="next-match-card">
         <View style={styles.nmHead}>
           <Kicker>{replay ? "REPLAY" : "NEXT MATCH"}</Kicker>
-          <Text style={styles.nmOf} testID="next-match-number">Match {next.number} of 10</Text>
+          <Text style={styles.nmOf} testID="next-match-number">Match {next.number} of {CAREER_MATCHES.length}</Text>
           {next.round ? (
             <View style={styles.roundBadge} testID="badge-round">
               <Text style={styles.roundText}>{next.round}</Text>
@@ -130,7 +71,7 @@ export default function Career() {
               <View style={styles.side}>
                 <Badge name={next.rival} color={next.color} size={44} testID="rival-badge" />
                 <Text style={styles.code} testID="rival-code">{next.code}</Text>
-                <Text style={styles.rivalFull} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} testID="rival-name">{next.rival}</Text>
+                <Text style={styles.rivalFull} numberOfLines={2} testID="rival-name">{next.rival}</Text>
                 {next.namedRival ? (
                   <View style={styles.rivalTag} testID="badge-rival">
                     <Text style={styles.rivalTagText}>RIVAL TEAM</Text>
@@ -220,24 +161,8 @@ export default function Career() {
 
 const styles = StyleSheet.create({
   pad: { padding: 10 },
-  groups: { flexDirection: "row", marginTop: 8 },
-  group: { paddingHorizontal: 4 },
-  groupDivider: { borderLeftWidth: 1, borderLeftColor: UI.line },
-  groupHead: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3, marginBottom: 6 },
-  groupName: { color: UI.inkSoft, fontSize: 11, fontWeight: "600", textAlign: "center" },
-  nodes: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center" },
-  link: { height: 3, flex: 1, maxWidth: 16, backgroundColor: "#CFC4A8", marginTop: 11 },
-  linkDone: { backgroundColor: UI.green },
-  node: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#D9D0B9", borderWidth: 1.5, borderColor: "#B9AE92", alignItems: "center", justifyContent: "center" },
-  nodeDone: { backgroundColor: UI.green, borderColor: "#1F5A37" },
-  nodeCurrent: { backgroundColor: UI.gold, borderColor: UI.goldDeep, transform: [{ scale: 1.15 }] },
-  nodeLocked: { opacity: 0.45 },
-  nodeHit: { alignItems: "center", minWidth: 28, minHeight: 44 },
   soon: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 58, borderRadius: 16, marginTop: 10, backgroundColor: UI.creamDeep, borderWidth: 1, borderColor: UI.line },
   soonText: { color: UI.muted, fontSize: 20, fontWeight: "900", letterSpacing: 1 },
-  nodeNum: { color: UI.ink, fontSize: 11 },
-  numRow: { flexDirection: "row", alignItems: "center", gap: 1, marginTop: 3 },
-  caption: { color: UI.inkSoft, fontSize: 11, textAlign: "center", marginTop: 2 },
   code: { color: UI.ink, fontSize: 15, fontWeight: "900", letterSpacing: 1.5, marginTop: 2 },
   rivalFull: { color: UI.inkSoft, fontSize: 11, textAlign: "center", alignSelf: "stretch" },
   newTag: { position: "absolute", top: -6, right: -6, backgroundColor: UI.red, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: UI.cream },

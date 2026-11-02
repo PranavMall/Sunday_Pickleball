@@ -83,7 +83,7 @@ export interface SaveDoc {
   career: { cleared: string[]; nextMatchId: string; firstClearWins: number; firstClearLosses: number };
   namedRivals: Record<string, boolean>;
   milestones: Record<string, boolean>;
-  daily: { dayKey: string; training: number; scrimmage: number };
+  daily: { dayKey: string; training: number; scrimmage: number; quick: number };
   inboxRead: string[];
   rewardIds: string[]; // every applied rewardId (idempotency)
   ledger: LedgerEntry[]; // recent history (LEDGER_KEEP)
@@ -97,7 +97,7 @@ export interface MatchOutcome {
   applied: boolean;
   lines: string[];
   events: string[];
-  capped?: boolean; // training/scrimmage after the daily cap
+  capped?: boolean; // training/scrimmage/quick after the daily cap
   // Result-screen data, all taken from this match's ledger entries.
   coins?: CurrencyTile; // only when Coins changed
   fans?: CurrencyTile; // only when Fans changed
@@ -168,7 +168,7 @@ export function freshSave(now: number, rand: () => number = Math.random): SaveDo
     career: { cleared: [], nextMatchId: FIRST_CAREER_MATCH_ID, firstClearWins: 0, firstClearLosses: 0 },
     namedRivals: {},
     milestones: {},
-    daily: { dayKey: dayKeyOf(now), training: 0, scrimmage: 0 },
+    daily: { dayKey: dayKeyOf(now), training: 0, scrimmage: 0, quick: 0 },
     inboxRead: [],
     rewardIds: [],
     ledger: [],
@@ -240,6 +240,7 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
       dayKey: typeof dly.dayKey === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dly.dayKey) ? dly.dayKey : base.daily.dayKey,
       training: num(dly.training, 0),
       scrimmage: num(dly.scrimmage, 0),
+      quick: num(dly.quick, 0),
     },
     inboxRead: strArr(r.inboxRead),
     rewardIds: strArr(r.rewardIds),
@@ -303,12 +304,18 @@ export class MetaStore {
   rollDay(now: number): void {
     const d = this.doc as SaveDoc;
     const k = dayKeyOf(now);
-    if (k > d.daily.dayKey) d.daily = { dayKey: k, training: 0, scrimmage: 0 };
+    if (k > d.daily.dayKey) d.daily = { dayKey: k, training: 0, scrimmage: 0, quick: 0 };
   }
 
   dailyUsage(now: number): { training: number; scrimmage: number } {
     this.rollDay(now);
     return { training: this.doc.daily.training, scrimmage: this.doc.daily.scrimmage };
+  }
+
+  // Quick Play matches that still pay Coins today.
+  quickPaidLeft(now: number): number {
+    this.rollDay(now);
+    return Math.max(0, QUICK_PLAY_REWARDS.dailyCap - this.doc.daily.quick);
   }
 
   // ---- Ledger -----------------------------------------------------------
@@ -527,11 +534,18 @@ export class MetaStore {
       }
       analytics.track(m.kind === "training" ? "training_completed" : "scrimmage_completed", { matchId: m.matchId, won: m.won, capped: !!out.capped });
     } else {
-      coinsLine("coins", m.won ? QUICK_PLAY_REWARDS.winCoins : QUICK_PLAY_REWARDS.lossCoins, "", m.won ? "Win" : "Loss");
-      analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won });
+      // Free and unlimited; only the first dailyCap matches of the day pay Coins.
+      const used = d.daily.quick;
+      d.daily.quick = used + 1;
+      if (used < QUICK_PLAY_REWARDS.dailyCap) coinsLine("coins", m.won ? QUICK_PLAY_REWARDS.winCoins : QUICK_PLAY_REWARDS.lossCoins, "", m.won ? "Win" : "Loss");
+      else {
+        out.capped = true;
+        out.lines.push("Coins used today — play for fun");
+      }
+      analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won, capped: !!out.capped });
     }
     // "Play for fun" (a capped Training / Scrimmage) never fades anyone.
-    if (!m.singles && !out.capped) this.fadeOthers(m.partnerId ?? (m.kind === "career" ? d.activePartnerId : m.kind === "quick" ? this.quickPartner() : d.trainingPartnerId), m, src, now);
+    if (!m.singles && !(out.capped && m.kind !== "quick")) this.fadeOthers(m.partnerId ?? (m.kind === "career" ? d.activePartnerId : m.kind === "quick" ? this.quickPartner() : d.trainingPartnerId), m, src, now);
     this.save();
     return out;
   }
