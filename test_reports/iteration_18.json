@@ -1,0 +1,32 @@
+{
+  "summary": "Release 10 frontend + headless verification at 375x667 on live web preview. Headless: phase1a 132/0, phase1b 55/0, phase1c 101/0, run.ts 265/0 all green; b3Report md5 097a601037a7adc4e88b4ac8994948ea and shotMix md5 1238864370f30941b8b7966da795b3e6 both MATCH. Browser (localStorage pb.meta seeds): Career MUMBAI JOURNEY card renders 4 stage columns, trophies, WON ribbons for cleared finals, lock on unopened stage, 'Match N of 12', nodes 1-12, player badge on current node, 'Next: Match N · <court>', 'Tap ✓ to replay'; tapping a ✓ node switches the card to REPLAY (+40 replay coins); tapping the current node returns to NEXT MATCH. Seed with 6 cleared → Match 7 Nashik Vines NAS on Nashik Vineyard Court with NEW tag, Tour column highlighted, Championship locked. Seed with 11 cleared → Match 12 Gateway Champs on Marine Drive Night Court, FINAL badge, Championship column highlighted. Team: Matz discovered but not signable shows 'UNLOCKS AFTER MUMBAI LOCAL SERIES FINAL'; signable with 1200 coins shows SIGN 1000 COINS → dialog → Sign → signed=true, coins 200, Matz portrait and meters shown, 'Make Matz your Career partner?' prompt, Matz appears in the Quick Play picker. Quick Play: '7 paid matches left today'; quick=6 → '1 paid match left today'; quick=7 → 'Play for fun'; an old dayKey resets to 7. Match screen loads without a crash on nashik (07), mahabaleshwar (09), pune (11) and maharashtra_night (12); scoreboard visible. Zero page errors. ONE BUG: '…' truncation in the Next Match card reward captions on every first-clear FINAL (matches 3/6/9/12). It is worst on match 9, where the long court name squeezes the rewards and '+450' wraps to '+45'/'0'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Career Next Match card - reward captions", "issue": "rewardSub uses numberOfLines={2} and is cut off with '…' at 375px whenever there are 3 coin parts: 'Coins (Win + Rival + …' on matches 3, 6, 9 and 12 (first clear). This breaks the 'never …' rule. Reference: /app/frontend/app/career.tsx:88 and :96", "testID": "reward-preview", "priority": "HIGH"},
+      {"component": "Career Next Match card - long court name", "issue": "courtName (career.tsx:113, style :187) has no maxWidth, so 'Mahabaleshwar Strawberry Court' stays on one line (~175px). The court column becomes wider than the 96px thumb and squeezes the left column: '+450' wraps to '+45' / '0', 'Coins (Win …' and 'Fans (Win +…' are truncated, and 'Satara Winds' and the 'RIVAL TEAM' tag wrap to 2 lines. Seen on match 9 first clear and on replay.", "testID": "court-name", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Career / JourneyCard", "issues": ["Node touch targets are 22x40 (+2px horizontal hitSlop), below 44pt. This is hard to avoid with 12 nodes in 347px, but consider a larger horizontal hitSlop.", "Locked stage name (muted) over the translucent card has low contrast."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/frontend/src/game/__tests__/phase1a.ts", "/app/frontend/src/game/__tests__/phase1b.ts", "/app/frontend/src/game/__tests__/phase1c.ts", "/app/frontend/src/game/__tests__/run.ts"],
+  "action_items": [
+    "career.tsx: limit the court column (CourtThumb + court-name) to the thumb width (maxWidth = thumb width, textAlign center) so long court names wrap instead of widening the column.",
+    "career.tsx: stop the '…' truncation of reward captions ('Coins (Win + Rival + Milestone N)', 'Fans (Win + Rival)'). Let them wrap (no numberOfLines cap) or stack the parts, and keep rewardNum (+450) on one line. Re-check matches 3, 6, 9 and 12 at 375x667."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx is 855 lines (>700); consider splitting it.",
+    "JourneyCard builds stages and counts from CAREER_MATCHES, so no counts are hard-coded.",
+    "No deprecated expo packages in package.json."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "~93% (all flows pass; 1 layout/truncation bug on the Career Next Match card)"},
+  "seed_data_creation": "Seeds were set per test via localStorage pb.meta (schemaVersion 1) plus pw.playerName/pw.teamName/pw.identitySet, in the browser only.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "To seed: localStorage.setItem('pb.meta', JSON), then goto /career. The truncation check must look for -webkit-line-clamp (RN web numberOfLines) with scrollHeight>clientHeight, not only text-overflow. Sign flow: status-matz → sign-dialog-yes.",
+  "rca_of_issue": "The Next Match card body is a row: a flex:1 left column plus an auto-width court column. The court column's width is the larger of the thumb and courtName's natural width. courtName has no width limit, so long names take width from the left column. rewardSub has numberOfLines={2}, so 3-part captions get '…' even at normal widths."
+}

@@ -143,3 +143,13 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - 8.3: receivers hold depth on serve return (new frozen baseline: b3 md5 097a6010…, shotMix 12388643…); court memory-disk cache + next-court prefetch; portrait onError + DEV faces line.
 - 9: 14 rival front sprites with per-match looks, 4-sheet loader, FarSpriteAnimator; stage trophies; Matz face; short team names; Maharashtra Championship.
 - STOP: awaiting Pranav phone test. Open question: Quick Play may show a signed Upsi/Matz on the rival side.
+
+## Release 10 (commits 227d5b9 + fit fix)
+- 12-match Mumbai career (community/local/tour/district), all enabled; Matches 4–5 rebalanced (ROOKIE+PRO)
+- 4 new courts (Nashik, Mahabaleshwar, Pune, Marine Drive Night), 12 rival sheets, Maharashtra Championship trophy
+- Matz signable after Match 6 (1000 Coins), partner_matz_back sheet; Team locked text derived from unlocks
+- Quick Play rivals: (seed mod 12)+1 with reserve looks (no Upsi/Matz)
+- Mumbai Journey card (src/ui/JourneyCard.tsx) replaces Tournament Progress
+- Quick Play: 7 paid matches/day (daily.quick), "Coins used today — play for fun"
+- Fault pill rule hints (faultLabel.ts), first 3 per type per session, 2.0 s
+- md5 b3Report 097a601037a7adc4e88b4ac8994948ea / shotMix 1238864370f30941b8b7966da795b3e6 unchanged
