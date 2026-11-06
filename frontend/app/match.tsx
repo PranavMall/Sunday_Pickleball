@@ -15,7 +15,7 @@ import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { END_SEQ_S, FarSpriteAnimator, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
-import { portraitLoadStatus, spriteLoadStatus } from "@/src/game/render/sprites";
+import { courtLoadStatus, portraitLoadStatus, sheetPrefetch, spriteLoadStatus } from "@/src/game/render/sprites";
 import { courtVisual } from "@/src/game/render/courts";
 import { analytics } from "@/src/game/services/analytics";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
@@ -31,6 +31,7 @@ import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_HINT_SECONDS, FAULT_LABEL_SECONDS, faultLabelFor, showHintForPoint } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
+import { KB_SIZE, KitchenButton, LobButton } from "@/src/ui/TacticalButtons";
 
 // END SEQUENCE (END_SEQ_S, spriteAnim): render-only time between game over and
 // the pop-ups / result (the sim is over; nothing steps). A tap skips it.
@@ -42,63 +43,11 @@ const EDGE_MARGIN = 24;
 // same size, side by side. Clear of the pause button (top-right) and the
 // centred hint/cue pills (which sit ABOVE the row). Swipes that START anywhere
 // on the row are ignored.
-const KB_SIZE = 64;
 const KB_RIGHT = 14;
 const KB_BOTTOM = 14; // + safe-area bottom inset
 const KB_GAP = 10;
 const ROW_W = KB_SIZE * 2 + KB_GAP;
 const PILL_BASE = KB_BOTTOM + KB_SIZE + 12; // pills start above the row
-
-// Memoised kitchen button: NET (hold the kitchen line) ↔ BACK (retreat toward
-// the baseline), with a short cooldown bar after each toggle.
-const KitchenButton = memo(function KitchenButton(props: {
-  mode: "hold" | "retreat";
-  cooldown: number; // 0..1 remaining
-  pulse: boolean; // "BACK ▼" hint right after my lob (no automatic retreat)
-  onPress: () => void;
-}) {
-  const styles = useStyles();
-  const hold = props.mode === "hold";
-  const cooling = props.cooldown > 0;
-  return (
-    <Pressable
-      testID="kitchen-button"
-      accessibilityLabel={hold ? "At the net. Tap to move back" : "Back court. Tap to rush the net"}
-      onPress={props.onPress}
-      disabled={cooling}
-      style={[styles.kitchenBtn, hold ? styles.kitchenBtnBack : styles.kitchenBtnHold, cooling && styles.kitchenBtnCooling, props.pulse && styles.kitchenBtnPulse]}
-    >
-      {/* Shows the ACTION a tap performs; the small dot row shows where we are now. */}
-      <Text style={[styles.kitchenBtnText, hold && styles.kitchenBtnTextBack]} testID="kitchen-button-state">
-        {hold ? "BACK ▼" : "NET ▲"}
-      </Text>
-      <Text style={[styles.kitchenBtnNow, hold && styles.kitchenBtnTextBack]} testID="kitchen-button-now">
-        {hold ? "● at net" : "● back"}
-      </Text>
-      {cooling ? (
-        <View style={styles.kitchenCdTrack}>
-          <View style={[styles.kitchenCdFill, { width: `${Math.round(props.cooldown * 100)}%` }]} />
-        </View>
-      ) : null}
-    </Pressable>
-  );
-});
-
-// LOB arm button: tap arms my next strike as a lob; tap again to clear.
-const LobButton = memo(function LobButton(props: { armed: boolean; onPress: () => void }) {
-  const styles = useStyles();
-  return (
-    <Pressable
-      testID="lob-button"
-      accessibilityLabel={props.armed ? "Lob armed. Tap to cancel" : "Arm a lob for my next shot"}
-      onPress={props.onPress}
-      style={[styles.kitchenBtn, props.armed ? styles.lobArmed : styles.kitchenBtnBack]}
-    >
-      <Text style={[styles.kitchenBtnText, !props.armed && styles.kitchenBtnTextBack]} testID="lob-button-state">LOB</Text>
-      <Text style={[styles.kitchenBtnNow, !props.armed && styles.kitchenBtnTextBack]}>{props.armed ? "● ARMED" : "tap to arm"}</Text>
-    </Pressable>
-  );
-});
 
 function buildMatch(p: LaunchParams): { sim: GameSimulation; config: MatchConfig; matchId: string; setup: MatchSetup } {
   const seed = (Math.random() * 1e9) | 0;
@@ -359,7 +308,7 @@ export default function Match() {
         const setup = match.setup;
         const won = sim.winner === "near";
         initMeta().then(() => {
-          const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court }, Date.now());
+          const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
           const d = meta.doc;
           setOutcome({ ...o, goal: setup.mode === "career" ? nextGoal(d) : null, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
         });
@@ -470,6 +419,9 @@ export default function Match() {
     } catch {
       // resolveAssetSource unavailable (web): the court decodes on mount.
     }
+    // The next match's two rival sheets, so they are ready (and kept on eviction).
+    if (outcome?.nextCareerId && meta.loaded) sheetPrefetch.run?.(buildSetup({ mode: "career", careerId: outcome.nextCareerId }, 0, meta.doc).rivalLooks);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextCourt]);
   const nextMatch = () => {
     if (!outcome?.nextCareerId) return;
@@ -514,6 +466,9 @@ export default function Match() {
   const faultCandidate = !paused && !gameOver && sincePoint < FAULT_HINT_SECONDS ? faultLabelFor(sim.lastFault, sim.players[humanSlot]?.team ?? "near") : null;
   const faultHint = faultCandidate ? showHintForPoint(faultCandidate, sim.lastFault?.reason, sim.lastPoint.time) : false;
   const faultLabel = faultCandidate && sincePoint < (faultHint ? FAULT_HINT_SECONDS : FAULT_LABEL_SECONDS) ? faultCandidate : null;
+  // TWIST pill: 2.0 s of sim time before the first serve (display only; freezes on pause).
+  const twist = match.setup.twist;
+  const twistPill = twist && ready && !paused && !gameOver && sim.time < 2.0 ? `${twist.name.toUpperCase()} — ${twist.line}` : null;
   const shotLabel =
     !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
       ? sim.lastHumanShot.type.toUpperCase()
@@ -605,6 +560,11 @@ export default function Match() {
           {faultHint && faultLabel.hint ? <Text style={styles.faultHintText} numberOfLines={1} testID="fault-hint">{faultLabel.hint}</Text> : null}
         </View>
       )}
+      {twistPill && !faultLabel && (
+        <View style={[styles.bounceCue, styles.faultRivals, { bottom: insets.bottom + PILL_BASE + 50, maxWidth: width - 32 }]} pointerEvents="none" testID="twist-pill">
+          <Text style={[styles.bounceCueText, { textAlign: "center" }]}>{twistPill}</Text>
+        </View>
+      )}
       {shotLabel && (
         <View style={[styles.shotLabel, { bottom: insets.bottom + PILL_BASE + 84 }]} pointerEvents="none">
           <Text style={styles.shotLabelText}>{shotLabel}</Text>
@@ -628,6 +588,7 @@ export default function Match() {
             {fps} fps · {sim.phase} · z{sim.ball.z.toFixed(1)} · sfx {sfx.ready ? "rdy" : "…"} {sfx.lastLatencyMs.toFixed(1)}ms · snd{sfx.playedCount}
           </Text>
           <Text style={styles.debugText} testID="sprite-status">{spriteLoadStatus.text}</Text>
+          <Text style={styles.debugText} testID="court-status">{courtLoadStatus.text}</Text>
           <Text style={styles.debugText} testID="face-status">{portraitLoadStatus.text}</Text>
           <Text style={styles.debugText} testID="perf-probe">
             renders/s {perf.current.rendersPerSec} · work {perf.current.workMs.toFixed(1)}ms · proj {perf.current.projBuilds} · resize {perf.current.sizeChanges} · {width}x{height}
@@ -828,20 +789,9 @@ const useStyles = makeStyles((c) => ({
   secondaryText: { color: c.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
   resultRow: { flexDirection: "row", gap: 12, marginTop: 12, width: "100%" },
   tacticalRow: { position: "absolute", right: KB_RIGHT, flexDirection: "row", gap: KB_GAP },
-  lobArmed: { backgroundColor: "rgba(214,96,60,0.95)", borderColor: "#FBF6E9" },
-  kitchenBtnPulse: { borderColor: c.accentGold, borderWidth: 4, transform: [{ scale: 1.08 }] },
   smashCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(214,96,60,0.95)", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 5 },
   smashCueText: { color: "#FBF6E9", fontSize: 13, fontWeight: "900", letterSpacing: 2 },
   smashReady: { backgroundColor: "rgba(20,26,18,0.7)", borderWidth: 1.5, borderColor: "rgba(214,96,60,0.95)" },
-  kitchenBtn: { width: KB_SIZE, height: KB_SIZE, borderRadius: KB_SIZE / 2, alignItems: "center", justifyContent: "center", borderWidth: 2 },
-  kitchenBtnHold: { backgroundColor: "rgba(197,160,40,0.92)", borderColor: "#FBF6E9" },
-  kitchenBtnBack: { backgroundColor: "rgba(46,61,42,0.82)", borderColor: "rgba(251,246,233,0.55)" },
-  kitchenBtnCooling: { opacity: 0.6 },
-  kitchenBtnText: { color: "#1c2417", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
-  kitchenBtnNow: { color: "#1c2417", fontSize: 8, fontWeight: "700", opacity: 0.75, marginTop: 1 },
-  kitchenBtnTextBack: { color: c.onSurfaceInverse },
-  kitchenCdTrack: { position: "absolute", bottom: 9, left: 14, right: 14, height: 3, borderRadius: 2, backgroundColor: "rgba(0,0,0,0.25)", overflow: "hidden" },
-  kitchenCdFill: { height: 3, backgroundColor: "#FBF6E9" },
   loadingCover: { ...abs(), backgroundColor: c.surfaceInverse, alignItems: "center", justifyContent: "center" },
   loadingTitle: { color: c.accentGold, fontSize: 30, fontWeight: "900", letterSpacing: 6 },
   skipLayer: { ...abs() },

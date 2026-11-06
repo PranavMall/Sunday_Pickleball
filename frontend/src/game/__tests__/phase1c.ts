@@ -5,6 +5,8 @@
 import { CAREER_MATCH_IDS, STAGE_NAMES, careerMatch } from "../meta/economyConfig";
 import { nextGoal } from "../meta/goals";
 import { MetaStore } from "../meta/metaStore";
+import { shareText, trophiesWon } from "../meta/trophies";
+import { SheetCache } from "../render/sheetCache";
 import { buildSetup, careerSetup, quickPlaySetup } from "../meta/matchSetup";
 
 let pass = 0;
@@ -72,7 +74,7 @@ async function commit4() {
     const { s: m } = await fresh();
     for (let n = 1; n <= 5; n++) career(m, n, true);
     const o6 = career(m, 6, true);
-    eq(o6.moments.map((x) => (x.kind === "court" ? `court:${x.court}` : x.kind === "stage" ? `stage:${x.stageKey}` : `partner:${x.partnerId}:${x.flag}`)), ["stage:local", "court:nashik", "partner:matz:signable"], "Match 6 win: Mumbai Local Series won → Nashik court → Matz signable");
+    eq(o6.moments.map((x) => (x.kind === "court" ? `court:${x.court}` : x.kind === "stage" ? `stage:${x.stageKey}` : x.kind === "partner" ? `partner:${x.partnerId}:${x.flag}` : x.kind)), ["stage:local", "court:nashik", "partner:matz:signable"], "Match 6 win: Mumbai Local Series won → Nashik court → Matz signable");
     ok(m.doc.coins === 1325 && m.doc.partners.matz.signable && !m.doc.partners.matz.signed, `clean path after Match 6: 1325 Coins, Matz signable (got ${m.doc.coins})`);
     eq(nextGoal(m.doc), "Sign Matz in Team", "next goal: Sign Matz");
     ok(m.signPartner("matz", T0) && m.doc.coins === 325 && m.doc.partners.matz.signed, "sign Matz for 1000 Coins: 1325 → 325");
@@ -201,7 +203,7 @@ async function sessionD() {
   const { levelView, growthCap } = await import("../meta/levels");
   ok(growthCap("mumbai.community.02") === 300 && growthCap("mumbai.local.04") === 500, "cap 300 Community Cup / 500 Mumbai Local");
   eq(levelView(140, "mumbai.community.02"), { level: 2, frac: 0.4, text: "40 / 100" }, "140 → Lv 2, 40/100");
-  ok(levelView(300, "mumbai.community.03").max === "MAX for Community Cup" && levelView(300, "mumbai.community.03").level === 3, "300 → Lv 3 MAX for Community Cup");
+  ok(levelView(300, "mumbai.community.03").max === "Win the Community Cup final to keep growing" && levelView(300, "mumbai.community.03").level === 3, "300 → Lv 3 at the Community Cup cap");
   // Fade: sign Upsi, play 3 with her → Anli −1, Rusty; then catch-up.
   (s.doc as any).coins = 5000;
   ok(s.signPartner("upsi", T0) && s.setTrainingPartner("upsi"), "Upsi signed, training partner");
@@ -291,8 +293,108 @@ function commit9() {
   eq(buildSetup({ mode: "scrimmage" }, 1, null).rivalLooks, ["rival_woman1_and", "rival_woman2_and"], "Scrimmage uses Match 4 looks");
 }
 
+async function release101() {
+  const kinds = (o: { moments: { kind: string }[] }) => o.moments.map((x) => x.kind);
+  {
+    // Lv 1 → Lv 2 on Match 3: stage → court → level → partner unlock.
+    const { s } = await fresh();
+    s.devJumpTo(3);
+    (s.doc as any).partners.anli.growth = 95;
+    const o = career(s, 3, true);
+    eq(kinds(o), ["stage", "court", "level", "partner"], "level-up moment queued after stage / court, before the partner unlock");
+    const lv = o.moments.find((x) => x.kind === "level") as any;
+    ok(lv.partnerId === "anli" && lv.level === 2 && !lv.atCap && o.moments.filter((x) => x.kind === "level").length === 1, "one level moment: Anli Lv 2");
+  }
+  {
+    // Level-up that hits the Community Cup cap carries atCap; at the cap → none.
+    const { s } = await fresh();
+    (s.doc as any).partners.anli.growth = 195;
+    const o = career(s, 1, true);
+    const lv = o.moments.find((x) => x.kind === "level") as any;
+    ok(lv && lv.level === 3 && lv.atCap === "community", "Lv 3 at the Community Cup cap → atCap (\"Win the … final to keep growing\")");
+    (s.doc as any).partners.anli.growth = 295;
+    const o2 = career(s, 1, true);
+    ok(!o2.moments.some((x) => x.kind === "level") && s.doc.partners.anli.growth === 300, "reaching the stage cap (300): no level moment");
+  }
+  {
+    // Crossing Chemistry 25 → one heart moment.
+    const { s } = await fresh();
+    (s.doc as any).chemistryHalves["player+anli"] = 48;
+    (s.doc as any).chemistryPeakHalves["player+anli"] = 48;
+    const o = career(s, 1, true);
+    const h = o.moments.filter((x) => x.kind === "heart") as any[];
+    ok(h.length === 1 && h[0].chemistry === 25 && h[0].partnerId === "anli", "crossing Chemistry 25 emits one heart moment");
+    const o2 = career(s, 2, true);
+    ok(!o2.moments.some((x) => x.kind === "heart"), "no heart moment until the next 25");
+  }
+  {
+    // A Training match that levels the partner emits the level moment too.
+    const { s } = await fresh();
+    (s.doc as any).partners.anli.growth = 95;
+    const o = s.completeMatch({ matchId: "tr-lv", kind: "training", won: true, partnerId: "anli" }, T0);
+    eq(kinds(o), ["level"], "Training win Lv 1 → Lv 2: level moment");
+  }
+  {
+    // Stage-final first clear writes career.trophies[stageKey].
+    const { s, mem } = await fresh();
+    s.devJumpTo(3);
+    s.completeMatch({ matchId: "tf3", kind: "career", won: true, careerMatchId: CAREER_MATCH_IDS[2], partnerId: "anli", court: "bandra_garden", score: "11–7" }, T0);
+    eq(s.doc.career.trophies.community, { wonAt: T0, score: "11–7", rival: "Colaba Kings", partnerId: "anli", court: "Bandra Garden" }, "trophy record: date, score, rival, partner, court");
+    s.completeMatch({ matchId: "tf3b", kind: "career", won: true, careerMatchId: CAREER_MATCH_IDS[2], partnerId: "anli", score: "11–0" }, T0 + 1);
+    ok(s.doc.career.trophies.community.score === "11–7" && Object.keys(s.doc.career.trophies).join() === "community", "replay of a won final keeps the first record");
+    await s.flush();
+    ok(JSON.parse(mem.get("pb.meta")!).career.trophies.community.rival === "Colaba Kings", "trophies persisted");
+    // Old save without trophies: already-won stages show as won.
+    const old = new Map<string, string>([["pb.meta", JSON.stringify({ schemaVersion: 1, guestId: "g_old", career: { cleared: CAREER_MATCH_IDS.slice(0, 6), nextMatchId: CAREER_MATCH_IDS[6] } })]]);
+    const so = new MetaStore({ getItem: async (k) => old.get(k) ?? null, setItem: async (k, v) => void old.set(k, v) }, () => 0.5);
+    await so.load(T0);
+    ok(JSON.stringify(so.doc.career.trophies) === "{}" && trophiesWon(so.doc).join() === "community,local", "old save loads; Community Cup + Local Series show as won");
+    eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local Series. Next: the Maharashtra Tour!", "share text");
+  }
+  {
+    // DEV jump to Match 7.
+    const { s } = await fresh();
+    const coins = s.doc.coins, writes0 = s.writes;
+    s.devJumpTo(7);
+    await s.flush();
+    ok(s.doc.career.cleared.length === 6 && s.doc.career.cleared.join() === CAREER_MATCH_IDS.slice(0, 6).join() && s.doc.career.nextMatchId === "mumbai.tour.07", "DEV jump 7: 6 cleared, next = mumbai.tour.07");
+    ok(s.doc.partners.upsi.signable && s.doc.partners.matz.signable && !s.doc.partners.upsi.signed && !s.doc.partners.matz.signed, "DEV jump 7: Upsi and Matz signable, not signed");
+    ok(s.doc.coins === coins && s.doc.fans === 0 && s.doc.partners.anli.growth === 0 && Object.keys(s.doc.milestones).length === 0 && s.writes === writes0 + 1, "DEV jump 7: Coins / Fans / Growth / milestones unchanged, one save");
+    s.devJumpTo(5);
+    ok(s.doc.partners.upsi.signable && !s.doc.partners.matz.discovered && s.doc.career.nextMatchId === "mumbai.local.05", "DEV jump 5: Upsi signable, Matz not yet met");
+  }
+  {
+    // Sheet eviction: exactly the current set (+ the prefetched next set) stays decoded.
+    const disposed: number[] = [];
+    let failsLeft = 0;
+    const c = new SheetCache<{ id: number; dispose: () => void }>(async (m) => {
+      if (failsLeft > 0) { failsLeft--; throw new Error("net"); }
+      return { id: m, dispose: () => disposed.push(m) };
+    }, [1, 1]);
+    const loadSet = async (mods: number[]) => { c.setCurrent(mods); await Promise.all(mods.map((m) => c.load(m))); };
+    await loadSet([1, 2, 3, 4]);
+    await loadSet([1, 2, 5, 6]);
+    eq([...c.cache.keys()].sort(), [1, 2, 5, 6], "eviction: only the current set stays");
+    ok(disposed.sort().join() === "3,4", "eviction: evicted sheets disposed");
+    c.prefetch([7, 8]);
+    await Promise.all([c.load(7), c.load(8)]);
+    eq([...c.cache.keys()].sort(), [1, 2, 5, 6, 7, 8], "prefetched next set kept alongside the current set");
+    await loadSet([1, 2, 7, 8]);
+    eq([...c.cache.keys()].sort(), [1, 2, 7, 8], "next match: previous rivals evicted");
+    failsLeft = 2;
+    c.setCurrent([1, 2, 9]);
+    ok((await c.load(9)).id === 9, "a sheet that fails twice loads on the third try");
+    failsLeft = 3;
+    c.setCurrent([1, 2, 10]);
+    let failed = false;
+    try { await c.load(10); } catch { failed = true; }
+    ok(failed && !c.cache.has(10), "three failures → rejected (placeholder)");
+  }
+}
+
 (async () => {
   await commit4();
+  await release101();
   await commit5();
   await sessionD();
   commit9();

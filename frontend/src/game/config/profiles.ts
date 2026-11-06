@@ -78,18 +78,24 @@ export const AI_PROFILES: Record<Difficulty, AIProfile> = Object.fromEntries(
 // Personalities are presets too (bias shot selection on top of a profile).
 export const PERSONALITY_PRESETS: Record<Personality, PersonalityBias> = PERSONALITY_BIAS;
 
-// Chemistry hook. `chemistry` is neutral at 1.0 (identity). A value != 1 may
-// later nudge a partner's params; at the default it returns the params
-// unchanged so parity is preserved and a partner is never made worse by default.
+// Chemistry hook. 1.0 = identity (every default match, so the baseline md5s
+// stay identical). Otherwise k = min(1, chemistry − 1): the six skill fields
+// move k of the way from the player's own tier toward the PRO row;
+// personality fields (kitchenAffinity, aggressiveness, tacticalVariety) stay.
+const SKILL_FIELDS = ["reactionDelay", "positionError", "predictError", "shotAccuracy", "unforcedError", "anticipation"] as const;
 export function applyChemistry(params: AIParams, chemistry: number): AIParams {
   if (chemistry === 1) return params;
-  // Forward-looking: positive chemistry sharpens accuracy & reaction a touch,
-  // never degrades. (Inactive at the neutral default used everywhere in Part A.)
-  const k = Math.max(0, chemistry - 1);
-  return {
-    ...params,
-    shotAccuracy: Math.min(1, params.shotAccuracy + k * 0.05),
-    reactionDelay: Math.max(0.05, params.reactionDelay * (1 - k * 0.1)),
-    unforcedError: Math.max(0, params.unforcedError * (1 - k * 0.15)),
-  };
+  // Cached per (params, chemistry): the engine asks per AI decision, so no
+  // allocation after the first call.
+  let byChem = chemCache.get(params);
+  if (!byChem) chemCache.set(params, (byChem = new Map()));
+  const hit = byChem.get(chemistry);
+  if (hit) return hit;
+  const k = Math.max(0, Math.min(1, chemistry - 1));
+  const pro = DIFFICULTY_TABLE.PRO;
+  const out = { ...params };
+  for (const f of SKILL_FIELDS) out[f] = params[f] + (pro[f] - params[f]) * k;
+  byChem.set(chemistry, out);
+  return out;
 }
+const chemCache = new WeakMap<AIParams, Map<number, AIParams>>();

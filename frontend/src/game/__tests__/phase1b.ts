@@ -3,8 +3,8 @@
  */
 import { PARTNER_DIFFICULTY } from "../config/ai";
 import { PLAYER_NAME_POOL, TEAM_NAME_POOL, teamCode } from "../services/profile";
-import { quickPlaySetup, careerSetup, trainingSetup } from "../meta/matchSetup";
-import { CAREER_MATCH_IDS, CAREER_MATCHES, CAREER_REWARDS, PARTNERS, careerMatch, careerRewardPreview } from "../meta/economyConfig";
+import { quickPlaySetup, careerSetup, showTalk, talkRival, trainingSetup } from "../meta/matchSetup";
+import { CAREER_MATCH_IDS, CAREER_MATCHES, CAREER_REWARDS, MATCH_TALK, PARTNERS, careerMatch, careerRewardPreview } from "../meta/economyConfig";
 import { hasUnread, inboxMessages } from "../meta/inbox";
 import { discoveredPartners, rosterStatus } from "../meta/team";
 import { MetaStore, freshSave } from "../meta/metaStore";
@@ -19,6 +19,8 @@ export function ok(c: boolean, msg: string) {
   }
 }
 (globalThis as any).__DEV__ = true;
+declare const require: any;
+declare const process: any;
 
 // ---- 3a: identity + team code ----
 ok(PLAYER_NAME_POOL.length === 33 && TEAM_NAME_POOL.length === 30, "Appendix A pool sizes (33 players / 30 teams)");
@@ -61,7 +63,7 @@ const r1 = careerRewardPreview(careerMatch("mumbai.community.01"));
 ok(r1.coins === CAREER_REWARDS.win.coins && r1.fans === CAREER_REWARDS.win.fans, "Match 1 preview = win components only");
 
 const cs = careerSetup(careerMatch("mumbai.community.02"), "anli", 3).config;
-ok(cs.matchType === "career" && cs.court === "bandra_garden" && cs.far.players.map((p) => p.profileId).join() === "ROOKIE,ROOKIE" && cs.far.players.map((p) => p.personality).join() === "KITCHEN,TACTICAL" && cs.far.players[0].name === "Upsi" && cs.ruleModifiers === undefined, "career setup: per-slot AI, recruit name, to 11");
+ok(cs.matchType === "career" && cs.court === "bandra_garden" && cs.far.players.map((p) => p.profileId).join() === "ROOKIE,ROOKIE" && cs.far.players.map((p) => p.personality).join() === "KITCHEN,TACTICAL" && cs.far.players[0].name === "Upsi" && cs.ruleModifiers?.pointsToWin === 7, "career setup: per-slot AI, recruit name, Match 2 twist first to 7");
 const c4 = careerSetup(careerMatch("mumbai.local.04"), "anli", 3).config;
 ok(c4.court === "mumbai_local" && c4.far.players.map((p) => p.profileId).join() === "ROOKIE,PRO" && c4.far.players.map((p) => p.personality).join() === "KITCHEN,DEFENSIVE", "career 4: Mumbai Local court, ROOKIE + PRO, KITCHEN / DEFENSIVE (Release 10)");
 for (const mode of ["training", "scrimmage"] as const) {
@@ -72,9 +74,9 @@ for (const mode of ["training", "scrimmage"] as const) {
 const base = freshSave(0, () => 0.5);
 ok(inboxMessages(base).map((m) => m.id).join() === "inbox.welcome" && hasUnread(base), "fresh save: Welcome message + dot (Session D 7.9)");
 const s2 = { ...base, career: { ...base.career, cleared: ["mumbai.community.01", "mumbai.community.02"] } };
-ok(inboxMessages(s2).map((m) => m.id).join() === "inbox.welcome,inbox.met_upsi" && hasUnread(s2), "after Match 2: Welcome + Met Upsi + dot");
+ok(inboxMessages(s2).map((m) => m.id).join() === "inbox.met_upsi" && hasUnread(s2), "after Match 2: Met Upsi + dot (Welcome done after Match 1)");
 const s5 = { ...base, career: { ...base.career, cleared: CAREER_MATCH_IDS.slice(0, 5) as unknown as string[] }, inboxRead: ["inbox.welcome", "inbox.met_upsi", "inbox.upsi_signable", "inbox.new_court_local", "inbox.matz_watching"] };
-ok(inboxMessages(s5).length === 6 && hasUnread(s5) && inboxMessages(s5).every((m) => m.cta.label && m.cta.path), "after Match 5: six messages each with a CTA, Match 6 unread");
+ok(inboxMessages(s5).map((m) => m.id).join() === "inbox.met_upsi,inbox.upsi_signable,inbox.matz_watching,inbox.local_final_soon" && hasUnread(s5) && inboxMessages(s5).every((m) => m.cta.label && m.cta.path), "after Match 5 (Upsi / Matz flags unset): four not-done messages each with a CTA, Match 6 unread");
 ok(!hasUnread({ ...s5, inboxRead: [...s5.inboxRead, "inbox.local_final_soon"] }), "all read → no dot");
 
 ok(discoveredPartners(base).join() === "anli" && rosterStatus(base, "anli").kind === "active", "fresh roster: Anli only, ACTIVE");
@@ -86,6 +88,37 @@ ok(rosterStatus(team(300, { signable: true, signed: true }), "upsi").kind === "s
 const matz = (coins: number, st: object) => ({ ...base, coins, partners: { ...base.partners, matz: { discovered: true, signable: false, signed: false, growth: 0, ...st } } });
 ok(JSON.stringify(rosterStatus(matz(300, {}), "matz")) === JSON.stringify({ kind: "locked", text: "UNLOCKS AFTER MUMBAI LOCAL SERIES FINAL" }), "Matz discovered not signable → UNLOCKS AFTER MUMBAI LOCAL SERIES FINAL");
 ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON.stringify({ kind: "sign", cost: 1000 }), "Matz signable + 1200 coins → SIGN 1000");
+
+// ---- Release 10.1: twists, match talk, faces ----
+{
+  const TABLE: Record<number, { s?: object; r?: object }> = {
+    2: { r: { pointsToWin: 7, winBy: 2 } },
+    5: { s: { near: 3, far: 0, servingTeam: "far", serverNumber: 1 } },
+    8: { s: { near: 3, far: 4, servingTeam: "far", serverNumber: 1 } },
+    10: { s: { near: 8, far: 8, servingTeam: "near", serverNumber: 1 } },
+    12: { r: { pointsToWin: 15, winBy: 2 } },
+  };
+  for (const m of CAREER_MATCHES) {
+    const c = careerSetup(m, "anli", 1).config;
+    const t = TABLE[m.number];
+    if (t) ok(JSON.stringify(c.startingScore) === JSON.stringify(t.s) && JSON.stringify(c.ruleModifiers) === JSON.stringify(t.r) && !!m.twist?.name && !!m.twist.line, `Match ${m.number}: twist config matches the table`);
+    else ok(c.startingScore === undefined && c.ruleModifiers === undefined && !m.twist, `Match ${m.number}: no twist → no startingScore / ruleModifiers`);
+  }
+  ok(CAREER_MATCHES.filter((m) => m.twist).map((m) => m.twist!.name).join() === "Quick fire,Head start,Comeback,Clutch,Long final", "twist names");
+  ok(quickPlaySetup("CLUB", false, "anli", 1).config.startingScore === undefined && trainingSetup("training", "anli", 1).config.startingScore === undefined, "Quick Play / Training have no twist");
+  ok(CAREER_MATCHES.every((m) => { const l = MATCH_TALK[m.number]; return !!l && l.length >= 4 && l.length <= 6 && l.every((x) => ["R", "P", "Y"].includes(x.speaker) && x.text.length > 0); }), "every Career match has 4–6 MATCH_TALK lines with speaker R / P / Y");
+  ok(MATCH_TALK[5][0].text === "Sorry, sorry! Western Express traffic. A wedding procession had right of way." && MATCH_TALK[12].length === 5, "talk text as written");
+  const fs = require("fs");
+  const path = require("path");
+  const root = path.join(process.cwd());
+  const spr = fs.readFileSync(path.join(root, "src/game/render/sprites.ts"), "utf8");
+  const looks = new Set<string>();
+  for (const m of CAREER_MATCHES) for (const sg of [() => false, () => true]) { const r = talkRival(m, sg); if (r.look) looks.add(r.look); for (const l of careerSetup(m, "anli", 1, sg).rivalLooks) if (!/_(upsi|matz)_front$/.test(l)) looks.add(l); }
+  const missing = [...looks].filter((l) => { const k = l.replace(/^rival_/, "face_"); return !spr.includes(`  ${k}: require("@/assets/images/${k}.png")`) || !fs.existsSync(path.join(root, `assets/images/${k}.png`)); });
+  ok(looks.size === 24 && missing.length === 0, `every look used by Career has a face_ asset (${looks.size} looks; missing ${missing.join(",") || "none"})`);
+  ok(talkRival(careerMatch("mumbai.local.05"), () => false).partnerId === "matz" && talkRival(careerMatch("mumbai.local.05"), () => true).look === "rival_man1_juh", "Match 5 talk: Matz portrait unless signed (then the reserve's face)");
+  ok(showTalk({ cleared: [], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: ["mumbai.local.05"], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: [], talkSeen: ["mumbai.local.05"] }, "mumbai.local.05"), "talk shows on first play only (skipped on a replay / once seen)");
+}
 
 {
   const mem = new Map<string, string>();

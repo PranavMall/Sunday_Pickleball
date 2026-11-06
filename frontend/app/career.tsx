@@ -12,7 +12,9 @@ import {
   careerMatch,
   careerRewardPreview,
 } from "@/src/game/meta/economyConfig";
-import { partnerOf } from "@/src/game/meta/matchSetup";
+import { partnerOf, showTalk } from "@/src/game/meta/matchSetup";
+import { meta } from "@/src/game/meta";
+import { TwistChip } from "@/src/ui/TwistChip";
 import { levelView } from "@/src/game/meta/levels";
 import { teamCode } from "@/src/game/services/profile";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
@@ -77,6 +79,12 @@ export default function Career() {
                     <Text style={styles.rivalTagText}>RIVAL TEAM</Text>
                   </View>
                 ) : null}
+                {next.twist ? (
+                  <View style={{ marginTop: 4, alignItems: "center" }}>
+                    <TwistChip twist={next.twist} />
+                    <Text style={styles.twistLine} testID="twist-line">{next.twist.line}</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
             {next.enabled ? (
@@ -119,7 +127,11 @@ export default function Career() {
             big
             testID="play-match"
             label={replay ? "REPLAY MATCH" : "PLAY MATCH"}
-            onPress={() => router.push({ pathname: "/match", params: { mode: "career", careerId: next.id } })}
+            onPress={() =>
+              save && !replay && showTalk(save.career, next.id)
+                ? router.push({ pathname: "/talk", params: { careerId: next.id } })
+                : router.push({ pathname: "/match", params: { mode: "career", careerId: next.id } })
+            }
             style={{ marginTop: 10 }}
           />
         ) : (
@@ -152,15 +164,57 @@ export default function Career() {
             <Text style={styles.viewText}>VIEW{"\n"}IN TEAM ›</Text>
           </Pressable>
         </View>
-        <MeterRow icon="star" label="Growth" value={lv.frac * 100} num={lv.max ?? lv.text} color={UI.growth} testID="partner-growth" />
+        <MeterRow icon="star" label="Growth" value={lv.frac * 100} num={lv.text} color={UI.growth} testID="partner-growth" />
+        {lv.max ? <Text style={styles.maxLine} testID="partner-growth-max">{lv.max}</Text> : null}
         <MeterRow icon="heart" label="Chemistry" value={chem} color={UI.chem} testID="partner-chem" />
+        {chem >= 100 ? <Text style={styles.maxLine} testID="perfect-pair">♥ Perfect pair</Text> : null}
       </Card>
+
+      {__DEV__ ? (
+        <View style={styles.devBox} testID="dev-jump">
+          <Text style={styles.devTitle}>DEV · Jump to match</Text>
+          <View style={styles.devRow}>
+            {CAREER_MATCHES.map((m) => (
+              <Pressable
+                key={m.id}
+                testID={`dev-jump-${m.number}`}
+                style={styles.devBtn}
+                onPress={() => {
+                  meta.devJumpTo(m.number);
+                  setPickedId(null);
+                  refresh();
+                }}
+              >
+                <Text style={styles.devBtnText}>{m.number}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            testID="dev-coins"
+            style={[styles.devBtn, { alignSelf: "flex-start", paddingHorizontal: 12 }]}
+            onPress={() => {
+              const now = Date.now();
+              meta.grant(`dev:coins:${now}`, "coins", 2000, { sourceType: "dev", sourceId: "dev" }, now);
+              refresh();
+            }}
+          >
+            <Text style={styles.devBtnText}>DEV · +2000 Coins</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </DestinationScreen>
   );
 }
 
 const styles = StyleSheet.create({
   pad: { padding: 10 },
+  maxLine: { color: UI.muted, fontSize: 12, fontWeight: "700", marginLeft: 22, marginTop: 2 },
+  twistLine: { color: UI.inkSoft, fontSize: 10.5, textAlign: "center", marginTop: 2, fontWeight: "600" },
+  devBox: { backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12, padding: 8, gap: 6 },
+  devTitle: { color: "#9fe", fontSize: 11, fontWeight: "700" },
+  devRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  devBtn: { minWidth: 36, minHeight: 36, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  devBtnText: { color: "#9fe", fontSize: 12, fontWeight: "700" },
   soon: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 58, borderRadius: 16, marginTop: 10, backgroundColor: UI.creamDeep, borderWidth: 1, borderColor: UI.line },
   soonText: { color: UI.muted, fontSize: 20, fontWeight: "900", letterSpacing: 1 },
   code: { color: UI.ink, fontSize: 15, fontWeight: "900", letterSpacing: 1.5, marginTop: 2 },

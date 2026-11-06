@@ -14,6 +14,12 @@ import { analytics } from "../services/analytics";
 import { CAREER_MATCH_IDS, META_STORAGE_KEY, SCHEMA_VERSION } from "../meta/economyConfig";
 import { MetaStore, dayKeyOf, newMatchId, pairingKey, type StorageAdapter } from "../meta/metaStore";
 import { NEAR_LINE_Y } from "./retrieval";
+import { DIFFICULTY_TABLE } from "../config/ai";
+import { applyChemistry } from "../config/profiles";
+import { partnerBoost } from "../meta/economyConfig";
+import { buildSetup } from "../meta/matchSetup";
+import { inboxMessages } from "../meta/inbox";
+import { freshSave } from "../meta/metaStore";
 import { cueProbe } from "./smashCueProbe";
 import type { FaultEvent, FaultReason, Team } from "../sim/types";
 
@@ -82,7 +88,23 @@ export const suites: { name: string; run: () => void | Promise<void> }[] = [
   { name: "scoring", run: scoringTests },
   { name: "meta", run: metaTests },
   { name: "chemistryIsolation", run: chemistryIsolationTests },
+  { name: "inboxDone", run: inboxDoneTests },
 ];
+
+function inboxDoneTests() {
+  console.log("\n[Release 10.1: inbox done conditions]");
+  const base = freshSave(0, () => 0.5);
+  const ids = (cleared: number, partners: object = {}) => inboxMessages({ career: { ...base.career, cleared: CAREER_MATCH_IDS.slice(0, cleared) as unknown as string[] }, partners: { ...base.partners, ...partners } }).map((m) => m.id);
+  ok(ids(0).includes("inbox.welcome") && !ids(1).includes("inbox.welcome"), "welcome gone after Match 1");
+  ok(ids(2).includes("inbox.met_upsi") && !ids(3, { upsi: { discovered: true, signable: true, signed: false, growth: 0 } }).includes("inbox.met_upsi"), "Nice game in Dadar gone once Upsi is signable");
+  const up = { upsi: { discovered: true, signable: true, signed: true, growth: 0 } };
+  ok(ids(3, { upsi: { ...up.upsi, signed: false } }).includes("inbox.upsi_signable") && !ids(3, up).some((x) => x.startsWith("inbox.met_upsi") || x === "inbox.upsi_signable"), "Upsi messages gone after signing her");
+  ok(ids(3).includes("inbox.new_court_local") && !ids(4).includes("inbox.new_court_local"), "Mumbai Local is open gone after Match 4");
+  const mz = (signable: boolean, signed: boolean) => ({ ...up, matz: { discovered: true, signable, signed, growth: 0 } });
+  ok(ids(5, mz(false, false)).includes("inbox.matz_watching") && !ids(6, mz(true, false)).includes("inbox.matz_watching"), "Saw your match gone once Matz is signable");
+  ok(ids(5, mz(false, false)).includes("inbox.local_final_soon") && !ids(6, mz(true, false)).includes("inbox.local_final_soon"), "Match 6 is the final gone after Match 6");
+  ok(ids(6, mz(true, false)).includes("inbox.matz_signable") && ids(6, mz(true, true)).length === 0, "Ready when you are gone after signing Matz (inbox empty)");
+}
 
 function scoringTests() {
   console.log("\n[Commit 2a: first-to-7 scoring]");
@@ -255,6 +277,26 @@ function chemistryIsolationTests() {
     const sim = new GameSimulation(cfg);
     ok(sim.players.every((p) => p.chemistry === 1), `${name}: engine players chemistry exactly 1.0`);
   }
+  // Release 10.1: the AI partner (slot 1) gets partnerBoost(level, chemistry);
+  // exactly 1.0 (unset) at Lv 1 with Chemistry < 25; human and rivals 1.0.
+  const sv = (growth: number, halves: number) => ({ activePartnerId: "anli", trainingPartnerId: "anli", partners: { anli: { signed: true, growth } }, chemistryHalves: { "player+anli": halves }, career: { nextMatchId: "mumbai.district.10" } });
+  for (const [g, h] of [[0, 0], [0, 48], [0, 50], [150, 0], [450, 120]] as const) {
+    const want = partnerBoost(1 + Math.floor(g / 100), Math.floor(h / 2));
+    for (const mode of ["career", "training", "scrimmage", "quick"]) {
+      const cfg = buildSetup({ mode, careerId: "mumbai.tour.07" }, 1, sv(g, h)).config;
+      const sim = new GameSimulation(cfg);
+      ok(sim.players.every((p) => p.chemistry === (p.team === "near" && p.slot === 1 ? want : 1)) && (want !== 1 || cfg.near.players[1].chemistry === undefined), `${mode} growth ${g} chem ${h / 2}: partner ${want.toFixed(2)}, human + rivals 1.0`);
+    }
+  }
+  ok(partnerBoost(1, 24) === 1 && Math.abs(partnerBoost(5, 0) - 1.24) < 1e-9 && Math.abs(partnerBoost(10, 100) - 1.7) < 1e-9, "partnerBoost: Lv 1 + Chemistry 0–24 = 1.0; Lv 5 = 1.24; Lv 10 + 100 = 1.70");
+  // applyChemistry: identity at 1; at 2 the six skill fields = PRO, personality kept.
+  const club = DIFFICULTY_TABLE.CLUB;
+  const same = applyChemistry(club, 1);
+  ok(same === club && JSON.stringify(same) === JSON.stringify(club), "applyChemistry(params, 1) returns the same values");
+  const two = applyChemistry(club, 2);
+  const SK = ["reactionDelay", "positionError", "predictError", "shotAccuracy", "unforcedError", "anticipation"] as const;
+  ok(SK.every((f) => Math.abs(two[f] - DIFFICULTY_TABLE.PRO[f]) < 1e-12) && two.kitchenAffinity === club.kitchenAffinity && two.aggressiveness === club.aggressiveness && two.tacticalVariety === club.tacticalVariety, "applyChemistry(CLUB, 2) = PRO skill fields, CLUB personality fields");
+  ok(applyChemistry(club, 1.5) === applyChemistry(club, 1.5), "applyChemistry is cached (no per-call allocation)");
   const legacy = new GameSimulation({ seed: 1, difficulty: "CLUB" });
   ok(legacy.players.every((p) => p.chemistry === 1) && legacy.config.near.players.concat(legacy.config.far.players).every((p) => p.stats === undefined), "SimOptions path: chemistry 1.0, stats unset");
   // No engine/config file imports the meta layer.

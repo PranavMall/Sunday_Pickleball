@@ -57,8 +57,14 @@ export const QUICK_PLAY_COURT: CourtId = "bandra_garden";
 export const QUICK_PLAY_REWARDS = { winCoins: 40, lossCoins: 20, dailyCap: 7 } as const;
 
 // Chemistry: 0–100, stored in HALF points (0.5 steps), displayed rounded down.
-// Meta-only: it never reaches MatchConfig (engine chemistry stays 1.0).
+// Every 25 is a heart (hearts are never lost).
 export const CHEMISTRY_MAX = 100;
+export const HEART_STEP = 25;
+export const heartsOf = (chemistry: number) => Math.min(4, Math.floor(chemistry / HEART_STEP));
+// The AI partner's (slot 1) engine chemistry: Lv 1 + Chemistry 0–24 = 1.0 exactly.
+export function partnerBoost(level: number, chemistryValue: number): number {
+  return 1 + 0.06 * (level - 1) + 0.04 * Math.floor(chemistryValue / 25);
+}
 
 // Career (Mumbai): 12 stable IDs (Community 01–03 · Local 04–06 · Tour 07–09 · District 10–12).
 export const CAREER_MATCH_IDS = [
@@ -107,14 +113,29 @@ export interface CareerMatchDef {
   recruit?: { slot: 0 | 1; partnerId: PartnerId }; // that AI slot IS the recruit
   looks: [string, string] | null; // RIVAL_SHEETS keys (far slot 0, slot 1); null → placeholder
   reserveLook?: string; // the recruit slot's look once that partner is signed (with reserveName)
+  twist?: MatchTwist; // told before the match (chip, talk, cue pill); replays keep it
 }
+// Match twists: only existing config fields (startingScore / ruleModifiers).
+export interface MatchTwist {
+  name: string;
+  line: string;
+  startingScore?: { near: number; far: number; servingTeam: "near" | "far"; serverNumber?: 1 | 2 };
+  ruleModifiers?: { pointsToWin?: number; winBy?: number };
+}
+export const CAREER_TWISTS: Partial<Record<number, MatchTwist>> = {
+  2: { name: "Quick fire", line: "First to 7", ruleModifiers: { pointsToWin: 7, winBy: 2 } },
+  5: { name: "Head start", line: "The rivals are late: you lead 3–0", startingScore: { near: 3, far: 0, servingTeam: "far", serverNumber: 1 } },
+  8: { name: "Comeback", line: "Rain stopped play at 3–4: you're behind", startingScore: { near: 3, far: 4, servingTeam: "far", serverNumber: 1 } },
+  10: { name: "Clutch", line: "The lights failed at 8–8: finish it", startingScore: { near: 8, far: 8, servingTeam: "near", serverNumber: 1 } },
+  12: { name: "Long final", line: "First to 15", ruleModifiers: { pointsToWin: 15, winBy: 2 } },
+};
 const M = (
   n: number, round: CareerMatchDef["round"], rival: string, code: string, color: string, namedRival: boolean,
   ai: [AiDiff, AiDiff], personalities: [AiPers, AiPers], court: CourtId | null, looks: CareerMatchDef["looks"],
   recruit?: CareerMatchDef["recruit"], reserveLook?: string,
 ): CareerMatchDef => {
   const id = CAREER_MATCH_IDS[n - 1];
-  return { id, number: n, stageKey: id.split(".")[1] as CareerMatchDef["stageKey"], round, rival, code, color, namedRival, ai, personalities, court, enabled: true, recruit, looks, reserveLook };
+  return { id, number: n, stageKey: id.split(".")[1] as CareerMatchDef["stageKey"], round, rival, code, color, namedRival, ai, personalities, court, enabled: true, recruit, looks, reserveLook, twist: CAREER_TWISTS[n] };
 };
 export const CAREER_MATCHES: CareerMatchDef[] = [
   M(1, "", "Bandra Bashers", "BAN", "#3E7CB1", false, ["ROOKIE", "ROOKIE"], ["DEFENSIVE", "TACTICAL"], "bandra_garden", ["rival_man1_ban", "rival_woman1_ban"]),
@@ -211,6 +232,25 @@ export const TRAINING_MODES = {
   scrimmage: { dailyCap: 3, vs: "sparring pair", code: "SPR", ai: ["CLUB", "CLUB"] as [AiDiff, AiDiff], personalities: ["AGGRESSIVE", "TACTICAL"] as [AiPers, AiPers] },
 } as const;
 export const SHORT_FORMAT = { pointsToWin: 7, winBy: 2 } as const;
+
+// MATCH TALK (before a Career match's first play). R = rival speaker, P = your
+// partner, Y = you. Text exactly as written in the brief.
+export type TalkSpeaker = "R" | "P" | "Y";
+const T = (...l: [TalkSpeaker, string][]) => l.map(([speaker, text]) => ({ speaker, text }));
+export const MATCH_TALK: Record<number, { speaker: TalkSpeaker; text: string }[]> = {
+  1: T(["R", "Fresh faces at Bandra Garden. Do you even know what a kitchen is?"], ["Y", "Room with snacks. Also a zone I'm not allowed to volley from."], ["P", "Relax. We read the rulebook. You should try the chapter on losing."], ["R", "Big talk for a team with zero wins."], ["Y", "Zero so far. Give it eleven points."]),
+  2: T(["R", "Bad news: the uncles' yoga class has this court at seven sharp."], ["Y", "So we play fast."], ["R", "First to 7. Blink and you're stretching with the uncles."], ["P", "Then don't blink. We've seen your backhand. We're not worried."], ["R", "You've seen my warm-up. Different thing."]),
+  3: T(["R", "Colaba Kings. Three years, zero finals lost."], ["P", "Three years? Your streak is old enough to go to school."], ["R", "And it's not dropping out today."], ["Y", "Then today it graduates."]),
+  4: T(["R", "Welcome to the Local Series. Mind the gap. Mostly the one in your backhand."], ["Y", "My backhand is a work in progress."], ["P", "So is your serve. We watched your warm-up. Twice. Out of pity."], ["R", "Fine. Let's see who's laughing at 11."]),
+  5: T(["R", "Sorry, sorry! Western Express traffic. A wedding procession had right of way."], ["P", "Rules say late means 3–0. To us."], ["R", "Fine. Enjoy your three points. Frame them."], ["Y", "We were planning to."], ["R", "This is our turf. Juhu doesn't lose twice."], ["P", "Then today's your first. Congratulations in advance."]),
+  6: T(["R", "Worli Strikers. We hit hard, we hit first, we hit the snacks after."], ["Y", "Can we skip to the snacks?"], ["P", "Save us a seat at the snacks. Losers buy."], ["R", "Bold of you to think you're getting either."]),
+  7: T(["R", "Welcome to Nashik. Fresh air, sweet grapes, sour losers."], ["P", "Which one are we?"], ["Y", "Grapes. Definitely grapes."], ["R", "Then you know what happens to grapes here."], ["P", "They become something fancy and expensive. Thanks for the compliment."]),
+  8: T(["R", "Rain stopped us yesterday at 4–3. To us, if you're keeping score."], ["Y", "We weren't."], ["P", "We are now. Enjoy the lead. It's on loan."], ["R", "Tigers don't do comebacks. We do finishes."], ["Y", "Good thing we're not tigers."]),
+  9: T(["R", "Satara Winds. The mist is on our side. It told us."], ["P", "Did the mist also tell you about our kitchen game?"], ["R", "It said you'd get lost in the fog."], ["Y", "Can't lose what we can't see. Wait, that came out wrong."], ["P", "Tour final. Let's just win it."]),
+  10: T(["R", "The lights failed at 8–8 last night. The electrician says sorry."], ["P", "Tell him thanks. You were about to lose in the dark."], ["R", "8–8, first to 11, win by two. No pressure."], ["Y", "Define 'no pressure'."], ["P", "That was a joke. It's all pressure. Let's go."]),
+  11: T(["R", "Pune Pacers. We set the pace here. Also the parking rules."], ["Y", "We parked fine."], ["R", "Nobody parks fine in Pune."], ["P", "Then we'll be quick. Semifinal, eleven points, home before the ticket."]),
+  12: T(["R", "Gateway Champs. Finals at Marine Drive go to 15. Hope you packed water."], ["Y", "Fifteen? I trained for eleven."], ["P", "Then train for four more on the job. I believe in you. Mostly."], ["R", "The whole promenade is watching. Smile for the losers' photo."], ["P", "Funny. We'll send you a copy of ours. Signed."]),
+};
 
 // Ledger history kept in the save (idempotency uses the full rewardId set).
 export const LEDGER_KEEP = 200;

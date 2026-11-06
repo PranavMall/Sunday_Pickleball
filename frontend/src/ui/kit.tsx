@@ -152,6 +152,17 @@ export function MeterRow({ icon, label, value, color, testID, num }: { icon: Ion
   );
 }
 
+// Four chemistry hearts, filled pink up to `filled` (0..4).
+export function Hearts({ filled, size = 12, testID }: { filled: number; size?: number; testID?: string }) {
+  return (
+    <View style={{ flexDirection: "row", gap: 2 }} testID={testID} accessibilityLabel={`${filled} of 4 hearts`}>
+      {[0, 1, 2, 3].map((i) => (
+        <Ionicons key={i} name="heart" size={size} color={i < filled ? UI.chem : "#E6D9BC"} />
+      ))}
+    </View>
+  );
+}
+
 export const kit = StyleSheet.create({
   card: {
     backgroundColor: UI.cardBg,

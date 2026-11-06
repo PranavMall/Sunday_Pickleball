@@ -153,3 +153,15 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - Quick Play: 7 paid matches/day (daily.quick), "Coins used today — play for fun"
 - Fault pill rule hints (faultLabel.ts), first 3 per type per session, 2.0 s
 - md5 b3Report 097a601037a7adc4e88b4ac8994948ea / shotMix 1238864370f30941b8b7966da795b3e6 unchanged
+
+## Release 10.1 (Jun 2026)
+- Image loading: SheetCache (current + prefetched next set only, dispose others, 2 retries 0.5/1.5 s), court image retry x2 + DEV court line, next-match rival sheets prefetched.
+- Overlay: backdrop Pressable behind plain sheet (scroll fixed); inbox done conditions + read at 60%.
+- DEV jump to Match N + DEV +2000 Coins (Career, __DEV__ only).
+- Twists on 2/5/8/10/12 (chip, talk, 2 s pill); Match talk route /talk (DialogueScene), first play only, talkSeen saved.
+- applyChemistry rewritten (k toward PRO, cached); partnerBoost(level, chem) as AI partner engine chemistry in all AI-partner modes.
+- LEVEL UP + heart moments; cap text "Win the <stage> final to keep growing".
+- Trophy cabinet (/cabinet), Home Trophies cell, career.trophies save field.
+- New LOB / NET-BACK buttons (TacticalButtons.tsx, segment cooldown ring).
+- Team grid + partner pop-up + trimmed Partner stats card.
+- Tests: phase1a 163, phase1b 74, phase1c 123, run.ts 265; md5 b3 097a6010.. / shotMix 12388643.. unchanged.

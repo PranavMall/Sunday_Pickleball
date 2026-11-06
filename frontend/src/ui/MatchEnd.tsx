@@ -32,6 +32,14 @@ function momentCopy(m: Moment) {
     return { kicker: "NEW COURT UNLOCKED", title: name, body: `The ${STAGE_NAMES[stageKey ?? "local"]} is played here.` };
   }
   const p = PARTNERS[m.partnerId as PartnerId];
+  if (m.kind === "level")
+    return {
+      kicker: "LEVEL UP",
+      title: `${p.name} reached Level ${m.level}!`,
+      body: "Your partner plays sharper: fewer mistakes, quicker reactions, better at reading your rivals.",
+      foot: m.atCap ? `Win the ${STAGE_NAMES[m.atCap] ?? ""} final to keep growing.` : `Next: Level ${m.level + 1}`,
+    };
+  if (m.kind === "heart") return { kicker: "CHEMISTRY", title: `${p.name} and you: ♥ ${m.chemistry} Chemistry`, body: "A little extra teamwork." };
   if (m.flag === "signable") return { kicker: "NEW PARTNER", title: `${p.name} can now be signed`, body: `${SIGNABLE_LINE[p.id] ?? `A ${p.archetype}.`}\nSign ${p.id === "matz" ? "him" : "her"} in Team for ${SIGN_COST[p.id] ?? 0} Coins.` };
   if (p.id === "matz") return { kicker: "SCOUT", title: "Matz is watching you", body: "A Banger from the Mumbai Local Series. Keep winning." };
   return { kicker: "NEW FRIEND", title: `You met ${p.name}`, body: "Nice game in Dadar. Win the Community Cup and come find me." };
@@ -41,6 +49,8 @@ export function momentChip(m: Moment): { icon: IoniconName; text: string; partne
   if (m.kind === "stage") return { icon: "trophy", text: "Cup won" };
   if (m.kind === "court") return { icon: "grid", text: COURT_NAMES[m.court as CourtId] ?? m.court };
   const p = PARTNERS[m.partnerId as PartnerId];
+  if (m.kind === "level") return { icon: "star", text: `${p.name} Lv ${m.level}` };
+  if (m.kind === "heart") return { icon: "heart", text: `♥ ${m.chemistry}` };
   return { icon: "person", text: m.flag === "signable" ? `${p.name} signable` : p.id === "matz" ? "Matz watching" : `Met ${p.name}`, partnerId: p.id };
 }
 
@@ -49,6 +59,7 @@ export function Celebration({ moments, index, onContinue, onSign }: { moments: M
   const m = moments[index];
   const c = momentCopy(m);
   const signable = m.kind === "partner" && m.flag === "signable";
+  const pp = m.kind === "level" || m.kind === "heart" ? PARTNERS[m.partnerId as PartnerId] : null;
   const artW = Math.min(300, width - 96);
   return (
     <View style={styles.popWrap} testID={`celebration-${index}`}>
@@ -56,9 +67,20 @@ export function Celebration({ moments, index, onContinue, onSign }: { moments: M
         <Text style={styles.popKicker} testID="celebration-kicker">{c.kicker}</Text>
         {m.kind === "stage" ? <Image source={TROPHY_BY_STAGE[m.stageKey] ?? TROPHY_BY_STAGE.local} style={{ width: artW * 0.62, height: artW * 0.62 }} contentFit="contain" cachePolicy="memory-disk" /> : null}
         {m.kind === "court" && COURT_IMG[m.court] ? <CourtThumb court={m.court} width={artW} testID="celebration-court" /> : null}
+        {m.kind === "level" && pp ? (
+          <>
+            <Badge id={pp.id} name={pp.name} color={pp.color} size={128} ring />
+            <View style={styles.lvLine} testID="celebration-level">
+              <Text style={styles.lvFrom}>Lv {m.level - 1} ›</Text>
+              <View style={styles.lvTo}><Text style={styles.lvToText}>★ Lv {m.level}</Text></View>
+            </View>
+          </>
+        ) : null}
+        {m.kind === "heart" ? <Ionicons name="heart" size={110} color={UI.chem} testID="celebration-heart" /> : null}
         {m.kind === "partner" ? <Badge id={m.partnerId} name={PARTNERS[m.partnerId as PartnerId].name} color={PARTNERS[m.partnerId as PartnerId].color} size={128} ring /> : null}
         <Text style={styles.popTitle} testID="celebration-title">{c.title}</Text>
         <Text style={styles.popBody}>{c.body}</Text>
+        {"foot" in c && c.foot ? <Text style={styles.popFoot} testID="celebration-foot">{c.foot}</Text> : null}
         <Pressable testID={signable ? "celebration-sign" : "celebration-continue"} accessibilityRole="button" style={({ pressed }) => [styles.popBtn, pressed && { opacity: 0.88 }]} onPress={() => (signable ? onSign(m.partnerId) : onContinue())}>
           <Text style={styles.popBtnText}>{signable ? "SIGN IN TEAM" : "CONTINUE"}</Text>
           <Ionicons name="chevron-forward" size={18} color={UI.goldInk} />
@@ -250,14 +272,17 @@ function Tile({ icon, value, tile, testID }: { icon: React.ReactNode; value: num
 function Bar({ icon, color, bar, t, testID }: { icon: IoniconName; color: string; bar: { from: number; to: number; text: string; max?: string }; t: { value: number }; testID: string }) {
   const lighter = useAnimatedStyle(() => ({ width: `${(bar.from + (bar.to - bar.from) * t.value) * 100}%` }));
   return (
-    <View style={styles.barRow} testID={testID}>
-      <Ionicons name={icon} size={13} color={color} />
-      <View style={styles.track}>
-        <Animated.View style={[styles.fill, { backgroundColor: color, opacity: 0.45 }, lighter]} />
-        <View style={[styles.fill, { backgroundColor: color, width: `${Math.min(bar.from, bar.to) * 100}%` }]} />
+    <>
+      <View style={styles.barRow} testID={testID}>
+        <Ionicons name={icon} size={13} color={color} />
+        <View style={styles.track}>
+          <Animated.View style={[styles.fill, { backgroundColor: color, opacity: 0.45 }, lighter]} />
+          <View style={[styles.fill, { backgroundColor: color, width: `${Math.min(bar.from, bar.to) * 100}%` }]} />
+        </View>
+        <Text style={styles.barNum} numberOfLines={1}>{bar.text}</Text>
       </View>
-      <Text style={styles.barNum} numberOfLines={1}>{bar.max ?? bar.text}</Text>
-    </View>
+      {bar.max ? <Text style={styles.barMax} testID={`${testID}-max`}>{bar.max}</Text> : null}
+    </>
   );
 }
 
@@ -267,6 +292,11 @@ const styles = StyleSheet.create({
   popKicker: { color: UI.gold, fontSize: 12, fontWeight: "800", letterSpacing: 3 },
   popTitle: { color: "#FBF4E2", fontFamily: SERIF, fontWeight: "700", fontSize: 24, textAlign: "center", marginTop: 6 },
   popBody: { color: "rgba(251,244,226,0.88)", fontSize: 14, lineHeight: 20, textAlign: "center" },
+  popFoot: { color: "rgba(251,244,226,0.6)", fontSize: 13, textAlign: "center" },
+  lvLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  lvFrom: { color: "rgba(251,244,226,0.8)", fontSize: 14, fontWeight: "700" },
+  lvTo: { backgroundColor: UI.gold, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  lvToText: { color: UI.goldInk, fontSize: 14, fontWeight: "900" },
   popBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "stretch", minHeight: 48, borderRadius: 14, backgroundColor: UI.gold, borderWidth: 1.5, borderColor: UI.goldDeep, marginTop: 8 },
   popBtnText: { color: UI.goldInk, fontSize: 16, fontWeight: "900", letterSpacing: 1.5 },
   later: { minHeight: 44, minWidth: 88, alignItems: "center", justifyContent: "center" },
@@ -301,13 +331,14 @@ const styles = StyleSheet.create({
   track: { flex: 1, height: 8, borderRadius: 4, backgroundColor: UI.track, overflow: "hidden" },
   fill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 4 },
   barNum: { color: UI.ink, fontSize: 11, fontWeight: "700", minWidth: 58, textAlign: "right" },
+  barMax: { color: UI.muted, fontSize: 11, fontWeight: "700", marginLeft: 19, marginTop: 1 },
   chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: 10 },
   chip: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 12, borderWidth: 1, borderColor: UI.goldDeep, backgroundColor: "#fff", paddingHorizontal: 8, paddingVertical: 3 },
   chipText: { color: UI.ink, fontSize: 11, fontWeight: "700" },
   next: { color: UI.inkSoft, fontSize: 12, fontWeight: "700", marginTop: 10 },
   btnRow: { flexDirection: "row", gap: 8, alignSelf: "stretch", marginTop: 12 },
   primary: { flex: 1.6, flexDirection: "row", gap: 4, minHeight: 48, borderRadius: 14, backgroundColor: UI.gold, borderWidth: 1.5, borderColor: UI.goldDeep, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  primaryText: { color: UI.goldInk, fontSize: 15, fontWeight: "900", letterSpacing: 1 },
+  primaryText: { color: UI.goldInk, fontSize: 13.5, fontWeight: "900", letterSpacing: 0.5 },
   secondary: { flex: 1, minHeight: 48, borderRadius: 14, backgroundColor: UI.creamDeep, borderWidth: 1, borderColor: UI.line, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   secondaryText: { color: UI.ink, fontSize: 14, fontWeight: "800", letterSpacing: 1 },
   share: { width: 48, minHeight: 48, borderRadius: 14, backgroundColor: UI.creamDeep, borderWidth: 1, borderColor: UI.line, alignItems: "center", justifyContent: "center" },

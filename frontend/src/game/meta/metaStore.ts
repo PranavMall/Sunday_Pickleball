@@ -24,6 +24,9 @@ import {
   TRAINING_MODES,
   careerMatch,
   milestoneFor,
+  COURT_NAMES,
+  HEART_STEP,
+  type CourtId,
   type PartnerId,
   FIRST_CAREER_MATCH_ID,
   FIRST_SESSION_START,
@@ -36,7 +39,7 @@ import {
   START_VALUES,
   type Currency,
 } from "./economyConfig";
-import { growthCap } from "./levels";
+import { capLevel, growthCap, levelView } from "./levels";
 
 export interface StorageAdapter {
   getItem(key: string): Promise<string | null>;
@@ -80,13 +83,22 @@ export interface SaveDoc {
   apart: Record<string, number>; // pairing key → matches played with someone else in a row
   quickPartnerId: string; // "" = follow the Career partner
   courtsPlayed: string[]; // courts with at least one completed Career match (NEW tag)
-  career: { cleared: string[]; nextMatchId: string; firstClearWins: number; firstClearLosses: number };
+  career: { cleared: string[]; nextMatchId: string; firstClearWins: number; firstClearLosses: number; trophies: Record<string, TrophyRecord>; talkSeen: string[] };
   namedRivals: Record<string, boolean>;
   milestones: Record<string, boolean>;
   daily: { dayKey: string; training: number; scrimmage: number; quick: number };
   inboxRead: string[];
   rewardIds: string[]; // every applied rewardId (idempotency)
   ledger: LedgerEntry[]; // recent history (LEDGER_KEEP)
+}
+
+// A stage-final first clear (written at match end only).
+export interface TrophyRecord {
+  wonAt: number;
+  score: string; // "11–7"
+  rival: string;
+  partnerId: string;
+  court: string; // display name
 }
 
 export type MatchKind = "career" | "training" | "scrimmage" | "quick";
@@ -119,6 +131,8 @@ export interface PartnerDelta {
 export type Moment =
   | { kind: "stage"; stageKey: string; rival: string; milestone?: string }
   | { kind: "court"; court: string }
+  | { kind: "level"; partnerId: string; level: number; atCap?: string } // atCap = stage key whose cap this level reached
+  | { kind: "heart"; partnerId: string; chemistry: number } // 25 / 50 / 75 / 100
   | { kind: "partner"; partnerId: string; flag: "discovered" | "signable"; event: string };
 
 export interface Source {
@@ -165,7 +179,7 @@ export function freshSave(now: number, rand: () => number = Math.random): SaveDo
     apart: {},
     quickPartnerId: "",
     courtsPlayed: [],
-    career: { cleared: [], nextMatchId: FIRST_CAREER_MATCH_ID, firstClearWins: 0, firstClearLosses: 0 },
+    career: { cleared: [], nextMatchId: FIRST_CAREER_MATCH_ID, firstClearWins: 0, firstClearLosses: 0, trophies: {}, talkSeen: [] },
     namedRivals: {},
     milestones: {},
     daily: { dayKey: dayKeyOf(now), training: 0, scrimmage: 0, quick: 0 },
@@ -233,6 +247,8 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
       nextMatchId: (CAREER_MATCH_IDS as readonly string[]).includes(c.nextMatchId) ? c.nextMatchId : base.career.nextMatchId,
       firstClearWins: num(c.firstClearWins, 0),
       firstClearLosses: num(c.firstClearLosses, 0),
+      trophies: trophiesOf(c.trophies),
+      talkSeen: strArr(c.talkSeen),
     },
     namedRivals: boolMap(r.namedRivals),
     milestones: boolMap(r.milestones),
@@ -246,6 +262,16 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
     rewardIds: strArr(r.rewardIds),
     ledger: Array.isArray(r.ledger) ? r.ledger.slice(-LEDGER_KEEP) : [],
   };
+}
+
+function trophiesOf(v: unknown): Record<string, TrophyRecord> {
+  const out: Record<string, TrophyRecord> = {};
+  if (!v || typeof v !== "object") return out;
+  for (const [k, t] of Object.entries<any>(v)) {
+    if (t && typeof t === "object" && typeof t.wonAt === "number")
+      out[k] = { wonAt: t.wonAt, score: String(t.score ?? ""), rival: String(t.rival ?? ""), partnerId: String(t.partnerId ?? ""), court: String(t.court ?? "") };
+  }
+  return out;
 }
 
 export class MetaStore {
@@ -414,6 +440,7 @@ export class MetaStore {
       partnerId?: string; // the partner who actually played
       singles?: boolean; // 1v1: no partner (no Chemistry fade)
       court?: string;
+      score?: string; // final score "11–7" (trophy record)
     },
     now: number,
   ): MatchOutcome {
@@ -422,6 +449,7 @@ export class MetaStore {
     if (this.rewardSet.has(doneId)) return out;
     out.applied = true;
     const d = this.docState!;
+    const nextBefore = d.career.nextMatchId; // the level cap in force when the match was played
     const src: Source = { sourceType: m.kind, sourceId: m.careerMatchId ?? m.matchId };
     const entries: LedgerEntry[] = [];
     const give = (key: string, currency: Currency, amount: number, target?: string): number => {
@@ -460,6 +488,17 @@ export class MetaStore {
       const g = give(`growth:${partnerId}`, "growth", growth, partnerId);
       const c = give(`chemistry:${key}`, "chemistry", cg, key);
       out.partner = { id: partnerId, growthBefore: gBefore, growthAfter: d.partners[partnerId].growth, chemBefore: chemNow, chemAfter: (d.chemistryHalves[key] ?? 0) / 2 };
+      // LV UP / heart pop-ups: queued before any partner unlock (stage → court → level → heart → partner).
+      const lb = levelView(gBefore, nextBefore).level;
+      const la = levelView(d.partners[partnerId].growth, nextBefore).level;
+      const pops: Moment[] = [];
+      if (la > lb) pops.push({ kind: "level", partnerId, level: la, ...(la >= capLevel(nextBefore) ? { atCap: nextBefore.split(".")[1] } : {}) });
+      const peakAfter = (d.chemistryPeakHalves[key] ?? 0) / 2;
+      if (c > 0 && Math.floor(peakAfter / HEART_STEP) > Math.floor(peak / HEART_STEP)) pops.push({ kind: "heart", partnerId, chemistry: Math.floor(peakAfter / HEART_STEP) * HEART_STEP });
+      if (pops.length) {
+        const at = out.moments.findIndex((x) => x.kind === "partner");
+        out.moments.splice(at < 0 ? out.moments.length : at, 0, ...pops);
+      }
       const parts = [g > 0 ? `+${g} Growth` : "", c > 0 ? `+${c} Chemistry` : ""].filter(Boolean);
       if (parts.length) out.lines.push(`${PARTNERS[partnerId as PartnerId]?.name ?? partnerId} ${parts.join(" · ")}`);
     };
@@ -482,6 +521,9 @@ export class MetaStore {
         }
         d.career.firstClearWins++;
         d.career.cleared.push(id);
+        if (def.round === "FINAL" && !d.career.trophies[def.stageKey]) {
+          d.career.trophies[def.stageKey] = { wonAt: now, score: m.score ?? "", rival: def.rival, partnerId: m.partnerId ?? d.activePartnerId, court: def.court ? COURT_NAMES[def.court as CourtId] : "" };
+        }
         const ms = milestoneFor(d.career.firstClearWins);
         if (ms && !d.milestones[ms.id]) {
           d.milestones[ms.id] = true;
@@ -611,6 +653,37 @@ export class MetaStore {
     d.trainingPartnerId = partnerId;
     this.save();
     return true;
+  }
+
+  // Match talk seen (end of the talk only).
+  markTalkSeen(careerMatchId: string): boolean {
+    const d = this.docState!;
+    if (d.career.talkSeen.includes(careerMatchId)) return false;
+    d.career.talkSeen.push(careerMatchId);
+    this.save();
+    return true;
+  }
+
+  // DEV ONLY (testing): jump to Career match N. Cleared = the IDs before N;
+  // unlock flags of those matches (discovered / signable, never signed). No
+  // Coins / Growth / Fans / milestones / pop-ups. Saves once.
+  devJumpTo(n: number): void {
+    const d = this.docState!;
+    const ids = CAREER_MATCH_IDS.slice(0, Math.max(0, Math.min(CAREER_MATCH_IDS.length, n) - 1)) as string[];
+    d.career.cleared = [...ids];
+    d.career.nextMatchId = CAREER_MATCH_IDS[Math.max(0, Math.min(CAREER_MATCH_IDS.length, n) - 1)];
+    d.career.firstClearWins = ids.length;
+    for (const [num, u] of Object.entries(CAREER_UNLOCKS)) {
+      const p = (d.partners[u.partnerId] ??= { discovered: false, signable: false, signed: false, growth: 0 });
+      if (p.signed) continue;
+      const reached = Number(num) <= ids.length;
+      if (u.flag === "discovered") p.discovered = reached;
+      else {
+        p.signable = reached;
+        if (reached) p.discovered = true;
+      }
+    }
+    this.save();
   }
 
   // Inbox: only READ ids are stored (messages are derived from save flags).

@@ -1,40 +1,35 @@
 // SPRITE SHEET LOADER. Skia's useImage(require(...)) does not decode bundled
 // assets in Expo Go, so sheets go through expo-asset: download → local file
-// URI → Skia.Data → SkImage. Each sheet is decoded once and cached for the
-// session. The status is shown in the DEV overlay so a failure is never silent.
+// URI → Skia.Data → SkImage. Each decoded sheet is ~3.7 MB, so SheetCache keeps
+// only the CURRENT match's set (+ the prefetched next set) and disposes the
+// rest; a failed load is retried twice before the placeholder. The status is
+// shown in the DEV overlay so a failure is never silent.
 import { Asset } from "expo-asset";
 import { Skia, type SkImage } from "@shopify/react-native-skia";
 import { useEffect, useMemo, useState } from "react";
 
-import { CHARACTER_SHEETS, RIVAL_SHEETS, spriteLoadStatus } from "./sprites";
+import { SheetCache } from "./sheetCache";
+import { CHARACTER_SHEETS, RIVAL_SHEETS, sheetPrefetch, spriteLoadStatus } from "./sprites";
 
 const modOf = (id: string | undefined): number | undefined => (id ? CHARACTER_SHEETS[id] ?? RIVAL_SHEETS[id] : undefined);
+const modsOf = (ids: (string | undefined)[]) => ids.map(modOf).filter((m): m is number => m !== undefined);
 
-const cache = new Map<number, SkImage>();
-const pending = new Map<number, Promise<SkImage>>();
+const sheets = new SheetCache<SkImage>(async (mod) => {
+  const asset = Asset.fromModule(mod);
+  await asset.downloadAsync();
+  const uri = asset.localUri ?? asset.uri;
+  if (!uri) throw new Error("no asset uri");
+  const data = await Skia.Data.fromURI(uri);
+  const img = Skia.Image.MakeImageFromEncoded(data);
+  if (!img) throw new Error(`decode failed (${uri.split("/").pop()})`);
+  return img;
+});
 
-
-function loadSheet(mod: number): Promise<SkImage> {
-  const hit = cache.get(mod);
-  if (hit) return Promise.resolve(hit);
-  let p = pending.get(mod);
-  if (!p) {
-    p = (async () => {
-      const asset = Asset.fromModule(mod);
-      await asset.downloadAsync();
-      const uri = asset.localUri ?? asset.uri;
-      if (!uri) throw new Error("no asset uri");
-      const data = await Skia.Data.fromURI(uri);
-      const img = Skia.Image.MakeImageFromEncoded(data);
-      if (!img) throw new Error(`decode failed (${uri.split("/").pop()})`);
-      cache.set(mod, img);
-      return img;
-    })();
-    pending.set(mod, p);
-    p.catch(() => pending.delete(mod));
-  }
-  return p;
+// NEXT MATCH offered: warm the next match's rival sheets.
+export function prefetchSheets(ids: (string | undefined)[]) {
+  sheets.prefetch(modsOf(ids));
 }
+sheetPrefetch.run = prefetchSheets;
 
 // A web load failure rejects with a DOM Event, not an Error.
 const reasonText = (e: any): string => (e?.message ? String(e.message) : e?.type ? `load error (${e.type})` : String(e));
@@ -46,14 +41,15 @@ export function useSpriteSheets(ids: (string | undefined)[]) {
   const key = useMemo(() => ids.map((id) => id ?? "").join("|"), [ids]); // pass a memoised list
   const [state, setState] = useState(() => {
     const mods = ids.map(modOf);
-    return { sheets: mods.map((m) => (m ? cache.get(m) ?? null : null)), done: mods.every((m) => !m || cache.has(m)) };
+    return { sheets: mods.map((m) => (m ? sheets.cache.get(m) ?? null : null)), done: mods.every((m) => !m || sheets.cache.has(m)) };
   });
   useEffect(() => {
     let alive = true;
     const list = key.split("|");
     const mods = list.map(modOf);
+    sheets.setCurrent(modsOf(list));
     spriteLoadStatus.text = "sprites: loading";
-    Promise.allSettled(mods.map((m) => (m ? loadSheet(m) : Promise.resolve(null)))).then((rs) => {
+    Promise.allSettled(mods.map((m) => (m ? sheets.load(m) : Promise.resolve(null)))).then((rs) => {
       const errs: string[] = [];
       const names: string[] = [];
       rs.forEach((r, i) => {
@@ -62,9 +58,10 @@ export function useSpriteSheets(ids: (string | undefined)[]) {
         names.push(name);
         if (r.status === "rejected") errs.push(`${name}: ${reasonText(r.reason)}`);
       });
+      if (!alive) return;
       spriteLoadStatus.text = errs.length ? `sprites: failed – ${errs.join("; ")}` : `sprites: loaded ${names.join(" + ")}`;
       if (errs.length) console.warn("[sprites]", errs.join("; "));
-      if (alive) setState({ sheets: rs.map((r) => (r.status === "fulfilled" ? r.value : null)), done: true });
+      setState({ sheets: rs.map((r) => (r.status === "fulfilled" ? r.value : null)), done: true });
     });
     return () => {
       alive = false;

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { IdentityEditor } from "@/src/components/identity-editor";
 import { PLAYER_BADGE_COLOR, stageNameOf } from "@/src/game/meta/economyConfig";
+import { trophiesWon } from "@/src/game/meta/trophies";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import { hasIdentity, migrateLegacyTeamName, saveIdentity, skipIdentity } from "@/src/game/services/profile";
 import { DestinationBar } from "@/src/ui/DestinationBar";
@@ -67,6 +68,10 @@ export default function Home() {
           <StatusCell icon={<Coin size={24} />} label="Coins" value={save ? String(save.coins) : "–"} testID="status-coins" />
           <View style={styles.divider} />
           <StatusCell icon={<Ionicons name="people" size={24} color={UI.fans} />} label="Fans" value={save ? String(save.fans) : "–"} testID="status-fans" />
+          <View style={styles.divider} />
+          <Pressable testID="status-trophies" accessibilityRole="button" accessibilityLabel={`Trophies ${save ? trophiesWon(save).length : 0} of 4`} onPress={() => router.push("/cabinet")} style={({ pressed }) => [{ flex: 1, minHeight: 44, justifyContent: "center" }, pressed && { opacity: 0.8 }]}>
+            <StatusCell icon={<Ionicons name="trophy" size={22} color={UI.goldDeep} />} label="Trophies" value={save ? `${trophiesWon(save).length}/4` : "–"} testID="status-trophies-cell" />
+          </Pressable>
         </Card>
 
         <Pressable

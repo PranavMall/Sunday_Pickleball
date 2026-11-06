@@ -12,7 +12,26 @@ export interface InboxMessage {
 
 const MANAGER = "Team Manager";
 
+// Each message disappears once its done condition holds.
+function isDone(id: string, d: Pick<SaveDoc, "career" | "partners">): boolean {
+  const c = d.career.cleared;
+  switch (id) {
+    case "inbox.welcome": return c.includes("mumbai.community.01");
+    case "inbox.met_upsi": return !!d.partners.upsi?.signable;
+    case "inbox.upsi_signable": return !!d.partners.upsi?.signed;
+    case "inbox.new_court_local": return c.includes("mumbai.local.04");
+    case "inbox.matz_watching": return !!d.partners.matz?.signable;
+    case "inbox.local_final_soon": return c.includes("mumbai.local.06");
+    case "inbox.matz_signable": return !!d.partners.matz?.signed;
+  }
+  return false;
+}
+
 export function inboxMessages(d: Pick<SaveDoc, "career" | "partners">): InboxMessage[] {
+  return allMessages(d).filter((m) => !isDone(m.id, d));
+}
+
+function allMessages(d: Pick<SaveDoc, "career" | "partners">): InboxMessage[] {
   const cleared = d.career.cleared;
   const out: InboxMessage[] = [
     { id: "inbox.welcome", sender: MANAGER, subject: "Your Community Cup starts now", line: "Three matches in Bandra. Win the final.", cta: { label: cleared.length ? "VIEW CAREER" : "PLAY MATCH 1", path: "/career" } },

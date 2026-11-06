@@ -43,7 +43,7 @@ function InboxBody({ save, onChange, onClose }: { save: SaveDoc | null; onChange
   return (
     <View>
       {[...msgs].reverse().map((m) => (
-        <View key={m.id} style={styles.msgRow} testID={`inbox-${m.id}`}>
+        <View key={m.id} style={[styles.msgRow, !unreadIds.includes(m.id) && { opacity: 0.6 }]} testID={`inbox-${m.id}`}>
           <View>
             <Badge id={m.senderId} name={m.sender} color={m.senderId ? partnerOf(m.senderId).color : UI.wood} size={36} />
             {unreadIds.includes(m.id) ? <View style={styles.unreadDot} /> : null}
@@ -101,7 +101,8 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
           <Text style={styles.partnerSub}>Active partner · {partner.archetype}</Text>
         </View>
       </View>
-      <MeterRow icon="star" value={lv.frac * 100} num={lv.max ?? `Lv ${lv.level} · ${lv.text}`} color={UI.growth} testID="stats-growth" />
+      <MeterRow icon="star" value={lv.frac * 100} num={`Lv ${lv.level} · ${lv.text}`} color={UI.growth} testID="stats-growth" />
+      {lv.max ? <Text style={styles.partnerSub}>{lv.max}</Text> : null}
       <MeterRow icon="heart" value={chem} color={UI.chem} testID="stats-chem" />
       <Pressable
         testID="stats-history-link"
@@ -134,8 +135,10 @@ export function Overlay({ visible, title, onClose, children, testID }: { visible
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={[styles.scrim, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]} onPress={onClose}>
-        <Pressable style={styles.sheetWrap} onPress={() => {}}>
+      {/* Backdrop (closes on tap) BEHIND a plain sheet: nothing steals the scroll. */}
+      <View style={[styles.scrim, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" testID="overlay-backdrop" />
+        <View style={styles.sheetWrap}>
           <Card style={[styles.sheet, { backgroundColor: UI.cream }]} testID={testID}>
             <View style={styles.sheetHead}>
               <Text style={styles.sheetTitle}>{title}</Text>
@@ -143,12 +146,12 @@ export function Overlay({ visible, title, onClose, children, testID }: { visible
                 <Text style={styles.closeText}>✕</Text>
               </Pressable>
             </View>
-            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ paddingBottom: 4 }}>
+            <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 4 }}>
               {children}
             </ScrollView>
           </Card>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -157,7 +160,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: 10 },
   scrim: { flex: 1, backgroundColor: "rgba(20,26,18,0.6)", justifyContent: "center", paddingHorizontal: 20 },
   sheetWrap: { width: "100%", maxWidth: 420, alignSelf: "center", maxHeight: "100%" },
-  sheet: { padding: 18, maxHeight: "100%" },
+  sheet: { padding: 18, maxHeight: "100%", flexShrink: 1 },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   sheetTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 24 },
   close: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },

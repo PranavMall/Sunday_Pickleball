@@ -9,7 +9,7 @@ import type { GameSimulation } from "../sim/GameSimulation";
 import { IMAGE_H, IMAGE_W, type Projector } from "../render/perspective";
 import { Character, type CharacterColors, type CharacterView } from "./character";
 import { courtVisual } from "./courts";
-import { CHARACTER_SHEETS, PLAYER_CHARACTER_ID, RIVAL_SHEETS, SPRITE_META, SPRITE_SCALE } from "./sprites";
+import { CHARACTER_SHEETS, courtLoadStatus, PLAYER_CHARACTER_ID, RIVAL_SHEETS, SPRITE_META, SPRITE_SCALE } from "./sprites";
 import type { FarSpriteAnimator, NearSpriteAnimator } from "./spriteAnim";
 import { useSpriteSheets } from "./spriteSheets";
 
@@ -58,6 +58,10 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
   // Far player k (in slot order) → rival sheet k.
   const farSlots = useMemo(() => sim.players.filter((p) => p.team === "far").map((p) => p.slot), [sim]);
   const [courtLoaded, setCourtLoaded] = useState(false);
+  const [courtTry, setCourtTry] = useState(0);
+  useEffect(() => {
+    courtLoadStatus.text = "court: loading";
+  }, [court]);
   const readySent = useRef(false);
   const sheetsReady = !sprites || sheets.done;
   useEffect(() => {
@@ -328,9 +332,20 @@ export function GameCanvas({ sim, projector, width, height, court, onReady, spri
         }}
         contentFit="fill"
         cachePolicy="memory-disk"
-        onLoad={() => setCourtLoaded(true)}
+        key={`court-${court}-${courtTry}`}
+        onLoad={() => {
+          courtLoadStatus.text = `court: loaded ${court ?? "default"}`;
+          setCourtLoaded(true);
+        }}
         onError={(e) => {
-          console.warn("[court] background image failed to load", e);
+          const reason = String((e as { error?: string })?.error ?? "load error");
+          // Retry up to twice by remounting with a new key.
+          if (courtTry < 2) {
+            setCourtTry((t) => t + 1);
+            return;
+          }
+          console.warn("[court] background image failed to load", reason);
+          courtLoadStatus.text = `court: failed ${court ?? "default"} – ${reason}`;
           setCourtLoaded(true); // never trap the player behind the loading cover
         }}
       />

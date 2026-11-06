@@ -70,6 +70,40 @@ export const PORTRAITS: Record<string, number> = {
 // Sheet load status, read by the DEV overlay (kept here, outside the Skia
 // module, so match.tsx can read it before Skia loads on web).
 export const spriteLoadStatus = { text: "sprites: loading" };
+// Court background status (GameCanvas), shown next to the sprites line.
+export const courtLoadStatus = { text: "court: loading" };
+// Set by spriteSheets (Skia side) on load; match.tsx calls it without importing Skia.
+export const sheetPrefetch: { run: ((ids: (string | undefined)[]) => void) | null } = { run: null };
+
+// Rival faces for the match talk (144 × 144, cut from each rival's sheet):
+// look rival_<x> → face_<x>.png.
+export const FACES: Record<string, number> = {
+  face_man1_ban: require("@/assets/images/face_man1_ban.png"),
+  face_woman1_ban: require("@/assets/images/face_woman1_ban.png"),
+  face_man2_dad: require("@/assets/images/face_man2_dad.png"),
+  face_woman1_dad: require("@/assets/images/face_woman1_dad.png"),
+  face_man1_col: require("@/assets/images/face_man1_col.png"),
+  face_man2_col: require("@/assets/images/face_man2_col.png"),
+  face_woman1_and: require("@/assets/images/face_woman1_and.png"),
+  face_woman2_and: require("@/assets/images/face_woman2_and.png"),
+  face_woman2_juh: require("@/assets/images/face_woman2_juh.png"),
+  face_man1_juh: require("@/assets/images/face_man1_juh.png"),
+  face_man2_wor: require("@/assets/images/face_man2_wor.png"),
+  face_woman1_wor: require("@/assets/images/face_woman1_wor.png"),
+  face_man1_nas: require("@/assets/images/face_man1_nas.png"),
+  face_woman2_nas: require("@/assets/images/face_woman2_nas.png"),
+  face_man2_tri: require("@/assets/images/face_man2_tri.png"),
+  face_woman1_tri: require("@/assets/images/face_woman1_tri.png"),
+  face_man1_sat: require("@/assets/images/face_man1_sat.png"),
+  face_man2_sat: require("@/assets/images/face_man2_sat.png"),
+  face_woman1_pan: require("@/assets/images/face_woman1_pan.png"),
+  face_woman2_pan: require("@/assets/images/face_woman2_pan.png"),
+  face_man1_pun: require("@/assets/images/face_man1_pun.png"),
+  face_woman1_pun: require("@/assets/images/face_woman1_pun.png"),
+  face_woman2_gat: require("@/assets/images/face_woman2_gat.png"),
+  face_man2_gat: require("@/assets/images/face_man2_gat.png"),
+};
+export const faceKeyOf = (look: string) => look.replace(/^rival_/, "face_");
 // Partner faces (Badge): a portrait that fails is recorded here and shown in
 // the DEV overlay under the sprite line — never a silent fallback.
 const faceFails: Record<string, string> = {};
