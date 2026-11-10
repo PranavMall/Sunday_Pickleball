@@ -19,19 +19,18 @@ export function SettingsOverlay({ visible, onClose, save, onChange, extraRows }:
   const haptics = save?.settings?.haptics ?? true;
   return (
     <Overlay visible={visible} title="Settings" onClose={onClose} testID="settings-overlay">
-      <View style={styles.row} testID="settings-vibration">
+    <Pressable style={styles.row} testID="settings-vibration" accessibilityRole="switch" accessibilityState={{ checked: haptics }} onPress={() => meta.loaded && meta.setHaptics(!haptics) && onChange()}>
         <Ionicons name="phone-portrait-outline" size={20} color={UI.ink} />
         <Text style={styles.label}>Vibration</Text>
-        <Switch
-          testID="settings-vibration-toggle"
-          value={haptics}
-          onValueChange={(v) => {
-            if (meta.loaded && meta.setHaptics(v)) onChange();
-          }}
-          trackColor={{ true: UI.green, false: UI.line }}
-          thumbColor="#fff"
-        />
-      </View>
+        <View pointerEvents="none">
+          <Switch
+            testID="settings-vibration-toggle"
+            value={haptics}
+            trackColor={{ true: UI.green, false: UI.line }}
+            thumbColor="#fff"
+          />
+        </View>
+      </Pressable>
       <SettingsRow
         icon="create-outline"
         label="Edit name and team"

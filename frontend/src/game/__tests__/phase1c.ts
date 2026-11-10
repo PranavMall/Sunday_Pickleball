@@ -8,6 +8,8 @@ import { MetaStore } from "../meta/metaStore";
 import { shareText, trophiesWon } from "../meta/trophies";
 import { SheetCache } from "../render/sheetCache";
 import { buildSetup, careerSetup, quickPlaySetup } from "../meta/matchSetup";
+import { LESSON_IDS, TutorialRun, showMatch1Prompt, showTutorialCard, tutorialEvents } from "../meta/tutorial";
+import { analytics } from "../services/analytics";
 
 let pass = 0;
 let fail = 0;
@@ -392,6 +394,95 @@ async function release101() {
   }
 }
 
+// Release 10.2 Part C: tutorial save, rewards, Match 1 prompt, events.
+async function release102C() {
+  const sim = { phase: "waiting_serve", kitchenMode: "hold" as string | null, score: { servingTeam: "far" }, lastFault: null as any, server: false, cue: null as string | null, humanIsServer() { return this.server; }, humanSmashCuePhase() { return this.cue; } };
+  const contact = (shotType: string, o: Partial<{ isServe: boolean; isVolley: boolean; slot: number; team: string; miss: boolean }> = {}) => ({ slot: 0, team: "near", shotType, isServe: false, isVolley: false, miss: false, ...o });
+  {
+    const { s } = await fresh();
+    const doc0 = JSON.parse(JSON.stringify(s.doc));
+    ok(showTutorialCard(s.doc) && s.doc.tutorial.steps.length === 0, "fresh save: tutorial offered, no steps");
+    analytics.recent();
+    tutorialEvents.started("welcome", false);
+    const run = new TutorialRun(s.doc.tutorial.steps, 0);
+    ok(run.cardFor(sim)!.join(" ").includes("Practice match") && run.current === "bounce", "intro + bounce lesson first");
+    run.onContact(contact("drive"), sim);
+    const t1 = run.onPointEnd(sim)!;
+    ok(t1.id === "bounce" && !t1.auto, "bounce ticks on a ball that bounced");
+    s.tutorialTick(t1.id);
+    tutorialEvents.lesson(t1.id, t1.chances, t1.auto);
+    // Serve waits for the human's serve.
+    sim.server = false;
+    run.cardFor(sim);
+    ok(run.current === null, "serve waits until the human serves");
+    run.onPointEnd(sim);
+    sim.server = true;
+    run.cardFor(sim);
+    ok(run.current === "serve", "serve lesson on the human's serve");
+    run.onContact(contact("serve", { isServe: true }), sim);
+    run.onContact(contact("drive", { slot: 2, team: "far" }), sim);
+    s.tutorialTick(run.onPointEnd(sim)!.id);
+    sim.server = false;
+    // Net: 3 missed chances → ticks (auto).
+    run.cardFor(sim);
+    ok(run.current === "net", "net next");
+    sim.kitchenMode = "retreat";
+    run.onContact(contact("drive"), sim);
+    ok(run.onPointEnd(sim) === null && run.onPointEnd(sim) === null, "net: missed chances don't tick");
+    const auto = run.onPointEnd(sim)!;
+    ok(auto.id === "net" && auto.auto && auto.chances === 3, "a lesson with 3 missed chances ticks");
+    ok(run.cardFor(sim)!.includes("Close enough. You'll see it again in Career."), "close-enough line after an auto tick");
+    s.tutorialTick("net");
+    // Leave: steps kept; a new run starts at the first unticked lesson.
+    tutorialEvents.left(run.steps.length);
+    await s.flush();
+    ok(s.doc.tutorial.steps.join() === "bounce,serve,net" && !s.doc.tutorial.done, "Leave keeps ticked steps");
+    const run2 = new TutorialRun(s.doc.tutorial.steps, 0);
+    run2.cardFor(sim);
+    ok(run2.current === "smash", "next start begins at the first unticked lesson");
+    sim.cue = "ready";
+    run2.onFrame(sim);
+    run2.onContact(contact("smash", { isVolley: true }), sim);
+    ok(run2.onPointEnd(sim)?.id === "smash", "smash ticks on a human smash");
+    sim.cue = null;
+    run2.cardFor(sim);
+    run2.onContact(contact("lob"), sim);
+    ok(run2.onPointEnd(sim)?.id === "lob", "lob ticks on a human lob");
+    run2.cardFor(sim);
+    sim.kitchenMode = "retreat";
+    run2.onFrame(sim);
+    ok(run2.onPointEnd(sim)?.id === "back" && run2.finished, "back ticks on BACK; all six → finished");
+    for (const id of ["smash", "lob", "back"]) s.tutorialTick(id);
+    const coins = s.tutorialComplete(T0 + 5, [...LESSON_IDS]);
+    tutorialEvents.completed(120, false);
+    ok(coins === 100 && s.doc.coins === doc0.coins + 100 && s.doc.tutorial.done && s.doc.tutorial.doneAt === T0 + 5, "ticking all six sets done and grants exactly 100 Coins");
+    ok(s.tutorialComplete(T0 + 9, [...LESSON_IDS]) === 0 && s.doc.coins === doc0.coins + 100 && s.doc.tutorial.doneAt === T0 + 5, "completing again grants 0");
+    ok(!showTutorialCard(s.doc), "showTutorialCard false once done (Home tile gone)");
+    const same = ["fans", "partners", "chemistryHalves", "daily", "career", "courtsPlayed", "milestones", "namedRivals"].every((k) => JSON.stringify((s.doc as any)[k]) === JSON.stringify(doc0[k]));
+    const newLedger = s.doc.ledger.slice(doc0.ledger.length);
+    ok(same && newLedger.length === 1 && newLedger[0].sourceType === "tutorial" && newLedger[0].currency === "coins", "a tutorial writes no Fans, Growth, Chemistry, daily usage or Career progress (one ledger entry: +100 Coins)");
+    const ev = analytics.recent().filter((e) => e.event.startsWith("tutorial_"));
+    const find = (n: string) => ev.find((e) => e.event === n)?.props as any;
+    ok(find("tutorial_started")?.from === "welcome" && find("tutorial_started")?.replay === false, "tutorial_started { from, replay }");
+    ok(find("tutorial_lesson")?.id === "bounce" && find("tutorial_lesson")?.chances === 1 && find("tutorial_lesson")?.auto === false, "tutorial_lesson { id, chances, auto }");
+    ok(find("tutorial_left")?.lessonsDone === 3, "tutorial_left { lessonsDone }");
+    ok(find("tutorial_completed")?.seconds === 120 && find("tutorial_completed")?.replay === false, "tutorial_completed { seconds, replay }");
+  }
+  {
+    const { s } = await fresh();
+    ok(showMatch1Prompt(s.doc, CAREER_MATCH_IDS[0]) && !showMatch1Prompt(s.doc, CAREER_MATCH_IDS[1]), "Match 1 pop-up shows while the tutorial is offered");
+    s.tutorialPrompted();
+    ok(!showMatch1Prompt(s.doc, CAREER_MATCH_IDS[0]) && s.doc.tutorial.careerPrompted && !s.doc.tutorial.hidden, "Match 1 pop-up shows once; sets careerPrompted, hidden unchanged");
+    const { s: h } = await fresh();
+    h.tutorialHide();
+    ok(!showTutorialCard(h.doc) && !showMatch1Prompt(h.doc, CAREER_MATCH_IDS[0]), "hidden: no Home tile, no Match 1 pop-up");
+    const old = new Map<string, string>([["pb.meta", JSON.stringify({ schemaVersion: 1, guestId: "g_old" })]]);
+    const so = new MetaStore({ getItem: async (k) => old.get(k) ?? null, setItem: async (k, v) => void old.set(k, v) }, () => 0.5);
+    await so.load(T0);
+    ok(so.doc.tutorial.done === false && so.doc.tutorial.hidden === false && so.doc.tutorial.steps.length === 0, "old save without tutorial loads with done: false, hidden: false");
+  }
+}
+
 // Release 10.2 Part B: settings.haptics.
 async function release102B() {
   const { s, mem } = await fresh();
@@ -411,6 +502,7 @@ async function release102B() {
   await commit4();
   await release101();
   await release102B();
+  await release102C();
   await commit5();
   await sessionD();
   commit9();

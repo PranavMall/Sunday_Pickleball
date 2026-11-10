@@ -14,7 +14,7 @@ import { analytics } from "../services/analytics";
 import { CAREER_MATCH_IDS, META_STORAGE_KEY, SCHEMA_VERSION } from "../meta/economyConfig";
 import { MetaStore, dayKeyOf, newMatchId, pairingKey, type StorageAdapter } from "../meta/metaStore";
 import { NEAR_LINE_Y } from "./retrieval";
-import { DIFFICULTY_TABLE } from "../config/ai";
+import { DIFFICULTY_TABLE, PERSONALITY_BIAS } from "../config/ai";
 import { applyChemistry } from "../config/profiles";
 import { partnerBoost } from "../meta/economyConfig";
 import { buildSetup } from "../meta/matchSetup";
@@ -472,6 +472,17 @@ function release102ATests() {
   eq(shareText([]), "Starting my Mumbai journey in Pickle-Ballers 🥒", "cabinet share: 0");
   eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "cabinet share: 2");
   eq(shareText(["community", "local", "tour", "district"]), "🏆 All 4 Mumbai trophies. Mumbai is done. South Cup, you're next. Pickle-Ballers 🥒", "cabinet share: 4");
+  // Release 10.2 Part C: TUTOR exists; no Career / Quick Play / Training / Scrimmage config uses it.
+  ok(!!PERSONALITY_BIAS.TUTOR && PERSONALITY_BIAS.TUTOR.lobBias === 5, "PERSONALITY_BIAS.TUTOR exists");
+  const cfgs = [
+    ...CAREER_MATCH_IDS.map((id) => buildSetup({ mode: "career", careerId: id }, 1, null).config),
+    buildSetup({ mode: "quick", difficulty: "ROOKIE" }, 1, null).config,
+    buildSetup({ mode: "quick", difficulty: "PRO", singles: "1" }, 1, null).config,
+    buildSetup({ mode: "training" }, 1, null).config,
+    buildSetup({ mode: "scrimmage" }, 1, null).config,
+  ];
+  ok(cfgs.every((c) => ![...c.near.players, ...c.far.players].some((p) => p.personality === "TUTOR")), "no Career / Quick Play / Training / Scrimmage config uses TUTOR");
+  ok(buildSetup({ mode: "tutorial" }, 1, null).config.far.players.every((p) => p.personality === "TUTOR" && p.profileId === "ROOKIE"), "tutorial config: two ROOKIE TUTORs");
 }
 
 if (process.argv[1]?.includes("phase1a")) {

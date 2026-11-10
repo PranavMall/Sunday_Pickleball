@@ -65,4 +65,5 @@ export const PERSONALITY_BIAS: Record<Personality, PersonalityBias> = {
   AGGRESSIVE: { driveBias: 0.3, dinkBias: -0.1, lobBias: -0.05, kitchenRush: 0.15, paceVariety: 0.05 },
   KITCHEN: { driveBias: -0.1, dinkBias: 0.35, lobBias: 0.05, kitchenRush: 0.3, paceVariety: 0.05 },
   TACTICAL: { driveBias: 0.05, dinkBias: 0.1, lobBias: 0.15, kitchenRush: 0.05, paceVariety: 0.35 },
+  TUTOR: { driveBias: -0.2, dinkBias: 0.3, lobBias: 5, kitchenRush: 0.3, paceVariety: 0 },
 };

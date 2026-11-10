@@ -3,7 +3,8 @@
  */
 import { PARTNER_DIFFICULTY } from "../config/ai";
 import { PLAYER_NAME_POOL, TEAM_NAME_POOL, teamCode } from "../services/profile";
-import { quickPlaySetup, careerSetup, showNewCourt, showTalk, talkRival, trainingSetup } from "../meta/matchSetup";
+import { quickPlaySetup, careerSetup, showNewCourt, showTalk, talkRival, trainingSetup, tutorialSetup } from "../meta/matchSetup";
+import { GameSimulation } from "../sim/GameSimulation";
 import { TROPHY_SHORT } from "../meta/trophies";
 import { homeCareerView, trainingTileText } from "../meta/home";
 declare const __dirname: string;
@@ -121,6 +122,30 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   ok(looks.size === 24 && missing.length === 0, `every look used by Career has a face_ asset (${looks.size} looks; missing ${missing.join(",") || "none"})`);
   ok(talkRival(careerMatch("mumbai.local.05"), () => false).partnerId === "matz" && talkRival(careerMatch("mumbai.local.05"), () => true).look === "rival_man1_juh", "Match 5 talk: Matz portrait unless signed (then the reserve's face)");
   ok(showTalk({ cleared: [], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: ["mumbai.local.05"], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: [], talkSeen: ["mumbai.local.05"] }, "mumbai.local.05"), "talk shows on first play only (skipped on a replay / once seen)");
+}
+
+{
+  // ---- Release 10.2 Part C: TUTOR smoke test (scripted human at the net, swipes on every chance) ----
+  let hits = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const sim = new GameSimulation(tutorialSetup("anli", seed).config);
+    let smashed = false, ticks = 0;
+    while (!smashed && sim.stats.pointsPlayed < 15 && ticks < 60 * 60 * 30) {
+      if (sim.kitchenMode !== "hold" && sim.kitchenCooldownLeft() === 0) sim.toggleKitchenMode();
+      if (sim.humanIsServer() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 0, dy: -140, power: 0.6, tap: false });
+      if (sim.humanCanHit() && !sim.hasBufferedSwipe()) {
+        if (sim.humanSmashWindow()) sim.submitSwipe({ dx: 20, dy: -150, power: 0.7, tap: false, speed: 1600 });
+        else sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 });
+      }
+      sim.step();
+      ticks++;
+      for (const ev of sim.consumeContactEvents()) if (ev.slot === 0 && ev.shotType === "smash" && !ev.isServe) smashed = true;
+      sim.consumeBounceEvents();
+    }
+    if (smashed) hits++;
+  }
+  console.log(`  TUTOR smoke: human smash within 15 points in ${hits}/40`);
+  ok(hits >= 36, `TUTOR: human smash within 15 points in ≥ 36 of 40 (got ${hits})`);
 }
 
 {

@@ -19,9 +19,11 @@ import { hasUnread } from "@/src/game/meta/inbox";
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import { hasIdentity, migrateLegacyTeamName, saveIdentity, skipIdentity } from "@/src/game/services/profile";
-import { playCareerMatch } from "@/src/ui/careerNav";
+import { startTutorial, useCareerPlay } from "@/src/ui/careerNav";
+import { showTutorialCard, tutorialEvents, type TutorialFrom } from "@/src/game/meta/tutorial";
+import { TutorialOffer } from "@/src/ui/TutorialOffer";
 import { DestinationBar } from "@/src/ui/DestinationBar";
-import { SettingsOverlay } from "@/src/ui/SettingsOverlay";
+import { SettingsOverlay, SettingsRow } from "@/src/ui/SettingsOverlay";
 import { Badge, Card, Coin, GoldButton, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
@@ -36,6 +38,8 @@ export default function Home() {
   const { save, identity, refresh } = useSave();
   const [promptOpen, setPromptOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [welcome, setWelcome] = useState(false);
+  const { play, prompt } = useCareerPlay(save, refresh);
 
   useEffect(() => {
     (async () => {
@@ -46,16 +50,32 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onSaveIdentity = async (p: string, t: string) => {
-    await saveIdentity(p, t);
+  // After the name step: the WELCOME pop-up's second step (while the tutorial is offered).
+  const afterName = () => {
     setPromptOpen(false);
     refresh();
+    if (meta.loaded && showTutorialCard(meta.doc)) {
+      setWelcome(true);
+      tutorialEvents.offered("welcome");
+    }
+  };
+  const onSaveIdentity = async (p: string, t: string) => {
+    await saveIdentity(p, t);
+    afterName();
   };
   const onSkipIdentity = async () => {
     await skipIdentity();
-    setPromptOpen(false);
+    afterName();
+  };
+  const hideTutorial = (from: TutorialFrom) => {
+    if (meta.loaded) meta.tutorialHide();
+    tutorialEvents.hidden(from);
     refresh();
   };
+  const tutorialTile = showTutorialCard(save);
+  useEffect(() => {
+    if (tutorialTile) tutorialEvents.offered("home");
+  }, [tutorialTile]);
 
   const view = homeCareerView(save ?? { career: { cleared: [], nextMatchId: "mumbai.community.01", firstClearWins: 0, firstClearLosses: 0, trophies: {}, talkSeen: [] } });
   const m = view.match;
@@ -65,7 +85,7 @@ export default function Home() {
   const trainingUsed = save && meta.loaded ? meta.dailyUsage(Date.now()).training : 0;
   const tileH = small ? 62 : 70;
 
-  const onPlay = () => (view.allCleared ? router.replace("/career") : playCareerMatch(router, save, m.id));
+  const onPlay = () => (view.allCleared ? router.replace("/career") : play(m.id));
 
   return (
     <View style={styles.root} testID="main-menu-screen">
@@ -93,9 +113,9 @@ export default function Home() {
             <Card style={styles.banner}>
               <Badge name={playerName || "P"} color={PLAYER_BADGE_COLOR} size={44} />
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.bannerName} numberOfLines={1} testID="home-player-name">{playerName}</Text>
+                <Text style={styles.bannerName} testID="home-player-name">{playerName}</Text>
                 <View style={styles.bannerSub}>
-                  <Text style={styles.bannerTeam} numberOfLines={1} testID="home-team-name">{identity?.teamName ?? ""} · </Text>
+                  <Text style={styles.bannerTeam} testID="home-team-name">{identity?.teamName ?? ""} · </Text>
                   <Ionicons name="people" size={13} color={UI.fans} />
                   <Text style={styles.bannerFans} testID="status-fans">{save?.fans ?? 0}</Text>
                 </View>
@@ -155,13 +175,60 @@ export default function Home() {
               <Text style={styles.tileTitle}>Training</Text>
               <Text style={styles.tileSub} testID="training-tile-left">{trainingTileText(trainingUsed)}</Text>
             </Pressable>
+            {tutorialTile ? (
+              <View style={[styles.tile, styles.tutTile, { height: tileH }]}>
+                <Pressable testID="menu-tutorial" accessibilityRole="button" accessibilityLabel="Tutorial" onPress={() => startTutorial(router, "home")} style={styles.tutPress}>
+                  <View style={styles.tutIcon}>
+                    <Ionicons name="school" size={16} color={UI.goldInk} />
+                  </View>
+                  <Text style={styles.tileTitle}>Tutorial</Text>
+                  <Text style={styles.tileSub}>2 min · +100</Text>
+                </Pressable>
+                <Pressable testID="tutorial-tile-hide" accessibilityRole="button" accessibilityLabel="Hide tutorial" onPress={() => hideTutorial("home")} style={styles.tutX}>
+                  <Text style={styles.tutXText}>✕</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </View>
       </Animated.View>
 
       <DestinationBar active="home" />
 
-      <SettingsOverlay visible={settingsOpen} onClose={() => setSettingsOpen(false)} save={save} onChange={refresh} />
+      <SettingsOverlay
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        save={save}
+        onChange={refresh}
+        extraRows={
+          <SettingsRow
+            icon="school-outline"
+            label="Replay the tutorial"
+            testID="settings-replay-tutorial"
+            onPress={() => {
+              setSettingsOpen(false);
+              startTutorial(router, "settings");
+            }}
+          />
+        }
+      />
+      {prompt}
+      <TutorialOffer
+        visible={welcome}
+        testID="welcome-tutorial"
+        kicker={`WELCOME, ${(identity?.playerName ?? "").toUpperCase()}`}
+        partnerName={partner.name}
+        secondary="I know pickleball"
+        onLearn={() => {
+          setWelcome(false);
+          startTutorial(router, "welcome");
+        }}
+        onSecondary={() => {
+          setWelcome(false);
+          hideTutorial("welcome");
+        }}
+        onClose={() => setWelcome(false)}
+      />
 
       {promptOpen ? (
         <View style={styles.modalWrap} testID="identity-prompt">
@@ -211,6 +278,11 @@ const styles = StyleSheet.create({
   trIcon: { width: 26, height: 22, borderRadius: 7, backgroundColor: UI.green, alignItems: "center", justifyContent: "center" },
   tileTitle: { color: UI.ink, fontSize: 14, fontWeight: "800", marginTop: 2 },
   tileSub: { color: UI.inkSoft, fontSize: 11 },
+  tutTile: { backgroundColor: "rgba(251,240,206,0.92)", borderWidth: 2, borderColor: UI.gold, paddingHorizontal: 0 },
+  tutPress: { flex: 1, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
+  tutIcon: { width: 26, height: 22, borderRadius: 7, backgroundColor: UI.gold, alignItems: "center", justifyContent: "center" },
+  tutX: { position: "absolute", top: 0, right: 0, width: 44, height: 44, alignItems: "flex-end", justifyContent: "flex-start", paddingTop: 3, paddingRight: 6 },
+  tutXText: { color: UI.inkSoft, fontSize: 13, fontWeight: "800" },
   modalWrap: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(20,26,18,0.78)" },
   modalCenter: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
   modal: { backgroundColor: UI.cream, borderRadius: 24, padding: 22, width: "100%", maxWidth: 420, alignSelf: "center" },

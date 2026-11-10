@@ -6,7 +6,7 @@ export type CourtSide = "L" | "R"; // GLOBAL: R = right half (x>10), L = left ha
 export type ShotType = "serve" | "drive" | "dink" | "drop" | "lob" | "smash";
 
 export type Difficulty = "ROOKIE" | "CLUB" | "PRO" | "CASUAL" | "ADVANCED" | "LEGEND";
-export type Personality = "DEFENSIVE" | "AGGRESSIVE" | "KITCHEN" | "TACTICAL";
+export type Personality = "DEFENSIVE" | "AGGRESSIVE" | "KITCHEN" | "TACTICAL" | "TUTOR";
 
 export interface PlayerState {
   slot: number; // 0..3

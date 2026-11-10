@@ -89,6 +89,7 @@ export interface SaveDoc {
   daily: { dayKey: string; training: number; scrimmage: number; quick: number };
   inboxRead: string[];
   settings: { haptics: boolean };
+  tutorial: { done: boolean; hidden: boolean; steps: string[]; doneAt?: number; careerPrompted: boolean };
   rewardIds: string[]; // every applied rewardId (idempotency)
   ledger: LedgerEntry[]; // recent history (LEDGER_KEEP)
 }
@@ -186,6 +187,7 @@ export function freshSave(now: number, rand: () => number = Math.random): SaveDo
     daily: { dayKey: dayKeyOf(now), training: 0, scrimmage: 0, quick: 0 },
     inboxRead: [],
     settings: { haptics: true },
+    tutorial: { done: false, hidden: false, steps: [], careerPrompted: false },
     rewardIds: [],
     ledger: [],
   };
@@ -262,9 +264,15 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
     },
     inboxRead: strArr(r.inboxRead),
     settings: { haptics: !(r.settings && typeof r.settings === "object" && r.settings.haptics === false) },
+    tutorial: tutorialOf(r.tutorial),
     rewardIds: strArr(r.rewardIds),
     ledger: Array.isArray(r.ledger) ? r.ledger.slice(-LEDGER_KEEP) : [],
   };
+}
+
+function tutorialOf(v: any): SaveDoc["tutorial"] {
+  const t = v && typeof v === "object" ? v : {};
+  return { done: t.done === true, hidden: t.hidden === true, steps: Array.isArray(t.steps) ? t.steps.filter((x: unknown) => typeof x === "string") : [], ...(typeof t.doneAt === "number" ? { doneAt: t.doneAt } : {}), careerPrompted: t.careerPrompted === true };
 }
 
 function trophiesOf(v: unknown): Record<string, TrophyRecord> {
@@ -348,6 +356,38 @@ export class MetaStore {
     d.settings.haptics = on;
     this.save();
     return true;
+  }
+
+  // ---- Tutorial (written at lesson ticks between points and at the end only) ----
+  tutorialTick(id: string): boolean {
+    const t = (this.doc as SaveDoc).tutorial;
+    if (t.steps.includes(id)) return false;
+    t.steps.push(id);
+    this.save();
+    return true;
+  }
+  tutorialHide(): void {
+    (this.doc as SaveDoc).tutorial.hidden = true;
+    this.save();
+  }
+  tutorialPrompted(): void {
+    (this.doc as SaveDoc).tutorial.careerPrompted = true;
+    this.save();
+  }
+  // Sets done (+ doneAt the first time); +100 Coins once, on the first completion.
+  tutorialComplete(now: number, steps: string[]): number {
+    const t = (this.doc as SaveDoc).tutorial;
+    const first = !t.done;
+    t.done = true;
+    if (first) t.doneAt = now;
+    for (const id of steps) if (!t.steps.includes(id)) t.steps.push(id);
+    let coins = 0;
+    if (first) {
+      const g = this.grant("tutorial.complete", "coins", 100, { sourceType: "tutorial", sourceId: "tutorial" }, now);
+      if (g.ok && g.applied) coins = 100;
+    }
+    this.save();
+    return coins;
   }
 
   // Quick Play matches that still pay Coins today.

@@ -41,6 +41,7 @@ export function DestinationBar({ active }: { active: Destination }) {
     useCallback(() => {
       if (active === "home") return;
       const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        if (router.canDismiss()) router.dismissAll();
         router.replace("/");
         return true;
       });
@@ -50,8 +51,10 @@ export function DestinationBar({ active }: { active: Destination }) {
 
   const go = (it: (typeof ITEMS)[number]) => {
     if (it.key === "locker") return setToast(true);
-    if (it.key !== active && it.path) router.replace(it.path);
-    else if (it.key === "home" && router.canGoBack()) router.replace("/"); // from Quick Play / Training / Profile
+    if (it.key === active && !(it.key === "home" && router.canDismiss())) return;
+    // One screen at a time: clear anything pushed (Quick Play / Training / Profile), then switch.
+    if (router.canDismiss()) router.dismissAll();
+    if (it.path) router.replace(it.path);
   };
   const homeSel = active === "home";
 

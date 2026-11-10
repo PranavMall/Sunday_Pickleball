@@ -34,6 +34,9 @@ import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_HINT_SECONDS, FAULT_LABEL_SECONDS, faultLabelFor, showHintForPoint } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
 import { KB_SIZE, KitchenButton, LobButton } from "@/src/ui/TacticalButtons";
+import { LESSON_IDS, TutorialRun, tutorialEvents, type LessonId, type TutorialFrom } from "@/src/game/meta/tutorial";
+import { TutorialLayer } from "@/src/ui/TutorialLayer";
+import { TutorialFinish } from "@/src/ui/TutorialFinish";
 
 // END SEQUENCE (END_SEQ_S, spriteAnim): render-only time between game over and
 // the pop-ups / result (the sim is over; nothing steps). A tap skips it.
@@ -113,8 +116,8 @@ const PauseButton = memo(function PauseButton(props: { paused: boolean; top: num
 });
 
 export default function Match() {
-  const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string }>();
-  const [launch, setLaunch] = useState<LaunchParams>(() => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court }));
+  const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string; from?: string }>();
+  const [launch, setLaunch] = useState<LaunchParams>(() => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court, from: params.from }));
   const router = useRouter();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -170,6 +173,31 @@ export default function Match() {
   // Settings → Vibration, read once per match (never per contact).
   const hapticsOn = useMemo(() => !meta.loaded || meta.doc.settings.haptics, [sim]);
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
+  // TUTORIAL (mode "tutorial"): lessons between points; a replay starts all six
+  // again and writes no steps. Lesson cards hold the sim like a pause.
+  const tut = useMemo(() => {
+    if (match.setup.mode !== "tutorial") return null;
+    const replay = meta.loaded && meta.doc.tutorial.done;
+    return { run: new TutorialRun(replay ? [] : meta.loaded ? meta.doc.tutorial.steps : [], humanSlot), replay, t0: Date.now(), points: 0, cardKey: -1 };
+  }, [match.setup.mode, sim, humanSlot]);
+  const [tutLines, setTutLines] = useState<string[] | null>(null);
+  const [tutDone, setTutDone] = useState<{ coins: number } | null>(null);
+  const [tutCurrent, setTutCurrent] = useState<LessonId | null>(null);
+  const [tutSteps, setTutSteps] = useState<string[]>([]);
+  const talkRef = useRef(false);
+  useEffect(() => {
+    if (!tut) return;
+    setTutSteps([...tut.run.steps]);
+    tutorialEvents.started((launch.from as TutorialFrom) ?? "home", tut.replay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tut]);
+  const finishTutorial = useCallback(() => {
+    if (!tut) return;
+    talkRef.current = true; // the sim stops for good
+    const coins = meta.loaded ? meta.tutorialComplete(Date.now(), tut.replay ? [] : [...LESSON_IDS]) : 0;
+    tutorialEvents.completed(Math.round((Date.now() - tut.t0) / 1000), tut.replay);
+    setTutDone({ coins });
+  }, [tut]);
   // Sprite animation state for the near pair: one preallocated animator per match.
   const spriteAnim = useMemo(() => new NearSpriteAnimator(), [sim]);
   const farAnim = useMemo(() => new FarSpriteAnimator(), [sim]);
@@ -246,7 +274,7 @@ export default function Match() {
         raf = requestAnimationFrame(loop);
         return;
       }
-      const idle = pausedRef.current || !readyRef.current;
+      const idle = pausedRef.current || !readyRef.current || talkRef.current;
       if (idle) {
         if (!wasIdle) setFrame((f) => (f + 1) % 1000000); // one render to show the pause state
         wasIdle = true;
@@ -290,6 +318,7 @@ export default function Match() {
       for (const ev of sim.consumeContactEvents()) {
         sfx.playForContact(ev);
         spriteAnim.onContact(ev, sim);
+        if (tut) tut.run.onContact(ev, sim);
         farAnim.onContact(ev, sim);
         if (ev.slot === humanSlot && hapticsOn && Platform.OS !== "web") {
           Haptics.impactAsync(
@@ -298,12 +327,38 @@ export default function Match() {
         }
       }
       for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
+      if (tut) {
+        tut.run.onFrame(sim);
+        if (sim.stats.pointsPlayed !== tut.points) {
+          // Point over: tick (the only storage write, between points).
+          tut.points = sim.stats.pointsPlayed;
+          const tick = tut.run.onPointEnd(sim);
+          if (tick) {
+            if (!tut.replay && meta.loaded) meta.tutorialTick(tick.id);
+            tutorialEvents.lesson(tick.id, tick.chances, tick.auto);
+            setTutSteps([...tut.run.steps]);
+          }
+          if (tut.run.finished) finishTutorial();
+        } else if (sim.phase === "waiting_serve" && tut.cardKey !== sim.stats.pointsPlayed) {
+          tut.cardKey = sim.stats.pointsPlayed;
+          const lines = tut.run.cardFor(sim);
+          setTutCurrent(tut.run.current);
+          if (lines) {
+            talkRef.current = true;
+            setTutLines(lines);
+          }
+        }
+      }
       if (sim.phase !== "game_over") {
         spriteAnim.update(sim, -1);
         farAnim.update(sim, -1);
       }
 
-      if (sim.phase === "game_over" && !loggedRef.current) {
+      if (sim.phase === "game_over" && !loggedRef.current && tut) {
+        loggedRef.current = true;
+        endT0.current = performance.now();
+        finishTutorial();
+      } else if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
         endT0.current = performance.now();
         logMatchResult(config, sim);
@@ -313,7 +368,7 @@ export default function Match() {
         const won = sim.winner === "near";
         const firstClear = setup.mode === "career" && meta.loaded && !meta.doc.career.cleared.includes(setup.careerId ?? "");
         initMeta().then(() => {
-          const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
+          const o = meta.completeMatch({ matchId, kind: setup.mode as Exclude<typeof setup.mode, "tutorial">, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
           const d = meta.doc;
           const goal = setup.mode === "career" ? nextGoal(d, won ? undefined : { careerMatchId: setup.careerId ?? "" }) : null;
           setOutcome({ ...o, goal, firstClear, trophyCount: trophiesWon(d).length, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
@@ -326,7 +381,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, hapticsOn, matchId, match.setup, spriteAnim, farAnim]);
+  }, [sim, config, difficulty, humanSlot, hapticsOn, matchId, match.setup, spriteAnim, farAnim, tut, finishTutorial]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time
@@ -451,6 +506,17 @@ export default function Match() {
   }, [paused]);
   // Back to the destination the match was launched from (bottom of the stack).
   const goMenu = () => (router.canDismiss() ? router.dismissAll() : router.replace("/"));
+  const leaveTutorial = () => {
+    if (tut) tutorialEvents.left(tut.run.steps.length);
+    goMenu();
+  };
+  const tutorialNext = () => {
+    if (meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id)) {
+      const id = careerMatch(undefined).id;
+      if (showTalk(meta.doc.career, id)) router.replace({ pathname: "/talk", params: { careerId: id } });
+      else router.replace({ pathname: "/match", params: { mode: "career", careerId: id } });
+    } else goMenu();
+  };
   const toggleKitchen = useCallback(() => {
     if (!pausedRef.current) sim.toggleKitchenMode();
   }, [sim]);
@@ -615,6 +681,30 @@ export default function Match() {
         </View>
       )}
 
+      {tut && ready && !tutDone ? (
+        <TutorialLayer
+          done={tutSteps}
+          current={tutCurrent}
+          chipsTop={sbRect.top + sbRect.height + 8}
+          top={insets.top}
+          bottom={insets.bottom + 16}
+          lines={tutLines}
+          partnerId={match.setup.partnerId}
+          onLinesDone={() => {
+            talkRef.current = false;
+            setTutLines(null);
+          }}
+          onSkip={leaveTutorial}
+        />
+      ) : null}
+      {tutDone ? (
+        <TutorialFinish
+          partnerId={match.setup.partnerId}
+          coins={tutDone.coins}
+          button={meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id) ? "PLAY MATCH 1" : "CONTINUE"}
+          onPress={tutorialNext}
+        />
+      ) : null}
       {!ready && (
         <View style={styles.loadingCover} testID="loading-cover">
           <Text style={styles.loadingTitle}>PICKLE-BALLERS</Text>
@@ -634,17 +724,26 @@ export default function Match() {
                 <Text style={styles.secondaryText}>Sound: {muted ? "Off" : "On"}</Text>
               </Pressable>
             )}
-            {__DEV__ && (
+            {tut ? (
+              <Pressable testID="leave-tutorial-button" style={styles.pauseSecondaryBtn} onPress={leaveTutorial}>
+                <Text style={styles.secondaryText}>Leave tutorial</Text>
+              </Pressable>
+            ) : null}
+            {__DEV__ && !tut && (
               <Pressable testID="sprites-toggle" style={styles.pauseSecondaryBtn} onPress={() => setSpritesOn((v) => !v)}>
                 <Text style={styles.secondaryText}>Sprites: {spritesOn ? "On" : "Off"}</Text>
               </Pressable>
             )}
-            <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
-              <Text style={styles.secondaryText}>Restart</Text>
-            </Pressable>
-            <Pressable testID="quit-button" style={styles.pauseSecondaryBtn} onPress={goMenu}>
-              <Text style={styles.secondaryText}>Quit to Menu</Text>
-            </Pressable>
+            {!tut ? (
+              <>
+                <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
+                  <Text style={styles.secondaryText}>Restart</Text>
+                </Pressable>
+                <Pressable testID="quit-button" style={styles.pauseSecondaryBtn} onPress={goMenu}>
+                  <Text style={styles.secondaryText}>Quit to Menu</Text>
+                </Pressable>
+              </>
+            ) : null}
           </View>
         </View>
       )}

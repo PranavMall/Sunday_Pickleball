@@ -10,7 +10,7 @@ import type { Difficulty } from "../sim/types";
 import { levelView } from "./levels";
 import { CAREER_MATCHES, careerMatch, partnerBoost, PARTNERS, QUICK_PLAY_COURT, SHORT_FORMAT, STARTER_PARTNER_ID, TRAINING_MODES, type CareerMatchDef, type CourtId, type MatchTwist, type PartnerId } from "./economyConfig";
 
-export type MatchMode = "quick" | "career" | "training" | "scrimmage";
+export type MatchMode = "quick" | "career" | "training" | "scrimmage" | "tutorial";
 
 export interface LaunchParams {
   mode?: string;
@@ -18,6 +18,7 @@ export interface LaunchParams {
   singles?: string;
   careerId?: string;
   court?: string; // dev-only override
+  from?: string; // tutorial entry (welcome | match1 | home | settings)
 }
 
 export interface MatchSetup {
@@ -91,6 +92,7 @@ export function buildSetup(p: LaunchParams, seed: number, save: SetupSave | null
     const id = save?.activePartnerId ?? STARTER_PARTNER_ID;
     return careerSetup(careerMatch(p.careerId), id, seed, (x) => !!save?.partners?.[x]?.signed, boostFor(save, id));
   }
+  if (p.mode === "tutorial") return tutorialSetup(save?.activePartnerId ?? STARTER_PARTNER_ID, seed);
   if (p.mode === "training" || p.mode === "scrimmage") {
     const id = save?.trainingPartnerId ?? STARTER_PARTNER_ID;
     return trainingSetup(p.mode, id, seed, boostFor(save, id));
@@ -166,4 +168,19 @@ export function trainingSetup(mode: "training" | "scrimmage", partnerId: string,
     ruleModifiers: { ...SHORT_FORMAT },
   });
   return { mode, config, rivalCode: t.code, rivalName: mode === "training" ? "Drill pair" : "Sparring pair", label: mode, partnerId: partnerOf(partnerId).id, rivalLooks: [...CAREER_MATCHES[mode === "training" ? 0 : 3].looks!] };
+}
+
+// Tutorial: you + the active Career partner (boost 1) vs two ROOKIE TUTORs at
+// Bandra Garden; the score never ends it (the tutorial does).
+export function tutorialSetup(partnerId: string, seed: number): MatchSetup {
+  const config = buildMatchConfig({
+    seed,
+    format: "doubles",
+    matchType: "tutorial",
+    court: "bandra_garden",
+    near: nearTeam(partnerId, 1),
+    far: { controllers: ["AI", "AI"], difficulties: ["ROOKIE", "ROOKIE"], personalities: ["TUTOR", "TUTOR"], names: ["Tutor", "Tutor"] },
+    ruleModifiers: { pointsToWin: 99, winBy: 1 },
+  });
+  return { mode: "tutorial", config, rivalCode: "DRL", rivalName: "Practice pair", label: "tutorial", partnerId: partnerOf(partnerId).id, rivalLooks: [...CAREER_MATCHES[0].looks!] };
 }

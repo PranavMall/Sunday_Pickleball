@@ -18,7 +18,7 @@ import { levelView } from "@/src/game/meta/levels";
 import { teamCode } from "@/src/game/services/profile";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
 import { InboxButton } from "@/src/ui/HeaderActions";
-import { playCareerMatch } from "@/src/ui/careerNav";
+import { useCareerPlay } from "@/src/ui/careerNav";
 import { Badge, Card, chemOf, Coin, GoldButton, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 import { CourtThumb } from "@/src/ui/CourtThumb";
@@ -40,6 +40,7 @@ export default function Career() {
   const lv = levelView(save?.partners[partner.id]?.growth ?? 0, save?.career.nextMatchId ?? next.id);
   const myCode = teamCode(identity?.teamName ?? "", next.code);
   const chem = chemOf(save?.chemistryHalves[`player+${partner.id}`]);
+  const { play, prompt } = useCareerPlay(save, refresh);
 
   return (
     <DestinationScreen
@@ -129,7 +130,7 @@ export default function Career() {
             big
             testID="play-match"
             label={replay ? "REPLAY MATCH" : "PLAY MATCH"}
-            onPress={() => playCareerMatch(router, save, next.id)}
+            onPress={() => play(next.id)}
             style={{ marginTop: 10 }}
           />
         ) : (
@@ -200,6 +201,7 @@ export default function Career() {
           </Pressable>
         </View>
       ) : null}
+      {prompt}
     </DestinationScreen>
   );
 }
@@ -207,7 +209,7 @@ export default function Career() {
 const styles = StyleSheet.create({
   pad: { padding: 10 },
   maxLine: { color: UI.muted, fontSize: 12, fontWeight: "700", marginLeft: 22, marginTop: 2 },
-  twistLine: { color: UI.goldDeep, fontSize: 11, textAlign: "center", marginTop: 1, fontWeight: "800" },
+  twistLine: { color: "#9A6B0C", fontSize: 11, textAlign: "center", marginTop: 1, fontWeight: "800" },
   twistTag: { position: "absolute", top: -6, left: -6, backgroundColor: UI.gold, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: UI.cream },
   twistTagText: { color: UI.goldInk, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   devBox: { backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12, padding: 8, gap: 6 },
