@@ -17,6 +17,7 @@ const BY_PATH: Record<string, number> = {
   "/quickplay": BG_HOME,
   "/career": BG_CAREER,
   "/team": BG_CAREER,
+  "/records": BG_HOME,
 };
 
 export function DestinationBackdrop() {

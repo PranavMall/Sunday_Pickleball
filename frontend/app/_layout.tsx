@@ -39,6 +39,7 @@ export default function RootLayout() {
               <Stack.Screen name="career" options={DEST} />
               <Stack.Screen name="team" options={DEST} />
               <Stack.Screen name="training" options={DEST} />
+              <Stack.Screen name="records" options={DEST} />
               <Stack.Screen name="quickplay" options={{ contentStyle: { backgroundColor: "transparent" } }} />
             </Stack>
             </ThemeProvider>

@@ -9,7 +9,7 @@ import { meta } from "@/src/game/meta";
 import { PARTNER_IDS, PARTNER_REWARDS, PARTNERS, TRAINING_MODES } from "@/src/game/meta/economyConfig";
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
-import { HeaderActions, Overlay } from "@/src/ui/HeaderActions";
+import { Overlay } from "@/src/ui/HeaderActions";
 import { Badge, Card, fmtHalf, GoldButton, Kicker, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
@@ -27,14 +27,10 @@ export default function Training() {
 
   return (
     <DestinationScreen
-      active="training"
+      active="home"
       dim
       testID="training-screen"
-      header={
-        <>
-          <HeaderActions save={save} onChange={refresh} />
-        </>
-      }
+      header={null}
     >
       <Card style={{ padding: 10 }} testID="training-with">
         <Kicker style={{ fontSize: 11 }}>TRAINING WITH</Kicker>

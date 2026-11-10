@@ -5,6 +5,7 @@ import { PARTNER_DIFFICULTY } from "../config/ai";
 import { PLAYER_NAME_POOL, TEAM_NAME_POOL, teamCode } from "../services/profile";
 import { quickPlaySetup, careerSetup, showNewCourt, showTalk, talkRival, trainingSetup } from "../meta/matchSetup";
 import { TROPHY_SHORT } from "../meta/trophies";
+import { homeCareerView, trainingTileText } from "../meta/home";
 declare const __dirname: string;
 import { CAREER_MATCH_IDS, CAREER_MATCHES, CAREER_REWARDS, MATCH_TALK, PARTNERS, careerMatch, careerRewardPreview } from "../meta/economyConfig";
 import { hasUnread, inboxMessages } from "../meta/inbox";
@@ -120,6 +121,21 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   ok(looks.size === 24 && missing.length === 0, `every look used by Career has a face_ asset (${looks.size} looks; missing ${missing.join(",") || "none"})`);
   ok(talkRival(careerMatch("mumbai.local.05"), () => false).partnerId === "matz" && talkRival(careerMatch("mumbai.local.05"), () => true).look === "rival_man1_juh", "Match 5 talk: Matz portrait unless signed (then the reserve's face)");
   ok(showTalk({ cleared: [], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: ["mumbai.local.05"], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: [], talkSeen: ["mumbai.local.05"] }, "mumbai.local.05"), "talk shows on first play only (skipped on a replay / once seen)");
+}
+
+{
+  // ---- Release 10.2 Part B ----
+  const fs3 = require("fs");
+  const path3 = require("path");
+  const barSrc = fs3.readFileSync(path3.join(__dirname, "../../../src/ui/DestinationBar.tsx"), "utf8");
+  const items = barSrc.slice(barSrc.indexOf("const ITEMS"), barSrc.indexOf("];", barSrc.indexOf("const ITEMS")));
+  const labels = [...items.matchAll(/label: "(\w+)"/g)].map((m: any) => m[1]);
+  ok(labels.join() === "Team,Passport,Home,Locker,Records" && labels[2] === "Home" && !labels.includes("Training") && !labels.includes("Career"), "DestinationBar: Team · Passport · Home · Locker · Records, Home in the middle");
+  const cv = (n: number) => homeCareerView({ career: { cleared: CAREER_MATCH_IDS.slice(0, n) as any, nextMatchId: CAREER_MATCH_IDS[Math.min(n, 11)], firstClearWins: n, firstClearLosses: 0, trophies: {}, talkSeen: [] } });
+  ok(cv(0).button === "START CAREER", "Home card: START CAREER with nothing cleared");
+  ok(cv(8).button === "PLAY MATCH 9" && cv(8).title === "Match 9 · Final", "Home card: PLAY MATCH 9 with Matches 1–8 cleared");
+  ok(cv(12).allCleared && cv(12).title === "Mumbai champions!" && cv(12).button === "REPLAY A MATCH", "Home card: all 12 cleared → Mumbai champions! + REPLAY A MATCH");
+  ok(trainingTileText(0) === "2 left" && trainingTileText(2) === "Done today", "Training tile: 2 left / Done today");
 }
 
 {

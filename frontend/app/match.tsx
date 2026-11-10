@@ -167,6 +167,8 @@ export default function Match() {
   const armedRef = useRef(false); // one armed swipe per physical gesture
   const gestureT0 = useRef(0); // touch-down time (ms) for the stable speed signal
 
+  // Settings → Vibration, read once per match (never per contact).
+  const hapticsOn = useMemo(() => !meta.loaded || meta.doc.settings.haptics, [sim]);
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
   // Sprite animation state for the near pair: one preallocated animator per match.
   const spriteAnim = useMemo(() => new NearSpriteAnimator(), [sim]);
@@ -289,7 +291,7 @@ export default function Match() {
         sfx.playForContact(ev);
         spriteAnim.onContact(ev, sim);
         farAnim.onContact(ev, sim);
-        if (ev.slot === humanSlot && Platform.OS !== "web") {
+        if (ev.slot === humanSlot && hapticsOn && Platform.OS !== "web") {
           Haptics.impactAsync(
             ev.power > 0.55 ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
           ).catch(() => {});
@@ -324,7 +326,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, matchId, match.setup, spriteAnim, farAnim]);
+  }, [sim, config, difficulty, humanSlot, hapticsOn, matchId, match.setup, spriteAnim, farAnim]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time

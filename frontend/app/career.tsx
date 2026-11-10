@@ -12,12 +12,13 @@ import {
   careerMatch,
   careerRewardPreview,
 } from "@/src/game/meta/economyConfig";
-import { partnerOf, showNewCourt, showTalk } from "@/src/game/meta/matchSetup";
+import { partnerOf, showNewCourt } from "@/src/game/meta/matchSetup";
 import { meta } from "@/src/game/meta";
 import { levelView } from "@/src/game/meta/levels";
 import { teamCode } from "@/src/game/services/profile";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
-import { HeaderActions } from "@/src/ui/HeaderActions";
+import { InboxButton } from "@/src/ui/HeaderActions";
+import { playCareerMatch } from "@/src/ui/careerNav";
 import { Badge, Card, chemOf, Coin, GoldButton, Kicker, MeterRow, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 import { CourtThumb } from "@/src/ui/CourtThumb";
@@ -42,9 +43,9 @@ export default function Career() {
 
   return (
     <DestinationScreen
-      active="career"
+      active="passport"
       testID="career-screen"
-      header={<HeaderActions save={save} onChange={refresh} />}
+      header={<InboxButton save={save} onChange={refresh} />}
     >
       <JourneyCard cleared={cleared} nextOpen={nextOpen} picked={replay ? next.id : null} playerName={identity?.playerName ?? ""} onPick={setPickedId} />
 
@@ -128,11 +129,7 @@ export default function Career() {
             big
             testID="play-match"
             label={replay ? "REPLAY MATCH" : "PLAY MATCH"}
-            onPress={() =>
-              save && !replay && showTalk(save.career, next.id)
-                ? router.push({ pathname: "/talk", params: { careerId: next.id } })
-                : router.push({ pathname: "/match", params: { mode: "career", careerId: next.id } })
-            }
+            onPress={() => playCareerMatch(router, save, next.id)}
             style={{ marginTop: 10 }}
           />
         ) : (

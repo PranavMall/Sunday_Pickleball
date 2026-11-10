@@ -1,5 +1,4 @@
-// Header actions shared by every destination: Inbox + Stats icon buttons and
-// their overlays (no animation, no server).
+// Inbox button (Passport), Stats body (Records) and the shared Overlay.
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -15,16 +14,15 @@ import { getMatchResults, type MatchResultRecord } from "@/src/game/services/mat
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { Badge, Card, chemOf, Coin, IconSquare, MeterRow, SERIF, UI } from "./kit";
 
-export function HeaderActions({ save, onChange }: { save: SaveDoc | null; onChange?: () => void }) {
-  const [open, setOpen] = useState<null | "inbox" | "stats">(null);
+// The Inbox icon (Passport only, top-right): red dot + the Inbox overlay.
+export function InboxButton({ save, onChange }: { save: SaveDoc | null; onChange?: () => void }) {
+  const [open, setOpen] = useState(false);
   const unread = !!save && hasUnread(save);
   return (
     <View style={styles.row}>
-      <IconSquare testID="header-inbox" icon="mail" label={unread ? "Inbox, unread messages" : "Inbox"} dot={unread} onPress={() => setOpen("inbox")} />
-      <IconSquare testID="header-stats" icon="bar-chart" label="Stats" onPress={() => setOpen("stats")} />
-      <Overlay visible={open !== null} title={open === "inbox" ? "Inbox" : "Stats"} onClose={() => setOpen(null)} testID={`${open ?? "none"}-overlay`}>
-        {open === "inbox" ? <InboxBody save={save} onChange={onChange} onClose={() => setOpen(null)} /> : null}
-        {open === "stats" ? <StatsBody save={save} onClose={() => setOpen(null)} /> : null}
+      <IconSquare testID="header-inbox" icon="mail" label={unread ? "Inbox, unread messages" : "Inbox"} dot={unread} onPress={() => setOpen(true)} />
+      <Overlay visible={open} title="Inbox" onClose={() => setOpen(false)} testID="inbox-overlay">
+        {open ? <InboxBody save={save} onChange={onChange} onClose={() => setOpen(false)} /> : null}
       </Overlay>
     </View>
   );
@@ -70,8 +68,8 @@ function InboxBody({ save, onChange, onClose }: { save: SaveDoc | null; onChange
   );
 }
 
-function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => void }) {
-  const router = useRouter();
+// Stats (Records → Stats tab).
+export function StatsBody({ save }: { save: SaveDoc | null }) {
   const [log, setLog] = useState<MatchResultRecord[] | null>(null);
   useEffect(() => {
     getMatchResults().then(setLog);
@@ -104,16 +102,6 @@ function StatsBody({ save, onClose }: { save: SaveDoc | null; onClose: () => voi
       <MeterRow icon="star" value={lv.frac * 100} num={`Lv ${lv.level} · ${lv.text}`} color={UI.growth} testID="stats-growth" />
       {lv.max ? <Text style={styles.partnerSub}>{lv.max}</Text> : null}
       <MeterRow icon="heart" value={chem} color={UI.chem} testID="stats-chem" />
-      <Pressable
-        testID="stats-history-link"
-        style={styles.link}
-        onPress={() => {
-          onClose();
-          router.push("/history");
-        }}
-      >
-        <Text style={styles.linkText}>Match History ›</Text>
-      </Pressable>
     </View>
   );
 }
@@ -181,6 +169,4 @@ const styles = StyleSheet.create({
   partner: { flexDirection: "row", alignItems: "center", marginTop: 14 },
   partnerName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 18 },
   partnerSub: { color: UI.inkSoft, fontSize: 13 },
-  link: { marginTop: 14, backgroundColor: UI.creamDeep, borderRadius: 12, paddingVertical: 14, alignItems: "center", borderWidth: 1, borderColor: UI.line },
-  linkText: { color: UI.ink, fontSize: 16, fontWeight: "800" },
 });

@@ -10,7 +10,7 @@ import { levelView } from "@/src/game/meta/levels";
 import { pairingKey } from "@/src/game/meta/metaStore";
 import { discoveredPartners, rosterStatus, type RosterStatus } from "@/src/game/meta/team";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
-import { HeaderActions, Overlay } from "@/src/ui/HeaderActions";
+import { Overlay } from "@/src/ui/HeaderActions";
 import { Badge, Card, chemOf, Coin, Hearts, Kicker, MeterRow, SERIF, UI, type IoniconName } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
@@ -72,7 +72,6 @@ export default function Team() {
             <Coin size={22} />
             <Text style={styles.coinText}>{save?.coins ?? "–"}</Text>
           </View>
-          <HeaderActions save={save} onChange={refresh} />
         </View>
       }
     >

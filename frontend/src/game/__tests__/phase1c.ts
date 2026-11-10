@@ -392,9 +392,25 @@ async function release101() {
   }
 }
 
+// Release 10.2 Part B: settings.haptics.
+async function release102B() {
+  const { s, mem } = await fresh();
+  ok(s.doc.settings.haptics === true, "settings.haptics defaults to on");
+  ok(s.setHaptics(false) && !s.setHaptics(false), "setHaptics writes once per change");
+  await s.flush();
+  const s2 = new MetaStore({ getItem: async (k) => mem.get(k) ?? null, setItem: async (k, v) => void mem.set(k, v) }, () => 0.5);
+  await s2.load(T0);
+  ok(s2.doc.settings.haptics === false, "settings.haptics survives a reload");
+  const old = new Map<string, string>([["pb.meta", JSON.stringify({ schemaVersion: 1, guestId: "g_old" })]]);
+  const so = new MetaStore({ getItem: async (k) => old.get(k) ?? null, setItem: async (k, v) => void old.set(k, v) }, () => 0.5);
+  await so.load(T0);
+  ok(so.doc.settings.haptics === true, "old save without settings loads with haptics on");
+}
+
 (async () => {
   await commit4();
   await release101();
+  await release102B();
   await commit5();
   await sessionD();
   commit9();

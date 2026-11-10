@@ -12,6 +12,7 @@ import { meta } from "@/src/game/meta";
 import { levelView } from "@/src/game/meta/levels";
 import { Overlay } from "@/src/ui/HeaderActions";
 import { DIM } from "@/src/ui/DestinationScreen";
+import { DestinationBar } from "@/src/ui/DestinationBar";
 import { Badge, Card, Coin, IconSquare, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
@@ -150,6 +151,7 @@ export default function QuickPlay() {
           );
         })}
       </Overlay>
+      <DestinationBar active="home" />
     </View>
   );
 }

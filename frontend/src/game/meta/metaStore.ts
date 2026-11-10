@@ -88,6 +88,7 @@ export interface SaveDoc {
   milestones: Record<string, boolean>;
   daily: { dayKey: string; training: number; scrimmage: number; quick: number };
   inboxRead: string[];
+  settings: { haptics: boolean };
   rewardIds: string[]; // every applied rewardId (idempotency)
   ledger: LedgerEntry[]; // recent history (LEDGER_KEEP)
 }
@@ -184,6 +185,7 @@ export function freshSave(now: number, rand: () => number = Math.random): SaveDo
     milestones: {},
     daily: { dayKey: dayKeyOf(now), training: 0, scrimmage: 0, quick: 0 },
     inboxRead: [],
+    settings: { haptics: true },
     rewardIds: [],
     ledger: [],
   };
@@ -259,6 +261,7 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
       quick: num(dly.quick, 0),
     },
     inboxRead: strArr(r.inboxRead),
+    settings: { haptics: !(r.settings && typeof r.settings === "object" && r.settings.haptics === false) },
     rewardIds: strArr(r.rewardIds),
     ledger: Array.isArray(r.ledger) ? r.ledger.slice(-LEDGER_KEEP) : [],
   };
@@ -336,6 +339,15 @@ export class MetaStore {
   dailyUsage(now: number): { training: number; scrimmage: number } {
     this.rollDay(now);
     return { training: this.doc.daily.training, scrimmage: this.doc.daily.scrimmage };
+  }
+
+  // Settings → Vibration (never written during a rally).
+  setHaptics(on: boolean): boolean {
+    const d = this.doc as SaveDoc;
+    if (d.settings.haptics === on) return false;
+    d.settings.haptics = on;
+    this.save();
+    return true;
   }
 
   // Quick Play matches that still pay Coins today.

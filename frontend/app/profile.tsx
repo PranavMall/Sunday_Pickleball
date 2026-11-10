@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { IdentityEditor } from "@/src/components/identity-editor";
 import { DEFAULT_PLAYER, DEFAULT_TEAM, getIdentity, saveIdentity } from "@/src/game/services/profile";
 import { makeStyles } from "@/src/theme";
+import { DestinationBar } from "@/src/ui/DestinationBar";
 
 export default function Profile() {
   const router = useRouter();
@@ -59,6 +60,7 @@ export default function Profile() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <DestinationBar active="home" />
     </View>
   );
 }
