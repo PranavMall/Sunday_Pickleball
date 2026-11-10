@@ -1,0 +1,40 @@
+{
+  "summary": "Release 10.2 FRONTEND-only test (Expo web, 375x667, public URL, fresh localStorage per scenario). PASS: identity prompt -> Skip -> welcome-tutorial (chips, '+100 Coins when you finish', LEARN THE BASICS not truncated, 'I know pickleball', close ✕ 44x44, backdrop closes); 'I know pickleball' hides menu-tutorial; ✕ keeps the tile; tutorial-tile-hide hides it and it stays hidden after reload; Home layout (coins pill left, gear 44x44 right, logo, name banner -> /profile, career card 'CAREER · COMMUNITY CUP' / 'Match 1' / START CAREER, Quick Play, Training '2 left', home-inbox-dot); Home fits 667 with no scroll. Bottom bar 5 items, Locker toast 'Locker — coming soon' disappears after ~1.6 s, no Stats icon, header-inbox only on Passport. Records tabs, shelf-mumbai with Share, short names, no WON, trophy-popup LOCKED + 'Win Match 3, the Community Cup final.', stats-body, history-screen; /cabinet -> /records?tab=trophies and /history -> /records?tab=history. Settings: vibration toggle saves across reload, Edit name -> /profile, Replay -> tutorial (from=settings), version 'Pickle-Ballers 1.0.0', ✕ closes. Match 1 pop-up shows once (Play Match 1 -> talk-screen; LEARN -> tutorial from=match1), not shown again, also not after reload. Tutorial match: 'TUTORIAL · 1 OF 6', Skip ›, six chips, partner intro lines, the 300 ms lock after typing works, pause menu only Resume + Leave tutorial, Leave goes Home. Passport: NEXT MATCH / Match N of 12, nm-stage, codes, NEW tag, Coins/Fans, dev-jump 5 -> TWIST + 'You lead 3–0', 9 -> FINAL + Mahabaleshwar thumb + NEW, 12 -> TWIST + FINAL + 'First to 15'. Quick Play / Profile / Training show the bar with Home in gold. ISSUES: (1) HIGH: Skip › and Pause cannot be tapped while the partner's dialogue is on screen (the full-screen dialogue-tap sits on top of them); (2) Home -> Quick Play/Profile/Training -> nav-home leaves 2 Home screens on the stack; (3) '…' truncation with long names (welcome kicker, Home banner name); (4) match screen is 410px wide on web (35px sideways scroll). No deprecated Expo packages found (no expo-av, expo-barcode-scanner or expo-background-fetch).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TutorialLayer / DialogueScene", "issue": "While a partner lesson or intro line is showing, the tutorial-lesson wrapper (StyleSheet.absoluteFill, rendered AFTER the Skip button) plus dialogue-tap (a full-screen Pressable) cover Skip › and the pause-button. elementFromPoint at the centre of Skip and Pause returns 'dialogue-tap'. A real click on Skip times out, and a forced tap only moves the dialogue forward. Skip and Pause only work between lessons. Reference: src/ui/TutorialLayer.tsx:47-57", "testID": "tutorial-skip, pause-button", "priority": "HIGH"},
+      {"component": "DestinationBar nav-home from pushed screens", "issue": "Home -> Quick Play, Profile, Training or Settings>Edit name (all router.push) -> nav-home calls router.replace('/'). The old Home stays mounted underneath, so 2 main-menu-screen are in the DOM (seen after Profile and after Quick Play). Android back would land on a second Home, and every Home testID is duplicated. Reference: src/ui/DestinationBar.tsx:54", "testID": "nav-home", "priority": "MEDIUM"},
+      {"component": "Long-name truncation", "issue": "With an 18-char name (NAME_MAX) the welcome kicker 'WELCOME, <NAME>' (numberOfLines=1, letterSpacing 3) and the Home banner name (home-player-name, numberOfLines=1) show '…'. Estimate: the kicker truncates for any player name over about 13 characters. The spec says never show '…'. Reference: src/ui/TutorialOffer.tsx:17, app/index.tsx:116", "testID": "welcome-tutorial, home-player-name", "priority": "MEDIUM"},
+      {"component": "Match screen horizontal overflow (web)", "issue": "The court background DIV/IMG is 445px wide at x=-34, so document scrollWidth is 410 at a 375 viewport and the screen can shift sideways on web (seen in a screenshot). Other screens are 375 wide.", "testID": "match-screen", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings", "issues": ["The Vibration Switch tap target is 40x20. Only the switch reacts; the 52px row does not. Make the whole row toggle it."]},
+      {"screen": "Passport next-match-card", "issues": ["twist-line ('You lead 3–0' / 'First to 15') is gold text on a cream card: low contrast.", "The player side shows the team CODE and then the PLAYER name ('PIC' / 'Player'), while the rival side shows CODE and then TEAM name. Please confirm that is intended ('both teams CODE then name')."]},
+      {"screen": "Home", "issues": ["The career-card kicker is 10.5px and the Tutorial tile sub '2 min · +100' is 11px; both are small for mobile."]},
+      {"screen": "Training", "issues": ["No back chevron at the top, unlike Quick Play. Only the bottom-bar Home leaves the screen."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_20.json"],
+  "action_items": [
+    "HIGH: make Skip › and Pause tappable while the tutorial dialogue shows. Either render the Skip/Pause layer after (above) tutorial-lesson, or limit the dialogue-tap area so it does not cover the top bar (src/ui/TutorialLayer.tsx, src/ui/DialogueScene.tsx).",
+    "MEDIUM: on nav-home from pushed screens (quickplay, profile, training), use router.dismissAll() (or back() when the screen below is Home) instead of replace('/'), so Home is not mounted twice (src/ui/DestinationBar.tsx:54).",
+    "MEDIUM: stop '…' truncation for long names. Let the welcome kicker wrap or drop the name from it; same for home-player-name (wrap to 2 lines or scale down).",
+    "LOW: clip the match-screen background to the viewport (overflow hidden), so the page cannot scroll sideways on web.",
+    "LOW: make the whole Settings Vibration row toggle the switch (>=44px target); raise the contrast of twist-line."
+  ],
+  "critical_code_review_comments": [
+    "DestinationBar.go(): 'else if (it.key === \"home\" && router.canGoBack()) router.replace(\"/\")' causes the duplicate-Home stack.",
+    "TutorialLayer renders tutorial-lesson (absoluteFill) last, which puts it above Skip and the parent's pause button.",
+    "The championship trophy's testID is 'trophy-district' while its label is 'Championship'. A naming mismatch only."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (offline app)", "frontend": "~92% (all listed flows work; 1 high and 2 medium UI bugs)"},
+  "seed_data_creation": "None. Only browser localStorage in throwaway Playwright contexts.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Offline Expo app; all state is in localStorage. Each browser_automation run is a fresh context, so the identity prompt appears; tap 'Skip for now'. Pushed screens (profile/quickplay/training) keep Home mounted, so use ':visible' selectors. The tutorial match takes ~2-4 s behind a loading-cover before the dialogue appears. dev-jump-N buttons on /career change the save's next match.",
+  "rca_of_issue": "Skip/Pause blocked: in TutorialLayer, <View absoluteFill testID=tutorial-lesson> holds a full-screen Pressable (dialogue-tap) and is a later sibling of the Skip Pressable, so it is on top of it and takes all touches. Duplicate Home: Home push()es /quickplay, /profile and /training; DestinationBar then replace('/')s the top route, leaving the original Home below."
+}

@@ -1,0 +1,33 @@
+{
+  "summary": "Release 10.2 retest (frontend only, Expo web, 375x667 and 320x640, public URL, fresh localStorage for each run). PASS: (1) HIGH fix: while the partner dialogue shows, elementFromPoint at the centre of Skip and Pause hits tutorial-skip and pause-button (tutorial-lesson now starts at y=60). A real (not forced) click on Pause opens the pause menu (Resume / Leave tutorial). A real click on Skip › leaves to Home with 1 Home screen. Tapping the dialogue still moves it forward. (2) MEDIUM fix: Home -> Quick Play / Training / Profile / Settings>Edit name -> nav-home returns to '/' with exactly 1 main-menu-screen. (3) MEDIUM fix: 'Venkataraghavan R.' / 'Sea Link Slammers': the WELCOME kicker wraps to 2 lines, and home-player-name and home-team-name show in full with no '…' at 375 and 320 widths. (4) Vibration: tapping the icon or label area of settings-vibration toggles it, the switch toggles too, and the OFF state persists after reload (pb.meta settings.haptics=false). (5) Regression: Records tabs trophies/stats/history switch content; Passport next-match-card shows 'Match 1 of 12 / Community Cup / BAN Bandra Bashers / +100 Coins / +20 Fans / NEW / PLAY MATCH'; Match 1 pop-up shows once, 'Play Match 1' goes to /talk, and START CAREER after reload goes straight to /talk with no pop-up. NEW ISSUES: (a) MEDIUM: Home -> Profile -> nav-passport (replace) -> nav-home still leaves 2 Home screens, because dismissAll only runs when active==='home'. (b) LOW: Pause -> Resume during the partner dialogue restarts it at line 1 (seen: on line 2 'Six shots and you're ready.', after Resume it showed line 1 again). (c) LOW: at 320 width the welcome button shows 'LEARN THE BASI…'. No deprecated Expo packages in the files reviewed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DestinationBar nav-home after a push then a tab switch", "issue": "Home -> Profile (push) -> nav-passport (router.replace) -> nav-home leaves 2 main-menu-screen in the DOM. On Passport active='passport', so go() calls router.replace('/') instead of dismissAll, and the original Home stays under it. The same thing happens for any tab reached from Profile, Quick Play or Training, and for the Android BackHandler (router.replace('/')). Fix idea: for the home key, always call router.dismissAll() when router.canDismiss() and only replace if the root is not '/'; or reset with router.dismissTo('/'). Reference: src/ui/DestinationBar.tsx:44,53-54", "testID": "nav-home", "priority": "MEDIUM"},
+      {"component": "TutorialLayer pause/resume", "issue": "The lesson View is removed while paused (props.lines is null), so on Resume DialogueScene remounts and starts again at line 1. Seen: on line 2, Pause -> Resume showed line 1 again. Players must tap through lines they already read. Reference: src/ui/TutorialLayer.tsx:44-47 (and the caller that clears lines on pause)", "testID": "tutorial-lesson", "priority": "LOW"},
+      {"component": "TutorialOffer LEARN THE BASICS at 320 width", "issue": "At a 320px viewport the GoldButton label shows 'LEARN THE BASI…'. It is fine at 375.", "testID": "welcome-tutorial-learn", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings / Records", "issues": ["accessibilityState checked/selected is not output as aria-checked/aria-selected on web (both null) for settings-vibration and the records-tab-* items. Use the aria-checked / aria-selected props, or check that native a11y still announces the state."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_21.json"],
+  "action_items": [
+    "MEDIUM: DestinationBar go()/BackHandler: make Home always unwind the stack (dismissAll when canDismiss, then replace only if needed), so Home -> Profile -> Passport -> Home leaves a single Home.",
+    "LOW: keep the partner dialogue line index across Pause/Resume (do not unmount DialogueScene while paused, or pass a startIndex).",
+    "LOW: let the LEARN THE BASICS label shrink or wrap on 320px screens."
+  ],
+  "critical_code_review_comments": [
+    "DestinationBar.tsx header comment says 'only one is mounted at a time', but that is not true after a push followed by a tab replace.",
+    "SettingsOverlay: `meta.setHaptics(!haptics) && onChange()` is fine because setHaptics returns boolean. Switch is wrapped in pointerEvents='none', so the whole row handles taps (verified)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "92% (all 5 requested items pass; 1 related MEDIUM nav edge case and 2 LOW issues found)"},
+  "seed_data_creation": "None (localStorage only, fresh browser context per run)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Offline Expo app; all state is in localStorage (pb.meta). Fresh context -> identity prompt (identity-skip-button). Home Quick Play testID is menu-quick-match (not menu-quickplay). Use ':visible' selectors because pushed screens keep Home mounted. The tutorial dialogue appears ~2-4 s after welcome-tutorial-learn. To repro the nav issue: menu-profile -> nav-passport -> nav-home, then count main-menu-screen (it is 2).",
+  "rca_of_issue": "nav-home: dismissAll is only on the else-branch for key==='home' && active==='home'. From any non-home tab, router.replace('/') swaps the top screen while the pushed-from Home is still at the stack root."
+}
