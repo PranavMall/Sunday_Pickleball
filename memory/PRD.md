@@ -165,3 +165,10 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - New LOB / NET-BACK buttons (TacticalButtons.tsx, segment cooldown ring).
 - Team grid + partner pop-up + trimmed Partner stats card.
 - Tests: phase1a 163, phase1b 74, phase1c 123, run.ts 265; md5 b3 097a6010.. / shotMix 12388643.. unchanged.
+
+## Release 10.2 (commits aad7b53 A · 825d77c B · 83df137 C) — STOPPED for phone test
+- A: court_strawberry.webp for Mahabaleshwar (keyed + 1 retry), NEXT MATCH plays Match talk, new Next Match card (TWIST/NEW tags, twist.short), "Try again" goal after loss, trophy pop-ups + TROPHY_SHORT, dialogue 300 ms tap lock, twist pill until first serve, shareMessage (src/game/meta/share.ts, STORE_LINK empty).
+- B: bar Team · Passport · Home(raised) · Locker · Records; new Home; Records tabs (Trophies/Stats/History; /cabinet,/history redirect); Settings overlay (settings.haptics); Inbox only on Passport.
+- C: Tutorial mode (TUTOR personality row in ai.ts, src/game/meta/tutorial.ts TutorialRun), save.tutorial {done,hidden,steps,doneAt,careerPrompted}, entries: welcome step 2, Home tile, Match 1 prompt (once), Settings replay; +100 Coins once; tutorial_* analytics events.
+- md5 after A, B, C: 097a601037a7adc4e88b4ac8994948ea / 1238864370f30941b8b7966da795b3e6 (baseline).
+- Known low: LEARN THE BASICS label truncates at 320 px width (fine at 375); match screen web horizontal overflow (pre-existing).
