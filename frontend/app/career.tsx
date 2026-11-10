@@ -12,9 +12,8 @@ import {
   careerMatch,
   careerRewardPreview,
 } from "@/src/game/meta/economyConfig";
-import { partnerOf, showTalk } from "@/src/game/meta/matchSetup";
+import { partnerOf, showNewCourt, showTalk } from "@/src/game/meta/matchSetup";
 import { meta } from "@/src/game/meta";
-import { TwistChip } from "@/src/ui/TwistChip";
 import { levelView } from "@/src/game/meta/levels";
 import { teamCode } from "@/src/game/services/profile";
 import { DestinationScreen } from "@/src/ui/DestinationScreen";
@@ -53,55 +52,51 @@ export default function Career() {
         <View style={styles.nmHead}>
           <Kicker>{replay ? "REPLAY" : "NEXT MATCH"}</Kicker>
           <Text style={styles.nmOf} testID="next-match-number">Match {next.number} of {CAREER_MATCHES.length}</Text>
+          <View style={{ flex: 1 }} />
           {next.round ? (
             <View style={styles.roundBadge} testID="badge-round">
               <Text style={styles.roundText}>{next.round}</Text>
             </View>
           ) : null}
-          <View style={{ flex: 1 }} />
-          <Text style={styles.nmStage} numberOfLines={1} testID="nm-stage">{stage}</Text>
         </View>
+        <Text style={styles.nmStage} numberOfLines={1} testID="nm-stage">{stage}</Text>
         <View style={styles.nmBody}>
           <View style={{ flex: 1 }}>
             <View style={styles.vsRow}>
               <View style={styles.side}>
                 <Badge name={identity?.playerName ?? "P"} color={PLAYER_BADGE_COLOR} size={44} />
-                <Text style={styles.sideName} numberOfLines={1} adjustsFontSizeToFit testID="nm-player-name">{identity?.playerName ?? ""}</Text>
                 <Text style={styles.code} testID="nm-team-code">{myCode}</Text>
+                <Text style={styles.sideName} numberOfLines={2} testID="nm-player-name">{identity?.playerName ?? ""}</Text>
               </View>
               <Text style={styles.vs}>VS</Text>
               <View style={styles.side}>
                 <Badge name={next.rival} color={next.color} size={44} testID="rival-badge" />
                 <Text style={styles.code} testID="rival-code">{next.code}</Text>
-                <Text style={styles.rivalFull} numberOfLines={2} testID="rival-name">{next.rival}</Text>
+                <Text style={styles.sideName} numberOfLines={2} testID="rival-name">{next.rival}</Text>
                 {next.namedRival ? (
                   <View style={styles.rivalTag} testID="badge-rival">
                     <Text style={styles.rivalTagText}>RIVAL TEAM</Text>
-                  </View>
-                ) : null}
-                {next.twist ? (
-                  <View style={{ marginTop: 4, alignItems: "center" }}>
-                    <TwistChip twist={next.twist} />
-                    <Text style={styles.twistLine} testID="twist-line">{next.twist.line}</Text>
                   </View>
                 ) : null}
               </View>
             </View>
             {next.enabled ? (
             <View style={styles.rewards} testID="reward-preview">
+              {reward.coins > 0 ? (
               <View style={styles.reward}>
                 <Coin size={26} />
                 <View style={{ marginLeft: 6, flexShrink: 1 }}>
                   <Text style={styles.rewardNum} numberOfLines={1} testID="reward-coins">+{reward.coins}</Text>
-                  <Text style={styles.rewardSub}>Coins ({reward.coinParts.join(" + ")})</Text>
+                  <Text style={styles.rewardSub}>Coins</Text>
                 </View>
               </View>
+              ) : null}
               {reward.fans > 0 ? (
               <View style={styles.reward}>
                 <Ionicons name="people" size={24} color={UI.fans} />
                 <View style={{ marginLeft: 6, flexShrink: 1 }}>
                   <Text style={styles.rewardNum} testID="reward-fans">+{reward.fans}</Text>
-                  <Text style={styles.rewardSub}>Fans ({reward.fanParts.join(" + ")})</Text>
+                  <Text style={styles.rewardSub}>Fans</Text>
                 </View>
               </View>
               ) : null}
@@ -112,13 +107,19 @@ export default function Career() {
             <View style={{ marginLeft: 8, alignItems: "center", width: width < 385 ? 96 : 118 }}>
               <View>
                 <CourtThumb court={next.court} width={width < 385 ? 96 : 118} />
-                {save && !(save.courtsPlayed ?? []).includes(next.court) ? (
+                {next.twist ? (
+                  <View style={styles.twistTag} testID="court-twist">
+                    <Text style={styles.twistTagText}>TWIST</Text>
+                  </View>
+                ) : null}
+                {showNewCourt(cleared, next, replay) ? (
                   <View style={styles.newTag} testID="court-new">
                     <Text style={styles.newText}>NEW</Text>
                   </View>
                 ) : null}
               </View>
               <Text style={styles.courtName} testID="court-name">{COURT_NAMES[next.court]}</Text>
+              {next.twist ? <Text style={styles.twistLine} testID="twist-line">{next.twist.short}</Text> : null}
             </View>
           ) : null}
         </View>
@@ -209,7 +210,9 @@ export default function Career() {
 const styles = StyleSheet.create({
   pad: { padding: 10 },
   maxLine: { color: UI.muted, fontSize: 12, fontWeight: "700", marginLeft: 22, marginTop: 2 },
-  twistLine: { color: UI.inkSoft, fontSize: 10.5, textAlign: "center", marginTop: 2, fontWeight: "600" },
+  twistLine: { color: UI.goldDeep, fontSize: 11, textAlign: "center", marginTop: 1, fontWeight: "800" },
+  twistTag: { position: "absolute", top: -6, left: -6, backgroundColor: UI.gold, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: UI.cream },
+  twistTagText: { color: UI.goldInk, fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   devBox: { backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 12, padding: 8, gap: 6 },
   devTitle: { color: "#9fe", fontSize: 11, fontWeight: "700" },
   devRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
@@ -218,19 +221,17 @@ const styles = StyleSheet.create({
   soon: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 58, borderRadius: 16, marginTop: 10, backgroundColor: UI.creamDeep, borderWidth: 1, borderColor: UI.line },
   soonText: { color: UI.muted, fontSize: 20, fontWeight: "900", letterSpacing: 1 },
   code: { color: UI.ink, fontSize: 15, fontWeight: "900", letterSpacing: 1.5, marginTop: 2 },
-  rivalFull: { color: UI.inkSoft, fontSize: 11, textAlign: "center", alignSelf: "stretch" },
   newTag: { position: "absolute", top: -6, right: -6, backgroundColor: UI.red, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1.5, borderColor: UI.cream },
   newText: { color: "#fff", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
-  nmHead: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  nmHead: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 22 },
   nmOf: { color: UI.inkSoft, fontSize: 13 },
-  nmStage: { color: UI.inkSoft, fontSize: 13 },
+  nmStage: { color: UI.inkSoft, fontSize: 12, marginTop: 1 },
   roundBadge: { backgroundColor: UI.gold, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   roundText: { color: UI.goldInk, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
   nmBody: { flexDirection: "row", marginTop: 8 },
   vsRow: { flexDirection: "row", alignItems: "flex-start" },
   side: { flex: 1, alignItems: "center" },
-  sideName: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 15, marginTop: 4, textAlign: "center" },
-  sideSub: { color: UI.inkSoft, fontSize: 12, textAlign: "center" },
+  sideName: { color: UI.inkSoft, fontSize: 11, textAlign: "center", alignSelf: "stretch" },
   vs: { color: UI.inkSoft, fontFamily: SERIF, fontWeight: "700", fontSize: 16, marginTop: 16, marginHorizontal: 2 },
   rivalTag: { backgroundColor: "#7C8EA3", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, marginTop: 3 },
   rivalTagText: { color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 1 },

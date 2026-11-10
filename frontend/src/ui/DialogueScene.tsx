@@ -3,7 +3,7 @@
 // while typing → show it in full; otherwise → next line (150 ms fade / slide).
 // After the last line a tap calls onDone. No earlier lines stay on screen.
 import { Image } from "expo-image";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
@@ -22,6 +22,7 @@ export interface DialogueLine {
 }
 
 const CHAR_MS = 30;
+const LOCK_MS = 300;
 
 export function DialogueScene({ lines, onDone, bottom = 16 }: { lines: DialogueLine[]; onDone: () => void; bottom?: number }) {
   const [index, setIndex] = useState(0);
@@ -36,9 +37,17 @@ export function DialogueScene({ lines, onDone, bottom = 16 }: { lines: DialogueL
     return () => clearTimeout(t);
   }, [line, shown, full]);
 
+  // A line that just finished typing (by itself or by a tap) ignores taps for
+  // LOCK_MS, so a quick tap can't skip it unread.
+  const doneAt = useRef(0);
+  useEffect(() => {
+    if (line && shown >= full) doneAt.current = Date.now();
+  }, [line, shown, full]);
+
   const onTap = () => {
     if (!line) return onDone();
     if (typing) return setShown(full);
+    if (Date.now() - doneAt.current < LOCK_MS) return;
     if (index + 1 >= lines.length) return onDone();
     setIndex(index + 1);
     setShown(0);

@@ -282,7 +282,7 @@ function commit9() {
   const courtKeys = new Set([...vBlock.matchAll(/^  (\w+): \{/gm)].map((m) => m[1]));
   ok(CAREER_MATCH_IDS.map(careerMatch).every((m) => [no, yes].every((sg) => careerSetup(m, "anli", 1, sg).rivalLooks.every((k) => keys.has(k))) && !!m.court && courtKeys.has(m.court)), "every Career match: looks in RIVAL_SHEETS, court in COURT_VISUALS");
   const thumb = fs.readFileSync(path.join(root, "src/ui/CourtThumb.tsx"), "utf8");
-  ok([...courtKeys].every((k) => thumb.includes(`  ${k}: require(`) && fs.existsSync(path.join(root, `assets/images/court_${k}.webp`))), "every court has a thumbnail + image file");
+  ok([...courtKeys].every((k) => { const m = thumb.match(new RegExp(`  ${k}: require\\("@/assets/images/([\\w.]+)"\\)`)); return !!m && fs.existsSync(path.join(root, `assets/images/${m[1]}`)); }), "every court has a thumbnail + image file");
   // Stage keys: TROPHY_BY_STAGE and STAGE_NAMES cover all four.
   const tBlock = src.slice(src.indexOf("export const TROPHY_BY_STAGE"), src.indexOf("};", src.indexOf("export const TROPHY_BY_STAGE")));
   const trophyKeys = [...tBlock.matchAll(/^\s+(\w+): require\("@\/assets\/images\/(\w+)\.webp"\)/gm)];
@@ -349,7 +349,7 @@ async function release101() {
     const so = new MetaStore({ getItem: async (k) => old.get(k) ?? null, setItem: async (k, v) => void old.set(k, v) }, () => 0.5);
     await so.load(T0);
     ok(JSON.stringify(so.doc.career.trophies) === "{}" && trophiesWon(so.doc).join() === "community,local", "old save loads; Community Cup + Local Series show as won");
-    eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local Series. Next: the Maharashtra Tour!", "share text");
+    eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "share text");
   }
   {
     // DEV jump to Match 7.

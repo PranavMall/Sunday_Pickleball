@@ -9,14 +9,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Fullscreen } from "@/src/components/fullscreen";
 import { PARTNERS, STAGE_NAMES, type PartnerId } from "@/src/game/meta/economyConfig";
-import { finalOf, shareText, STAGE_ORDER, trophiesWon } from "@/src/game/meta/trophies";
+import { finalOf, lockedLine, shareText, STAGE_ORDER, TROPHY_SHORT, trophiesWon } from "@/src/game/meta/trophies";
+import type { TrophyRecord } from "@/src/game/meta/metaStore";
+import { Overlay } from "@/src/ui/HeaderActions";
+import { withLink } from "@/src/game/meta/share";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import { Text } from "@/src/ui/Text";
 import { Card, IconSquare, Kicker, SERIF, UI } from "@/src/ui/kit";
 import { useSave } from "@/src/ui/useSave";
 
 const BG = require("@/assets/images/bg_career_mumbai.webp");
-const FINAL_SHORT: Record<string, string> = { community: "Community Cup final", local: "Local Series final", tour: "Tour final", district: "Championship" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function Cabinet() {
@@ -34,7 +36,7 @@ export default function Cabinet() {
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: insets.bottom + 24, paddingHorizontal: 14, gap: 12 }}>
         <View style={styles.head}>
           <IconSquare testID="cabinet-back" icon="arrow-back" label="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} />
-          <Pressable testID="cabinet-share" accessibilityRole="button" accessibilityLabel="Share" onPress={() => Share.share({ message: shareText(won) }).catch(() => {})} style={({ pressed }) => [styles.share, pressed && { opacity: 0.85 }]}>
+          <Pressable testID="cabinet-share" accessibilityRole="button" accessibilityLabel="Share" onPress={() => Share.share({ message: withLink(shareText(won)) }).catch(() => {})} style={({ pressed }) => [styles.share, pressed && { opacity: 0.85 }]}>
             <Ionicons name="share-social" size={18} color={UI.woodDark} />
             <Text style={styles.shareText}>Share</Text>
           </Pressable>
@@ -46,35 +48,15 @@ export default function Cabinet() {
           <View style={styles.shelf}>
             {STAGE_ORDER.map((k) => {
               const isWon = won.includes(k);
-              const fm = finalOf(k);
               return (
-                <Pressable key={k} testID={`trophy-${k}`} disabled={!isWon} onPress={() => setPicked(picked === k ? null : k)} style={styles.slot} accessibilityLabel={isWon ? STAGE_NAMES[k] : `Locked: win Match ${fm.number}`}>
-                  <View>
-                    <Image source={TROPHY_BY_STAGE[k]} style={[styles.trophy, !isWon && { opacity: 0.45 }]} contentFit="contain" tintColor={isWon ? undefined : "#000"} />
-                    {isWon ? (
-                      <View style={styles.wonTag}><Text style={styles.wonText}>WON</Text></View>
-                    ) : null}
-                  </View>
-                  <Text style={[styles.slotText, isWon && styles.slotWon]}>{isWon ? STAGE_NAMES[k] : `Win Match ${fm.number} · ${FINAL_SHORT[k]}`}</Text>
+                <Pressable key={k} testID={`trophy-${k}`} onPress={() => setPicked(k)} style={styles.slot} accessibilityRole="button" accessibilityLabel={isWon ? STAGE_NAMES[k] : `${STAGE_NAMES[k]}, locked`}>
+                  <Image source={TROPHY_BY_STAGE[k]} style={[styles.trophy, !isWon && { opacity: 0.45 }]} contentFit="contain" tintColor={isWon ? undefined : "#000"} />
+                  <Text style={[styles.slotText, isWon && styles.slotWon]} numberOfLines={2}>{TROPHY_SHORT[k]}</Text>
                 </Pressable>
               );
             })}
           </View>
           <View style={styles.plank} />
-          {picked ? (
-            <View style={styles.detail} testID="trophy-detail">
-              <Image source={TROPHY_BY_STAGE[picked]} style={{ width: 44, height: 44 }} contentFit="contain" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.dTitle}>{STAGE_NAMES[picked]}</Text>
-                {rec ? (
-                  <>
-                    <Text style={styles.dLine}>Won {fmtDate(rec.wonAt)} · {rec.score} vs {rec.rival}</Text>
-                    <Text style={styles.dLine}>with {PARTNERS[rec.partnerId as PartnerId]?.name ?? rec.partnerId} · {rec.court}</Text>
-                  </>
-                ) : null}
-              </View>
-            </View>
-          ) : null}
         </Card>
 
         <Card testID="shelf-south">
@@ -92,6 +74,34 @@ export default function Cabinet() {
           <View style={styles.plank} />
         </Card>
       </ScrollView>
+      <Overlay visible={!!picked} title={picked ? STAGE_NAMES[picked] : ""} onClose={() => setPicked(null)} testID="trophy-popup">
+        {picked ? <TrophyPopup stageKey={picked} won={won.includes(picked)} rec={rec} /> : null}
+      </Overlay>
+    </View>
+  );
+}
+
+function TrophyPopup({ stageKey, won, rec }: { stageKey: string; won: boolean; rec?: TrophyRecord }) {
+  const fm = finalOf(stageKey);
+  const rows: [string, string][] = rec
+    ? [["Date", fmtDate(rec.wonAt)], ["Final", `${rec.score} vs ${rec.rival}`], ["Partner", PARTNERS[rec.partnerId as PartnerId]?.name ?? rec.partnerId], ["Court", rec.court]]
+    : [];
+  return (
+    <View style={{ alignItems: "center" }} testID={won ? "trophy-popup-won" : "trophy-popup-locked"}>
+      <Image source={TROPHY_BY_STAGE[stageKey]} style={[styles.big, !won && { opacity: 0.45 }]} contentFit="contain" tintColor={won ? undefined : "#000"} />
+      <Kicker style={{ marginTop: 6 }}>{won ? `WON · MATCH ${fm.number} FINAL` : "LOCKED"}</Kicker>
+      {won ? (
+        <View style={{ alignSelf: "stretch", marginTop: 8 }}>
+          {rows.map(([k, v]) => (
+            <View key={k} style={styles.dRow} testID={`trophy-row-${k.toLowerCase()}`}>
+              <Text style={styles.dKey}>{k}</Text>
+              <Text style={styles.dVal}>{v}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.lockLine} testID="trophy-locked-line">{lockedLine(stageKey)}</Text>
+      )}
     </View>
   );
 }
@@ -110,13 +120,13 @@ const styles = StyleSheet.create({
   shelf: { flexDirection: "row", marginTop: 8, alignItems: "flex-end" },
   slot: { flex: 1, alignItems: "center", gap: 2, minHeight: 44 },
   trophy: { width: 64, height: 64 },
-  wonTag: { position: "absolute", right: -6, top: 0, backgroundColor: UI.green, borderRadius: 5, paddingHorizontal: 4, paddingVertical: 1 },
-  wonText: { color: "#fff", fontSize: 9, fontWeight: "900" },
   q: { position: "absolute", left: 0, right: 0, top: 18, textAlign: "center", color: "#FBF4E2", fontSize: 22, fontWeight: "900" },
   slotText: { color: UI.muted, fontSize: 10, fontWeight: "700", textAlign: "center" },
   slotWon: { color: UI.ink },
   plank: { height: 6, borderRadius: 3, backgroundColor: UI.wood, marginTop: 4 },
-  detail: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
-  dTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 16 },
-  dLine: { color: UI.inkSoft, fontSize: 12 },
+  big: { width: 150, height: 150 },
+  dRow: { flexDirection: "row", justifyContent: "space-between", gap: 10, paddingVertical: 10, borderTopWidth: 1, borderTopColor: UI.line },
+  dKey: { color: UI.inkSoft, fontSize: 14 },
+  dVal: { color: UI.ink, fontSize: 14, fontWeight: "800", flexShrink: 1, textAlign: "right" },
+  lockLine: { color: UI.inkSoft, fontSize: 14, textAlign: "center", marginTop: 6, lineHeight: 20 },
 });

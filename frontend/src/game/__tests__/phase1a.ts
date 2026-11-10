@@ -20,6 +20,9 @@ import { partnerBoost } from "../meta/economyConfig";
 import { buildSetup } from "../meta/matchSetup";
 import { inboxMessages } from "../meta/inbox";
 import { freshSave } from "../meta/metaStore";
+import { nextGoal } from "../meta/goals";
+import { shareMessage, STORE_LINK } from "../meta/share";
+import { shareText } from "../meta/trophies";
 import { cueProbe } from "./smashCueProbe";
 import type { FaultEvent, FaultReason, Team } from "../sim/types";
 
@@ -87,6 +90,7 @@ export const suites: { name: string; run: () => void | Promise<void> }[] = [
   { name: "smashLatch", run: smashLatchTests },
   { name: "scoring", run: scoringTests },
   { name: "meta", run: metaTests },
+  { name: "release102A", run: release102ATests },
   { name: "chemistryIsolation", run: chemistryIsolationTests },
   { name: "inboxDone", run: inboxDoneTests },
 ];
@@ -447,6 +451,27 @@ function smashLatchTests() {
   const pr = cueProbe();
   console.log(`  cue probe: old median ${pr.oldMedianMs.toFixed(0)} ms (n=${pr.oldN}) → new median ${pr.newMedianMs.toFixed(0)} ms (n=${pr.newN})`);
   ok(pr.newMedianMs >= 350, "cue: median on-screen duration ≥ 350 ms");
+}
+
+// Release 10.2 Part A: nextGoal after a loss, share messages, cabinet share text.
+function release102ATests() {
+  const d = freshSave(0);
+  d.career.cleared = CAREER_MATCH_IDS.slice(0, 5) as any;
+  d.career.nextMatchId = CAREER_MATCH_IDS[5];
+  eq(nextGoal(d, { careerMatchId: CAREER_MATCH_IDS[5] }), "Try again: Mumbai Local Series Final", "nextGoal after a lost Career match → Try again");
+  ok(nextGoal(d).startsWith("Next: ") || nextGoal(d).startsWith("Sign "), "nextGoal after a win unchanged");
+  const base = { mode: "career", score: "11–4", rival: "Worli Strikers", court: "Mumbai Local", partner: "Anli", rivalPoints: 4 };
+  eq(shareMessage({ ...base, careerNumber: 6, stageFinalFirstClear: true, stageName: "Mumbai Local Series", trophyCount: 2 }), "🏆 Mumbai Local Series champions! 11–4 vs Worli Strikers at Mumbai Local. That's trophy 2 of 4 in Pickle-Ballers 🥒", "share: stage final");
+  eq(shareMessage({ ...base, careerNumber: 8, rival: "Trimbak Tigers", court: "Nashik Vineyard Court" }), "🥒 Rain stopped play at 3–4. We came back and won 11–4 vs Trimbak Tigers at Nashik Vineyard Court. Pickle-Ballers", "share: M8");
+  eq(shareMessage({ ...base, careerNumber: 10, rival: "Panchgani Peaks" }), "🥒 The lights failed at 8–8. We finished it 11–4 vs Panchgani Peaks. Pickle-Ballers", "share: M10");
+  eq(shareMessage({ ...base, careerNumber: 5, rival: "Juhu Bouncers" }), "🥒 They turned up late, we turned up ready: 11–4 vs Juhu Bouncers at Mumbai Local. Pickle-Ballers", "share: M5");
+  eq(shareMessage({ ...base, careerNumber: 4, score: "11–2", rivalPoints: 2, rival: "Andheri Locals" }), "🥒 11–2 vs Andheri Locals. Somebody check on them. Pickle-Ballers, Match 4 of 12", "share: 0–2 margin");
+  eq(shareMessage({ ...base, careerNumber: 4, rival: "Andheri Locals" }), "🥒 Beat Andheri Locals 11–4 at Mumbai Local. Anli wants half the credit. Pickle-Ballers, Match 4 of 12", "share: other Career win");
+  eq(shareMessage({ ...base, mode: "quick", score: "11–6" }), "🥒 Won 11–6 in Pickle-Ballers Quick Play. Doubles, kitchen rules, no mercy.", "share: Quick Play");
+  ok(STORE_LINK === "" && !shareMessage({ ...base, mode: "quick" }).includes("\n"), "share: empty STORE_LINK adds nothing");
+  eq(shareText([]), "Starting my Mumbai journey in Pickle-Ballers 🥒", "cabinet share: 0");
+  eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "cabinet share: 2");
+  eq(shareText(["community", "local", "tour", "district"]), "🏆 All 4 Mumbai trophies. Mumbai is done. South Cup, you're next. Pickle-Ballers 🥒", "cabinet share: 4");
 }
 
 if (process.argv[1]?.includes("phase1a")) {

@@ -10,7 +10,7 @@ import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { GameSimulation, MATCH, type MatchConfig } from "@/src/game";
-import { buildSetup, type LaunchParams, type MatchSetup } from "@/src/game/meta/matchSetup";
+import { buildSetup, showTalk, type LaunchParams, type MatchSetup } from "@/src/game/meta/matchSetup";
 import { INPUT, KITCHEN } from "@/src/game/config/tuning";
 import { makeProjector } from "@/src/game/render/perspective";
 import { CourtRenderer } from "@/src/game/render/CourtRenderer";
@@ -23,7 +23,9 @@ import { logMatchResult } from "@/src/game/services/matchLog";
 import { initMeta, meta } from "@/src/game/meta";
 import { newMatchId, type MatchOutcome } from "@/src/game/meta/metaStore";
 import { nextGoal } from "@/src/game/meta/goals";
-import { careerMatch, PARTNERS, type PartnerId } from "@/src/game/meta/economyConfig";
+import { careerMatch, COURT_NAMES, PARTNERS, STAGE_NAMES, type CourtId, type PartnerId } from "@/src/game/meta/economyConfig";
+import { shareMessage } from "@/src/game/meta/share";
+import { trophiesWon } from "@/src/game/meta/trophies";
 import { careerMatchLabel } from "@/src/game/meta/goals";
 import { levelView } from "@/src/game/meta/levels";
 import { Celebration, momentChip, ResultCard, type ResultButton, type ResultPartner } from "@/src/ui/MatchEnd";
@@ -120,7 +122,7 @@ export default function Match() {
   const landscape = width > height;
 
   const [match, setMatch] = useState(() => buildMatch(launch));
-  const [outcome, setOutcome] = useState<(MatchOutcome & { goal: string | null; nextCareerId: string; nextEnabled: boolean }) | null>(null);
+  const [outcome, setOutcome] = useState<(MatchOutcome & { goal: string | null; firstClear: boolean; trophyCount: number; nextCareerId: string; nextEnabled: boolean }) | null>(null);
   // Match end: the loop stops once the end sequence is over (seqDone); then
   // the pop-ups (one per moment) and the result card show.
   const [seqDone, setSeqDone] = useState(false);
@@ -307,10 +309,12 @@ export default function Match() {
         // matchId). Quitting / app-kill before this point grants nothing.
         const setup = match.setup;
         const won = sim.winner === "near";
+        const firstClear = setup.mode === "career" && meta.loaded && !meta.doc.career.cleared.includes(setup.careerId ?? "");
         initMeta().then(() => {
           const o = meta.completeMatch({ matchId, kind: setup.mode, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
           const d = meta.doc;
-          setOutcome({ ...o, goal: setup.mode === "career" ? nextGoal(d) : null, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
+          const goal = setup.mode === "career" ? nextGoal(d, won ? undefined : { careerMatchId: setup.careerId ?? "" }) : null;
+          setOutcome({ ...o, goal, firstClear, trophyCount: trophiesWon(d).length, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
         });
         analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
       }
@@ -425,6 +429,11 @@ export default function Match() {
   }, [nextCourt]);
   const nextMatch = () => {
     if (!outcome?.nextCareerId) return;
+    // First play of the next match: the Match talk first (as the Career screen's PLAY).
+    if (meta.loaded && showTalk(meta.doc.career, outcome.nextCareerId)) {
+      router.replace({ pathname: "/talk", params: { careerId: outcome.nextCareerId } });
+      return;
+    }
     const l: LaunchParams = { mode: "career", careerId: outcome.nextCareerId };
     loggedRef.current = false;
     armedRef.current = false;
@@ -466,9 +475,9 @@ export default function Match() {
   const faultCandidate = !paused && !gameOver && sincePoint < FAULT_HINT_SECONDS ? faultLabelFor(sim.lastFault, sim.players[humanSlot]?.team ?? "near") : null;
   const faultHint = faultCandidate ? showHintForPoint(faultCandidate, sim.lastFault?.reason, sim.lastPoint.time) : false;
   const faultLabel = faultCandidate && sincePoint < (faultHint ? FAULT_HINT_SECONDS : FAULT_LABEL_SECONDS) ? faultCandidate : null;
-  // TWIST pill: 2.0 s of sim time before the first serve (display only; freezes on pause).
+  // TWIST pill: until the first serve of the match is struck (display only).
   const twist = match.setup.twist;
-  const twistPill = twist && ready && !paused && !gameOver && sim.time < 2.0 ? `${twist.name.toUpperCase()} — ${twist.line}` : null;
+  const twistPill = twist && ready && !paused && !gameOver && sim.phase === "waiting_serve" && sim.stats.pointsPlayed === 0 ? `${twist.name.toUpperCase()} — ${twist.line}` : null;
   const shotLabel =
     !paused && !gameOver && sim.lastHumanShot && sim.time - sim.lastHumanShot.time < 1
       ? sim.lastHumanShot.type.toUpperCase()
@@ -682,7 +691,20 @@ export default function Match() {
       kind: "share",
       onPress: () => {
         analytics.track("share_clicked", { difficulty });
-        Share.share({ message: `I won ${sim.score.nearScore}-${sim.score.farScore} vs ${match.setup.rivalName} in Pickle-Ballers! 🥒` }).catch(() => {});
+        const cm = careerMatch(match.setup.careerId);
+        const message = shareMessage({
+          mode,
+          score: `${sim.score.nearScore}–${sim.score.farScore}`,
+          rival: match.setup.rivalName,
+          court: COURT_NAMES[config.court as CourtId] ?? "",
+          partner: PARTNERS[match.setup.partnerId as PartnerId]?.name ?? "",
+          rivalPoints: sim.score.farScore,
+          careerNumber: cm.number,
+          stageFinalFirstClear: mode === "career" && cm.round === "FINAL" && !!outcome?.firstClear,
+          stageName: STAGE_NAMES[cm.stageKey],
+          trophyCount: outcome?.trophyCount,
+        });
+        Share.share({ message }).catch(() => {});
       },
     };
     const btn = (label: string, testID: string, onPress: () => void, kind: ResultButton["kind"] = "secondary"): ResultButton => ({ label, testID, onPress, kind });

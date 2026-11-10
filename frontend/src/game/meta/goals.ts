@@ -9,7 +9,9 @@ export function careerMatchLabel(m: CareerMatchDef): string {
   return `${stage} · Match ${m.number}`;
 }
 
-export function nextGoal(d: Pick<SaveDoc, "partners" | "coins" | "career">): string {
+// `lost` = the Career match just played was lost (nothing moved on).
+export function nextGoal(d: Pick<SaveDoc, "partners" | "coins" | "career">, lost?: { careerMatchId: string }): string {
+  if (lost) return `Try again: ${careerMatchLabel(careerMatch(lost.careerMatchId))}`;
   // Newest signable partner first (Matz after Match 6 even if Upsi is still unsigned).
   const sign = [...PARTNER_IDS].reverse().find((id) => d.partners[id]?.signable && !d.partners[id].signed && d.coins >= (SIGN_COST[id] ?? 0));
   if (sign) return `Sign ${PARTNERS[sign].name} in Team`;

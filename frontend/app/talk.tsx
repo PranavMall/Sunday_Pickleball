@@ -2,7 +2,6 @@
 // only. The court (dimmed) behind; "MATCH N OF 12", "vs <rival>", the twist
 // chip + line + starting score (twist matches only); Skip › top-right. The only
 // storage write is "seen" for the match ID when the talk ends (or is skipped).
-import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -14,7 +13,7 @@ import { CAREER_MATCHES, MATCH_TALK, PARTNERS, PLAYER_BADGE_COLOR, careerMatch }
 import { partnerOf, talkRival } from "@/src/game/meta/matchSetup";
 import { FACES, faceKeyOf } from "@/src/game/render/sprites";
 import { teamCode } from "@/src/game/services/profile";
-import { COURT_IMG } from "@/src/ui/CourtThumb";
+import { CourtImage } from "@/src/ui/CourtThumb";
 import { DialogueScene, type DialogueLine, type DialogueSpeaker } from "@/src/ui/DialogueScene";
 import { Text } from "@/src/ui/Text";
 import { StartScoreCard, TwistChip } from "@/src/ui/TwistChip";
@@ -49,7 +48,7 @@ export default function Talk() {
   return (
     <View style={styles.root} testID="talk-screen">
       <Fullscreen />
-      {m.court ? <Image source={COURT_IMG[m.court]} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
+      {m.court ? <CourtImage court={m.court} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
       <View style={[StyleSheet.absoluteFill, styles.dim]} />
       <DialogueScene lines={lines} onDone={start} bottom={insets.bottom + 16} />
       <View style={[styles.top, { paddingTop: insets.top + 10 }]} pointerEvents="box-none">

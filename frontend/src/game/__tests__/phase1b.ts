@@ -3,7 +3,9 @@
  */
 import { PARTNER_DIFFICULTY } from "../config/ai";
 import { PLAYER_NAME_POOL, TEAM_NAME_POOL, teamCode } from "../services/profile";
-import { quickPlaySetup, careerSetup, showTalk, talkRival, trainingSetup } from "../meta/matchSetup";
+import { quickPlaySetup, careerSetup, showNewCourt, showTalk, talkRival, trainingSetup } from "../meta/matchSetup";
+import { TROPHY_SHORT } from "../meta/trophies";
+declare const __dirname: string;
 import { CAREER_MATCH_IDS, CAREER_MATCHES, CAREER_REWARDS, MATCH_TALK, PARTNERS, careerMatch, careerRewardPreview } from "../meta/economyConfig";
 import { hasUnread, inboxMessages } from "../meta/inbox";
 import { discoveredPartners, rosterStatus } from "../meta/team";
@@ -118,6 +120,29 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   ok(looks.size === 24 && missing.length === 0, `every look used by Career has a face_ asset (${looks.size} looks; missing ${missing.join(",") || "none"})`);
   ok(talkRival(careerMatch("mumbai.local.05"), () => false).partnerId === "matz" && talkRival(careerMatch("mumbai.local.05"), () => true).look === "rival_man1_juh", "Match 5 talk: Matz portrait unless signed (then the reserve's face)");
   ok(showTalk({ cleared: [], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: ["mumbai.local.05"], talkSeen: [] }, "mumbai.local.05") && !showTalk({ cleared: [], talkSeen: ["mumbai.local.05"] }, "mumbai.local.05"), "talk shows on first play only (skipped on a replay / once seen)");
+}
+
+{
+  // ---- Release 10.2 Part A ----
+  const SHORTS: Record<number, string> = { 2: "First to 7", 5: "You lead 3–0", 8: "You trail 3–4", 10: "From 8–8", 12: "First to 15" };
+  const tw = CAREER_MATCHES.filter((m) => m.twist);
+  ok(tw.length === 5 && tw.every((m) => m.twist!.short === SHORTS[m.number] && m.twist!.short.split(" ").length <= 4), "every twist has a short (≤ 4 words) matching the table");
+  const m9 = CAREER_MATCHES[8];
+  ok(!showNewCourt([], m9, true), "NEW: false on a replay");
+  ok(!showNewCourt([CAREER_MATCH_IDS[9]], m9, false), "NEW: false when a cleared match used the court");
+  ok(showNewCourt(CAREER_MATCH_IDS.slice(0, 8) as any, m9, false), "NEW: true for Match 9 with Matches 1–8 cleared");
+  ok(Object.keys(TROPHY_SHORT).length === 4 && Object.values(TROPHY_SHORT).every((n) => n.split(" ").length <= 2), "TROPHY_SHORT: 4 entries, ≤ 2 words");
+  const fs2 = require("fs");
+  const path2 = require("path");
+  const root2 = path2.join(__dirname, "../../..");
+  const courtsSrc = fs2.readFileSync(path2.join(root2, "src/game/render/courts.ts"), "utf8");
+  const thumbSrc = fs2.readFileSync(path2.join(root2, "src/ui/CourtThumb.tsx"), "utf8");
+  const pick = (src: string, key: string) => (src.slice(src.indexOf(`${key}:`)).match(/require\("([^"]+)"\)/) ?? [])[1];
+  ok(pick(courtsSrc, "mahabaleshwar") === "@/assets/images/court_strawberry.webp" && pick(thumbSrc, "mahabaleshwar") === "@/assets/images/court_strawberry.webp", "COURT_VISUALS / COURT_IMG mahabaleshwar → court_strawberry.webp");
+  const old = "court_" + "mahabaleshwar.webp";
+  const walk = (dir: string): string[] => fs2.readdirSync(dir, { withFileTypes: true }).flatMap((e: any) => (e.isDirectory() ? walk(path2.join(dir, e.name)) : /\.(ts|tsx|js|json)$/.test(e.name) ? [path2.join(dir, e.name)] : []));
+  const files = [...walk(path2.join(root2, "src")), ...walk(path2.join(root2, "app")), path2.join(root2, "app.json")];
+  ok(files.every((f) => !fs2.readFileSync(f, "utf8").includes(old)) && !fs2.existsSync(path2.join(root2, "assets/images", old)), "no file references the old Mahabaleshwar court image");
 }
 
 {

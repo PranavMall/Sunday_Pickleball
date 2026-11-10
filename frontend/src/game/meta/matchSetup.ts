@@ -141,6 +141,12 @@ export function showTalk(career: { cleared: string[]; talkSeen?: string[] }, car
   return !career.cleared.includes(careerMatchId) && !(career.talkSeen ?? []).includes(careerMatchId);
 }
 
+// NEW court tag: not on a replay, and no cleared Career match uses that court.
+export function showNewCourt(cleared: string[], m: CareerMatchDef, replay: boolean): boolean {
+  return !!m.court && !replay && !cleared.some((id) => careerMatch(id).court === m.court);
+}
+
+
 // The rival speaker of the talk: the unsigned recruit (portrait) or the slot-0 rival's look.
 export function talkRival(m: CareerMatchDef, signed: (id: string) => boolean): { partnerId?: PartnerId; look?: string } {
   if (m.recruit && !signed(m.recruit.partnerId)) return { partnerId: m.recruit.partnerId };

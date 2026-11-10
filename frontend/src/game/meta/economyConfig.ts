@@ -119,15 +119,16 @@ export interface CareerMatchDef {
 export interface MatchTwist {
   name: string;
   line: string;
+  short: string; // one short line under the court on the Next Match card
   startingScore?: { near: number; far: number; servingTeam: "near" | "far"; serverNumber?: 1 | 2 };
   ruleModifiers?: { pointsToWin?: number; winBy?: number };
 }
 export const CAREER_TWISTS: Partial<Record<number, MatchTwist>> = {
-  2: { name: "Quick fire", line: "First to 7", ruleModifiers: { pointsToWin: 7, winBy: 2 } },
-  5: { name: "Head start", line: "The rivals are late: you lead 3–0", startingScore: { near: 3, far: 0, servingTeam: "far", serverNumber: 1 } },
-  8: { name: "Comeback", line: "Rain stopped play at 3–4: you're behind", startingScore: { near: 3, far: 4, servingTeam: "far", serverNumber: 1 } },
-  10: { name: "Clutch", line: "The lights failed at 8–8: finish it", startingScore: { near: 8, far: 8, servingTeam: "near", serverNumber: 1 } },
-  12: { name: "Long final", line: "First to 15", ruleModifiers: { pointsToWin: 15, winBy: 2 } },
+  2: { name: "Quick fire", line: "First to 7", short: "First to 7", ruleModifiers: { pointsToWin: 7, winBy: 2 } },
+  5: { name: "Head start", line: "The rivals are late: you lead 3–0", short: "You lead 3–0", startingScore: { near: 3, far: 0, servingTeam: "far", serverNumber: 1 } },
+  8: { name: "Comeback", line: "Rain stopped play at 3–4: you're behind", short: "You trail 3–4", startingScore: { near: 3, far: 4, servingTeam: "far", serverNumber: 1 } },
+  10: { name: "Clutch", line: "The lights failed at 8–8: finish it", short: "From 8–8", startingScore: { near: 8, far: 8, servingTeam: "near", serverNumber: 1 } },
+  12: { name: "Long final", line: "First to 15", short: "First to 15", ruleModifiers: { pointsToWin: 15, winBy: 2 } },
 };
 const M = (
   n: number, round: CareerMatchDef["round"], rival: string, code: string, color: string, namedRival: boolean,

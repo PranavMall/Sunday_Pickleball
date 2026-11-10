@@ -30,7 +30,7 @@ export const COURT_VISUALS: Record<string, CourtVisual> = {
     scoreArea: { x0: 344, y0: 194, x1: 680, y1: 302 },
   },
   mahabaleshwar: {
-    image: require("@/assets/images/court_mahabaleshwar.webp"),
+    image: require("@/assets/images/court_strawberry.webp"),
     edgeTop: "#98A59E",
     edgeBottom: "#C18E80",
     scoreArea: { x0: 344, y0: 194, x1: 680, y1: 302 },
