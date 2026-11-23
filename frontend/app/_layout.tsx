@@ -1,11 +1,14 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { DefaultTheme, Stack, ThemeProvider } from "expo-router";
+import { DefaultTheme, Stack, ThemeProvider, usePathname } from "expo-router";
+import { useEffect } from "react";
 import { LogBox } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
-import { initMeta } from "@/src/game/meta";
+import { initMeta, meta } from "@/src/game/meta";
+import { analytics, crashReporting } from "@/src/game/services/analytics";
+import { initServices } from "@/src/game/services/startup";
 import { queryClient } from "@/src/query-client";
 import { DestinationBackdrop } from "@/src/ui/DestinationBackdrop";
 import { WarmingUp } from "@/src/ui/WarmingUp";
@@ -21,7 +24,17 @@ const DEST = { animation: "none" as const, contentStyle: { backgroundColor: "tra
 // and agent works as expected.
 LogBox.ignoreAllLogs(true);
 // APP START: load (or create) the one progression save ("Warming up" waits for it).
-const metaReady = initMeta();
+const metaReady = initMeta().then(() => initServices(!meta.loaded || meta.doc.settings.usageData));
+
+// One screen view per route change; Crashlytics remembers the last route.
+function ScreenTracker() {
+  const pathname = usePathname();
+  useEffect(() => {
+    analytics.screen(pathname);
+    crashReporting.setAttribute("screen", pathname);
+  }, [pathname]);
+  return null;
+}
 
 export default function RootLayout() {
   // One app level ErrorBoundary; a render crash shows a reload screen
@@ -41,10 +54,12 @@ export default function RootLayout() {
               <Stack.Screen name="team" options={DEST} />
               <Stack.Screen name="training" options={DEST} />
               <Stack.Screen name="records" options={DEST} />
+              <Stack.Screen name="privacy" options={{ contentStyle: { backgroundColor: "transparent" } }} />
               <Stack.Screen name="quickplay" options={{ contentStyle: { backgroundColor: "transparent" } }} />
             </Stack>
             </ThemeProvider>
             <WarmingUp until={metaReady} />
+            <ScreenTracker />
           </GestureHandlerRootView>
         </KeyboardProvider>
       </QueryClientProvider>

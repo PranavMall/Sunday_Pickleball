@@ -6,6 +6,7 @@ import { reloadAppAsync } from "expo";
 import { Component, type ErrorInfo, type PropsWithChildren, useState } from "react";
 import { Platform, Pressable, ScrollView, View } from "react-native";
 import { Text } from "@/src/ui/Text";
+import { crashReporting } from "@/src/game/services/analytics";
 
 import { makeStyles } from "@/src/theme";
 
@@ -20,6 +21,7 @@ export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundarySta
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error("[ErrorBoundary] render crash:", error, info.componentStack ?? "");
+    crashReporting.capture(error, { boundary: 1 });
   }
 
   resetError = (): void => {

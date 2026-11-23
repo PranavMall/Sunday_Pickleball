@@ -93,7 +93,36 @@ export const suites: { name: string; run: () => void | Promise<void> }[] = [
   { name: "release102A", run: release102ATests },
   { name: "chemistryIsolation", run: chemistryIsolationTests },
   { name: "inboxDone", run: inboxDoneTests },
+  { name: "release11", run: release11Tests },
 ];
+
+async function release11Tests() {
+  console.log("\n[Release 11: firstServerSlot, native wrappers]");
+  const q = quickMatchConfig("CLUB", 5);
+  ok(!("firstServerSlot" in q) && new GameSimulation(q).serverSlot === new GameSimulation(quickMatchConfig("CLUB", 5)).serverSlot, "firstServerSlot absent ⇒ the usual first server (b3 / shotMix md5s prove it)");
+  const { crashReporting } = await import("../services/analytics");
+  const { initPurchases } = await import("../services/purchases");
+  let threw = false;
+  try {
+    analytics.track("r11_probe", { a: 1 });
+    crashReporting.capture(new Error("probe"), { x: 1 });
+    initPurchases();
+  } catch {
+    threw = true;
+  }
+  ok(!threw && analytics.recent().some((e) => e.event === "r11_probe"), "no native modules: track / capture / initPurchases don't throw; track still buffers");
+  ok(initPurchases() === false, "initPurchases: not configured outside native Android builds");
+  const sent: string[] = [];
+  analytics.setForwarder({ logEvent: (n) => void sent.push(n), setEnabled: () => {}, setUserProperty: () => {}, logScreenView: () => {} });
+  analytics.track("r11_on");
+  analytics.setEnabled(false);
+  const n0 = analytics.recent().length;
+  analytics.track("r11_off");
+  ok(sent.join() === "r11_on,usage_data" && !analytics.recent().some((e) => e.event === "r11_off") && analytics.recent().length === n0, "setEnabled(false): usage_data {on:0} first, then no forwarding and nothing new buffered");
+  analytics.setEnabled(true);
+  ok(sent[sent.length - 1] === "usage_data", "setEnabled(true) sends usage_data {on:1}");
+  analytics.setForwarder(null);
+}
 
 function inboxDoneTests() {
   console.log("\n[Release 10.1: inbox done conditions]");

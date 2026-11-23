@@ -9,6 +9,7 @@ import { CIRCUIT_NAME, NEXT_CIRCUIT_NAME, PARTNERS, STAGE_NAMES, type PartnerId 
 import { finalOf, lockedLine, shareText, STAGE_ORDER, TROPHY_SHORT, trophiesWon } from "@/src/game/meta/trophies";
 import type { SaveDoc, TrophyRecord } from "@/src/game/meta/metaStore";
 import { withLink } from "@/src/game/meta/share";
+import { gameEvents } from "@/src/game/meta/events";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import { Overlay } from "./HeaderActions";
 import { Text } from "./Text";
@@ -29,7 +30,10 @@ export function CabinetBody({ save }: { save: SaveDoc | null }) {
               <Kicker>{CIRCUIT_NAME.toUpperCase()}</Kicker>
               <Text style={styles.sub} testID="shelf-mumbai-count">{won.length} of 4 won</Text>
             </View>
-            <Pressable testID="cabinet-share" accessibilityRole="button" accessibilityLabel="Share" onPress={() => Share.share({ message: withLink(shareText(won)) }).catch(() => {})} style={({ pressed }) => [styles.share, pressed && { opacity: 0.85 }]}>
+            <Pressable testID="cabinet-share" accessibilityRole="button" accessibilityLabel="Share" onPress={() => {
+              gameEvents.share("cabinet");
+              Share.share({ message: withLink(shareText(won)) }).catch(() => {});
+            }} style={({ pressed }) => [styles.share, pressed && { opacity: 0.85 }]}>
               <Ionicons name="share-social" size={18} color={UI.woodDark} />
               <Text style={styles.shareText}>Share</Text>
             </Pressable>

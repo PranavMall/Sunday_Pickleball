@@ -17,7 +17,8 @@ import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { END_SEQ_S, FarSpriteAnimator, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
 import { courtLoadStatus, portraitLoadStatus, sheetPrefetch, spriteLoadStatus } from "@/src/game/render/sprites";
 import { courtVisual } from "@/src/game/render/courts";
-import { analytics } from "@/src/game/services/analytics";
+import { analytics, crashReporting } from "@/src/game/services/analytics";
+import { gameEvents, PerfCounter } from "@/src/game/meta/events";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
 import { initMeta, meta } from "@/src/game/meta";
@@ -59,7 +60,8 @@ function buildMatch(p: LaunchParams): { sim: GameSimulation; config: MatchConfig
   const setup = buildSetup(p, seed, meta.loaded ? meta.doc : null);
   const config = setup.config;
   const sim = new GameSimulation(config);
-  analytics.track("match_started", { mode: setup.mode, difficulty: setup.label, format: config.format, court: config.court });
+  gameEvents.matchStart({ mode: setup.mode, careerId: setup.careerId, court: config.court, twist: setup.twist?.name, partner: config.format === "doubles" ? setup.partnerId : "none" });
+  crashReporting.setAttribute("mode", setup.mode);
   return { sim, config, matchId: newMatchId(Date.now()), setup };
 }
 
@@ -173,6 +175,17 @@ export default function Match() {
   // Settings → Vibration, read once per match (never per contact).
   const hapticsOn = useMemo(() => !meta.loaded || meta.doc.settings.haptics, [sim]);
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
+  // match_end / perf_sample counters (numbers only; one object per match).
+  const mstats = useMemo(() => ({ t0: Date.now(), smashes: 0, smashTaps: 0, perf: new PerfCounter(), sent: false }), [sim]);
+  const sendEnd = useCallback(
+    (quit: boolean) => {
+      if (mstats.sent) return;
+      mstats.sent = true;
+      gameEvents.matchEnd({ mode: match.setup.mode, careerId: match.setup.careerId, won: !quit && sim.winner === "near", quit, near: sim.score.nearScore, far: sim.score.farScore, seconds: (Date.now() - mstats.t0) / 1000, smashes: mstats.smashes, smashTaps: mstats.smashTaps });
+      gameEvents.perfSample(mstats.perf);
+    },
+    [mstats, sim, match.setup],
+  );
   // TUTORIAL (mode "tutorial"): lessons between points; a replay starts all six
   // again and writes no steps. Lesson cards hold the sim like a pause.
   const tut = useMemo(() => {
@@ -285,6 +298,7 @@ export default function Match() {
         return;
       }
       wasIdle = false;
+      if (sim.phase !== "game_over") mstats.perf.add(dt);
       fpsAcc += dt;
       fpsCount++;
       if (fpsAcc >= 0.5) {
@@ -319,6 +333,7 @@ export default function Match() {
         sfx.playForContact(ev);
         spriteAnim.onContact(ev, sim);
         if (tut) tut.run.onContact(ev, sim);
+        if (ev.slot === humanSlot && ev.shotType === "smash" && !ev.miss) mstats.smashes++;
         farAnim.onContact(ev, sim);
         if (ev.slot === humanSlot && hapticsOn && Platform.OS !== "web") {
           Haptics.impactAsync(
@@ -357,6 +372,7 @@ export default function Match() {
       if (sim.phase === "game_over" && !loggedRef.current && tut) {
         loggedRef.current = true;
         endT0.current = performance.now();
+        sendEnd(false);
         finishTutorial();
       } else if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
@@ -372,8 +388,9 @@ export default function Match() {
           const d = meta.doc;
           const goal = setup.mode === "career" ? nextGoal(d, won ? undefined : { careerMatchId: setup.careerId ?? "" }) : null;
           setOutcome({ ...o, goal, firstClear, trophyCount: trophiesWon(d).length, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
+          if (firstClear && won && setup.careerId) gameEvents.careerCleared(setup.careerId, o.tries ?? 1);
         });
-        analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
+        sendEnd(false);
       }
       setFrame((f) => (f + 1) % 1000000);
       perf.current.workMs = perf.current.workMs * 0.9 + (performance.now() - w0) * 0.1;
@@ -381,7 +398,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, hapticsOn, matchId, match.setup, spriteAnim, farAnim, tut, finishTutorial]);
+  }, [sim, config, difficulty, humanSlot, hapticsOn, matchId, match.setup, spriteAnim, farAnim, tut, finishTutorial, mstats, sendEnd]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time
@@ -506,9 +523,14 @@ export default function Match() {
   }, [paused]);
   // Back to the destination the match was launched from (bottom of the stack).
   const goMenu = () => (router.canDismiss() ? router.dismissAll() : router.replace("/"));
+  // Leave from the pause menu / Skip: match_end with quit 1 (once per match).
+  const quitMatch = () => {
+    if (!gameOverRef.current) sendEnd(true);
+    goMenu();
+  };
   const leaveTutorial = () => {
     if (tut) tutorialEvents.left(tut.run.steps.length);
-    goMenu();
+    quitMatch();
   };
   const tutorialNext = () => {
     if (meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id)) {
@@ -740,7 +762,7 @@ export default function Match() {
                 <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
                   <Text style={styles.secondaryText}>Restart</Text>
                 </Pressable>
-                <Pressable testID="quit-button" style={styles.pauseSecondaryBtn} onPress={goMenu}>
+                <Pressable testID="quit-button" style={styles.pauseSecondaryBtn} onPress={quitMatch}>
                   <Text style={styles.secondaryText}>Quit to Menu</Text>
                 </Pressable>
               </>
@@ -792,7 +814,7 @@ export default function Match() {
       testID: "share-button",
       kind: "share",
       onPress: () => {
-        analytics.track("share_clicked", { difficulty });
+        gameEvents.share("result");
         const cm = careerMatch(match.setup.careerId);
         const message = shareMessage({
           mode,

@@ -516,7 +516,28 @@ async function release11A() {
   eq(human, 40, "R11: a fresh tutorial's first point is served by the human (40 seeds)");
 }
 
+// Release 11 Part B: settings.usageData + old saves.
+async function release11B() {
+  const { s, mem } = await fresh();
+  ok(s.doc.settings.usageData === true, "R11: usageData defaults to on");
+  s.setUsageData(false);
+  await s.flush();
+  const s2 = new MetaStore({ getItem: async (k) => mem.get(k) ?? null, setItem: async () => {} }, () => 0.5);
+  await s2.load(T0);
+  ok(s2.doc.settings.usageData === false, "R11: usageData survives a reload");
+  const { sanitiseSave } = await import("../meta/metaStore");
+  const old = JSON.parse(JSON.stringify(s.doc));
+  delete old.settings.usageData;
+  delete old.career.tries;
+  ok(sanitiseSave(old, T0).settings.usageData === true, "R11: an old save without usageData loads as on");
+  // A 10.2-shaped save (no R11 fields).
+  const r102 = { schemaVersion: 1, coins: 640, gems: 0, fans: 85, career: { cleared: ["mumbai.community.01"], nextMatchId: "mumbai.community.02", firstClearWins: 1, firstClearLosses: 0, trophies: {}, talkSeen: ["mumbai.community.01"] }, settings: { haptics: false }, tutorial: { done: false, hidden: false, steps: ["bounce"] } };
+  const l = sanitiseSave(r102, T0);
+  ok(l.coins === 640 && l.settings.haptics === false && l.settings.usageData === true && JSON.stringify(l.career.tries) === "{}" && l.career.cleared.length === 1 && l.tutorial.steps.join() === "bounce", "R11: a 10.2-shaped save loads with every new field defaulted");
+}
+
 (async () => {
+  await release11B();
   await release11A();
   await commit4();
   await release101();

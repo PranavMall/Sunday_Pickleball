@@ -83,12 +83,12 @@ export interface SaveDoc {
   apart: Record<string, number>; // pairing key → matches played with someone else in a row
   quickPartnerId: string; // "" = follow the Career partner
   courtsPlayed: string[]; // courts with at least one completed Career match (NEW tag)
-  career: { cleared: string[]; nextMatchId: string; firstClearWins: number; firstClearLosses: number; trophies: Record<string, TrophyRecord>; talkSeen: string[] };
+  career: { cleared: string[]; nextMatchId: string; firstClearWins: number; firstClearLosses: number; trophies: Record<string, TrophyRecord>; talkSeen: string[]; tries: Record<string, number> };
   namedRivals: Record<string, boolean>;
   milestones: Record<string, boolean>;
   daily: { dayKey: string; training: number; scrimmage: number; quick: number };
   inboxRead: string[];
-  settings: { haptics: boolean };
+  settings: { haptics: boolean; usageData: boolean };
   tutorial: { done: boolean; hidden: boolean; steps: string[]; doneAt?: number; careerPrompted: boolean };
   rewardIds: string[]; // every applied rewardId (idempotency)
   ledger: LedgerEntry[]; // recent history (LEDGER_KEEP)
@@ -112,6 +112,7 @@ export interface MatchOutcome {
   lines: string[];
   events: string[];
   capped?: boolean; // training/scrimmage/quick after the daily cap
+  tries?: number; // Career: plays of this match so far (this one included)
   // Result-screen data, all taken from this match's ledger entries.
   coins?: CurrencyTile; // only when Coins changed
   fans?: CurrencyTile; // only when Fans changed
@@ -181,12 +182,12 @@ export function freshSave(now: number, rand: () => number = Math.random): SaveDo
     apart: {},
     quickPartnerId: "",
     courtsPlayed: [],
-    career: { cleared: [], nextMatchId: FIRST_CAREER_MATCH_ID, firstClearWins: 0, firstClearLosses: 0, trophies: {}, talkSeen: [] },
+    career: { cleared: [], nextMatchId: FIRST_CAREER_MATCH_ID, firstClearWins: 0, firstClearLosses: 0, trophies: {}, talkSeen: [], tries: {} },
     namedRivals: {},
     milestones: {},
     daily: { dayKey: dayKeyOf(now), training: 0, scrimmage: 0, quick: 0 },
     inboxRead: [],
-    settings: { haptics: true },
+    settings: { haptics: true, usageData: true },
     tutorial: { done: false, hidden: false, steps: [], careerPrompted: false },
     rewardIds: [],
     ledger: [],
@@ -253,6 +254,7 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
       firstClearLosses: num(c.firstClearLosses, 0),
       trophies: trophiesOf(c.trophies),
       talkSeen: strArr(c.talkSeen),
+      tries: Object.fromEntries(Object.entries(c.tries && typeof c.tries === "object" ? c.tries : {}).filter(([k, v]) => (CAREER_MATCH_IDS as readonly string[]).includes(k) && typeof v === "number" && v >= 0)) as Record<string, number>,
     },
     namedRivals: boolMap(r.namedRivals),
     milestones: boolMap(r.milestones),
@@ -263,7 +265,7 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
       quick: num(dly.quick, 0),
     },
     inboxRead: strArr(r.inboxRead),
-    settings: { haptics: !(r.settings && typeof r.settings === "object" && r.settings.haptics === false) },
+    settings: { haptics: !(r.settings && typeof r.settings === "object" && r.settings.haptics === false), usageData: !(r.settings && typeof r.settings === "object" && r.settings.usageData === false) },
     tutorial: tutorialOf(r.tutorial),
     rewardIds: strArr(r.rewardIds),
     ledger: Array.isArray(r.ledger) ? r.ledger.slice(-LEDGER_KEEP) : [],
@@ -347,6 +349,15 @@ export class MetaStore {
   dailyUsage(now: number): { training: number; scrimmage: number } {
     this.rollDay(now);
     return { training: this.doc.daily.training, scrimmage: this.doc.daily.scrimmage };
+  }
+
+  // Settings → Usage data (analytics collection; default on).
+  setUsageData(on: boolean): boolean {
+    const d = this.doc as SaveDoc;
+    if (d.settings.usageData === on) return false;
+    d.settings.usageData = on;
+    this.save();
+    return true;
   }
 
   // Settings → Vibration (never written during a rally).
@@ -562,6 +573,8 @@ export class MetaStore {
       const def = careerMatch(id);
       const R = CAREER_REWARDS;
       const firstAttempt = !d.career.cleared.includes(id);
+      d.career.tries[id] = (d.career.tries[id] ?? 0) + 1;
+      out.tries = d.career.tries[id];
       if (firstAttempt && m.won) {
         coinsLine("coins", R.win.coins);
         fansLine("fans", R.win.fans);

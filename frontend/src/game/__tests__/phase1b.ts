@@ -227,6 +227,60 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   ok(!fs.existsSync(path.resolve(root, "../backend")), "R11: backend/ is gone");
 }
 
+// Release 11 Part B: events + build config.
+{
+  const fs = require("fs") as typeof import("fs");
+  const path = require("path") as typeof import("path");
+  const root = path.resolve(__dirname, "../../..");
+  const { analytics } = require("../services/analytics");
+  const { gameEvents } = require("../meta/events");
+  const { tutorialEvents } = require("../meta/tutorial");
+  const got: { n: string; p: Record<string, unknown> }[] = [];
+  analytics.setForwarder({ logEvent: (n: string, p: Record<string, unknown>) => void got.push({ n, p }), setEnabled: () => {}, setUserProperty: () => {}, logScreenView: () => {} });
+  gameEvents.matchStart({ mode: "career", careerId: "mumbai.local.04", court: "mumbai_local", twist: null, partner: "anli" });
+  gameEvents.matchEnd({ mode: "quick", won: true, quit: false, near: 11, far: 4, seconds: 93.4, smashes: 2, smashTaps: 1 });
+  gameEvents.careerCleared("mumbai.community.02", 3);
+  gameEvents.perfSample({ frames: 600, slowFrames: 12, dtSum: 10 });
+  gameEvents.share("cabinet");
+  gameEvents.dailyView("Clutch");
+  gameEvents.dailyStart("Clutch");
+  gameEvents.dailyWin("Clutch", 2, true);
+  gameEvents.privacyOpen();
+  gameEvents.contactOpen();
+  gameEvents.feedbackOpen();
+  analytics.setEnabled(false);
+  analytics.setEnabled(true);
+  tutorialEvents.started("settings", true);
+  const want: Record<string, Record<string, unknown>> = {
+    match_start: { mode: "career", career_n: 4, court: "mumbai_local", twist: "none", partner: "anli" },
+    match_end: { mode: "quick", career_n: 0, won: 1, quit: 0, near: 11, far: 4, seconds: 93, smashes: 2, smash_taps: 1 },
+    career_cleared: { career_n: 2, tries: 3 },
+    perf_sample: { fps_avg: 60, slow_pct: 2, frames: 600 },
+    share: { from: "cabinet" },
+    daily_view: { twist: "Clutch" },
+    daily_start: { twist: "Clutch" },
+    daily_win: { twist: "Clutch", tries: 2, first_today: 1 },
+    privacy_open: {},
+    contact_open: {},
+    feedback_open: {},
+    tutorial_started: { from: "settings", replay: 1 },
+  };
+  for (const [n, p] of Object.entries(want)) {
+    const e = got.find((x) => x.n === n);
+    ok(!!e && JSON.stringify(e.p) === JSON.stringify(p), `R11 event ${n} params ${JSON.stringify(e?.p)}`);
+  }
+  const ud = got.filter((x) => x.n === "usage_data").map((x) => x.p.on);
+  ok(ud.join() === "0,1", "R11 event usage_data { on } on toggle");
+  analytics.setForwarder(null);
+  const eas = JSON.parse(fs.readFileSync(path.join(root, "eas.json"), "utf8"));
+  ok(["development", "preview", "production"].every((k) => eas.build[k]) && eas.build.development.developmentClient && eas.build.preview.android.buildType === "apk" && eas.build.production.autoIncrement && eas.cli.appVersionSource === "remote", "R11: eas.json has the three profiles");
+  ok(eas.build.development.env.EXPO_PUBLIC_BUILD_TYPE === "internal" && eas.build.preview.env.EXPO_PUBLIC_BUILD_TYPE === "internal" && eas.build.production.env.EXPO_PUBLIC_BUILD_TYPE === "store", "R11: build_type per profile");
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const rnfb = Object.entries(pkg.dependencies).filter(([k]) => k.startsWith("@react-native-firebase/"));
+  ok(rnfb.length === 3 && new Set(rnfb.map(([, v]) => v)).size === 1 && /^\d+\.\d+\.\d+$/.test(String(rnfb[0][1])) && String(rnfb[0][1]).startsWith("27."), "R11: @react-native-firebase/* on one exact v27 version");
+  ok(!!pkg.dependencies["expo-dev-client"] && !!pkg.dependencies["react-native-purchases"] && pkg.dependencies.expo.startsWith("57."), "R11: dev client + RevenueCat, still SDK 57");
+}
+
 export function report() {
   console.log(`=== PHASE 1B RESULT: ${pass} passed, ${fail} failed ===`);
   if (fail) process.exitCode = 1;
