@@ -42,7 +42,7 @@ export function TutorialLayer(props: {
   return (
     <>
       {props.lines ? (
-        <View style={[styles.lessonArea, { top: props.top + 60 }]} testID="tutorial-lesson">
+        <View style={styles.lessonArea} testID="tutorial-lesson">
           <DialogueScene key={props.lines.join("|")} lines={props.lines.map((text) => ({ speaker, text }))} onDone={props.onLinesDone} bottom={props.bottom} />
         </View>
       ) : null}
@@ -60,7 +60,7 @@ export function TutorialLayer(props: {
 }
 
 const styles = StyleSheet.create({
-  lessonArea: { position: "absolute", left: 0, right: 0, bottom: 0 },
+  lessonArea: { position: "absolute", left: 0, right: 0, bottom: 0, top: 0 },
   chipsWrap: { position: "absolute", left: 8, right: 8, alignItems: "center" },
   chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 5 },
   chip: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: UI.cream, borderWidth: 1, borderColor: UI.line },

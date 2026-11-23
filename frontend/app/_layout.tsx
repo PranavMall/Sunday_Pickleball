@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/src/components/error-boundary";
 import { initMeta } from "@/src/game/meta";
 import { queryClient } from "@/src/query-client";
 import { DestinationBackdrop } from "@/src/ui/DestinationBackdrop";
+import { WarmingUp } from "@/src/ui/WarmingUp";
 
 // Destinations switch by replace with no native animation; the backdrop
 // cross-fades and the content fades in (150 ms) instead.
@@ -19,8 +20,8 @@ const DEST = { animation: "none" as const, contentStyle: { backgroundColor: "tra
 // Disable logbox errors etc so that users can see the app
 // and agent works as expected.
 LogBox.ignoreAllLogs(true);
-// APP START: load (or create) the one progression save.
-initMeta();
+// APP START: load (or create) the one progression save ("Warming up" waits for it).
+const metaReady = initMeta();
 
 export default function RootLayout() {
   // One app level ErrorBoundary; a render crash shows a reload screen
@@ -43,6 +44,7 @@ export default function RootLayout() {
               <Stack.Screen name="quickplay" options={{ contentStyle: { backgroundColor: "transparent" } }} />
             </Stack>
             </ThemeProvider>
+            <WarmingUp until={metaReady} />
           </GestureHandlerRootView>
         </KeyboardProvider>
       </QueryClientProvider>

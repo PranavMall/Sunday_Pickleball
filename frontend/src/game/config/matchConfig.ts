@@ -59,6 +59,7 @@ export interface MatchConfig {
   far: TeamConfig; // the opponents
   startingScore?: StartingScore;
   ruleModifiers?: RuleModifiers;
+  firstServerSlot?: number; // the first point's server (tutorial); absent ⇒ the usual pick
   objectives?: unknown[]; // opaque to the engine (used by meta layer later)
   statNormalization: boolean; // true for ranked play (neutralise gear/partner stats)
 }
@@ -83,6 +84,7 @@ export interface BuildArgs {
   statNormalization?: boolean;
   startingScore?: StartingScore;
   ruleModifiers?: RuleModifiers;
+  firstServerSlot?: number;
   objectives?: unknown[];
 }
 
@@ -108,6 +110,7 @@ export function buildMatchConfig(a: BuildArgs): MatchConfig {
     far: team(a.far, ["Rival", "Rival"]),
     startingScore: a.startingScore,
     ruleModifiers: a.ruleModifiers,
+    ...(a.firstServerSlot !== undefined ? { firstServerSlot: a.firstServerSlot } : {}),
     objectives: a.objectives,
     statNormalization: a.statNormalization ?? false,
   };

@@ -469,9 +469,9 @@ function release102ATests() {
   eq(shareMessage({ ...base, careerNumber: 4, rival: "Andheri Locals" }), "🥒 Beat Andheri Locals 11–4 at Mumbai Local. Anli wants half the credit. Pickle-Ballers, Match 4 of 12", "share: other Career win");
   eq(shareMessage({ ...base, mode: "quick", score: "11–6" }), "🥒 Won 11–6 in Pickle-Ballers Quick Play. Doubles, kitchen rules, no mercy.", "share: Quick Play");
   ok(STORE_LINK === "" && !shareMessage({ ...base, mode: "quick" }).includes("\n"), "share: empty STORE_LINK adds nothing");
-  eq(shareText([]), "Starting my Mumbai journey in Pickle-Ballers 🥒", "cabinet share: 0");
-  eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "cabinet share: 2");
-  eq(shareText(["community", "local", "tour", "district"]), "🏆 All 4 Mumbai trophies. Mumbai is done. South Cup, you're next. Pickle-Ballers 🥒", "cabinet share: 4");
+  eq(shareText([]), "Starting the Maharashtra Circuit in Pickle-Ballers 🥒", "cabinet share: 0");
+  eq(shareText(["community", "local"]), "🏆 2 of 4 Maharashtra Circuit trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "cabinet share: 2");
+  eq(shareText(["community", "local", "tour", "district"]), "🏆 All 4 Maharashtra Circuit trophies. South Circuit, you're next. Pickle-Ballers 🥒", "cabinet share: 4");
   // Release 10.2 Part C: TUTOR exists; no Career / Quick Play / Training / Scrimmage config uses it.
   ok(!!PERSONALITY_BIAS.TUTOR && PERSONALITY_BIAS.TUTOR.lobBias === 5, "PERSONALITY_BIAS.TUTOR exists");
   const cfgs = [

@@ -5,21 +5,25 @@
 import { analytics } from "../services/analytics";
 import type { SaveDoc } from "./metaStore";
 
-export const LESSON_IDS = ["bounce", "serve", "net", "smash", "lob", "back"] as const;
+export const LESSON_IDS = ["serve", "bounce", "net", "back", "smash", "lob"] as const;
 export type LessonId = (typeof LESSON_IDS)[number];
-export const LESSON_CHIPS: Record<LessonId, string> = { bounce: "Bounce", serve: "Serve", net: "Net", smash: "Smash", lob: "Lob", back: "Back" };
+export const LESSON_CHIPS: Record<LessonId, string> = { serve: "Serve", bounce: "Bounce", net: "Net", back: "Back", smash: "Smash", lob: "Lob" };
 export const TUTORIAL_REWARD_COINS = 100;
 export const MAX_CHANCES = 3;
 
-export const INTRO_LINES = ["Practice match. Nobody's watching. Except me. I'm always watching.", "Six shots and you're ready."];
+export const INTRO_LINES = ["Practice match. Six shots and you're ready."];
+export const RESUME_LINES = ["Welcome back. Let's pick up where we left off."];
 export const LESSON_LINES: Record<LessonId, string[]> = {
-  bounce: ["Rule one: the return of serve must bounce. Then our next shot must bounce too.", "After that, volley away. Swipe toward where you want the ball to go."],
-  serve: ["Your serve. Swipe up, underhand. Hold your finger down to see where it lands.", "Into the box across from you. Nice and easy."],
-  net: ["Tap NET to move up to the kitchen line.", "No volleys from inside the kitchen. Dink: soft and low, just over the net."],
-  smash: ["They'll lob over us now. When the smash cue shows, swipe hard.", "High ball, big swing. That's the whole theory."],
-  lob: ["Your turn. Tap LOB, then swipe.", "Over their heads while they crowd the net."],
-  back: ["Tap BACK to drop to the baseline.", "That's the safe spot when they lob you."],
+  serve: ["Your serve. Swipe up, underhand, into the box across from you."],
+  bounce: ["Their return must bounce, and so must our next shot. After that, volley away."],
+  net: ["Tap NET to move up to the kitchen line. Never volley from inside the kitchen."],
+  back: ["Tap BACK to drop to the baseline. It's the safe spot when they lob you."],
+  smash: ["See this button? Grey means nothing to smash.", "When it turns red, a high ball is coming. Tap it, then swipe."],
+  lob: ["Your turn. Tap LOB, then swipe over their heads."],
 };
+// Smash lesson freeze (match screen): the bubble while frozen / after the tap.
+export const SMASH_FREEZE_LINE = "Red! A high ball is coming. Tap SMASH.";
+export const SMASH_ARMED_LINE = "Gold ring: now swipe!";
 export const SCORING_LINE = "Only the serving team scores. Lose the rally and the serve moves on.";
 export const CLOSE_ENOUGH_LINE = "Close enough. You'll see it again in Career.";
 
@@ -74,8 +78,8 @@ export class TutorialRun {
   steps: LessonId[];
   current: LessonId | null = null;
   finished = false;
-  private chances: Record<LessonId, number> = { bounce: 0, serve: 0, net: 0, smash: 0, lob: 0, back: 0 };
-  private shown: Record<LessonId, boolean> = { bounce: false, serve: false, net: false, smash: false, lob: false, back: false };
+  private chances: Record<LessonId, number> = { serve: 0, bounce: 0, net: 0, back: 0, smash: 0, lob: 0 };
+  private shown: Record<LessonId, boolean> = { serve: false, bounce: false, net: false, back: false, smash: false, lob: false };
   private introShown = false;
   private scoringShown = false;
   private closeEnough = false;
@@ -86,8 +90,10 @@ export class TutorialRun {
   private humanServed = false;
   private serveReturned = false;
 
+  private resumed: boolean;
   constructor(steps: readonly string[], private humanSlot: number) {
     this.steps = LESSON_IDS.filter((id) => steps.includes(id));
+    this.resumed = this.steps.length > 0;
     this.finished = this.steps.length === LESSON_IDS.length;
   }
 
@@ -95,7 +101,7 @@ export class TutorialRun {
     return this.steps.includes(id);
   }
 
-  // Bounce and serve first (serve waits for the human's serve), then net → smash → lob → back.
+  // Serve when the human serves, otherwise bounce first; then net → back → smash → lob.
   private pick(sim: TutorSim): LessonId | null {
     const left = LESSON_IDS.filter((id) => !this.steps.includes(id));
     if (!left.length) return null;
@@ -110,7 +116,7 @@ export class TutorialRun {
     const lines: string[] = [];
     if (!this.introShown) {
       this.introShown = true;
-      lines.push(...INTRO_LINES);
+      lines.push(...(this.resumed ? RESUME_LINES : INTRO_LINES));
     }
     if (this.closeEnough) {
       this.closeEnough = false;

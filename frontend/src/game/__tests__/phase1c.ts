@@ -351,7 +351,7 @@ async function release101() {
     const so = new MetaStore({ getItem: async (k) => old.get(k) ?? null, setItem: async (k, v) => void old.set(k, v) }, () => 0.5);
     await so.load(T0);
     ok(JSON.stringify(so.doc.career.trophies) === "{}" && trophiesWon(so.doc).join() === "community,local", "old save loads; Community Cup + Local Series show as won");
-    eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "share text");
+    eq(shareText(["community", "local"]), "🏆 2 of 4 Maharashtra Circuit trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "share text");
   }
   {
     // DEV jump to Match 7.
@@ -405,7 +405,10 @@ async function release102C() {
     analytics.recent();
     tutorialEvents.started("welcome", false);
     const run = new TutorialRun(s.doc.tutorial.steps, 0);
-    ok(run.cardFor(sim)!.join(" ").includes("Practice match") && run.current === "bounce", "intro + bounce lesson first");
+    eq([...LESSON_IDS], ["serve", "bounce", "net", "back", "smash", "lob"], "R11: LESSON_IDS order");
+    const card0 = run.cardFor(sim)!;
+    ok(card0[0] === "Practice match. Six shots and you're ready." && run.current === "bounce", "intro + bounce lesson first (the rival serves)");
+    ok(card0.length === 2, "R11: one short intro line + one lesson line");
     run.onContact(contact("drive"), sim);
     const t1 = run.onPointEnd(sim)!;
     ok(t1.id === "bounce" && !t1.auto, "bounce ticks on a ball that bounced");
@@ -436,10 +439,17 @@ async function release102C() {
     // Leave: steps kept; a new run starts at the first unticked lesson.
     tutorialEvents.left(run.steps.length);
     await s.flush();
-    ok(s.doc.tutorial.steps.join() === "bounce,serve,net" && !s.doc.tutorial.done, "Leave keeps ticked steps");
+    ok([...s.doc.tutorial.steps].sort().join() === "bounce,net,serve" && !s.doc.tutorial.done, "Leave keeps ticked steps (LESSON_IDS order)");
     const run2 = new TutorialRun(s.doc.tutorial.steps, 0);
+    const resumeCard = run2.cardFor(sim)!;
+    ok(resumeCard[0] === "Welcome back. Let's pick up where we left off." && !resumeCard.join(" ").includes("Practice match"), "R11: a resumed tutorial opens with Welcome back…");
+    ok(run2.current === "back", "next start begins at the first unticked lesson (back)");
+    sim.kitchenMode = "retreat";
+    run2.onFrame(sim);
+    ok(run2.onPointEnd(sim)?.id === "back", "back ticks on BACK");
+    sim.kitchenMode = "hold";
     run2.cardFor(sim);
-    ok(run2.current === "smash", "next start begins at the first unticked lesson");
+    ok(run2.current === "smash", "smash after back");
     sim.cue = "ready";
     run2.onFrame(sim);
     run2.onContact(contact("smash", { isVolley: true }), sim);
@@ -447,11 +457,7 @@ async function release102C() {
     sim.cue = null;
     run2.cardFor(sim);
     run2.onContact(contact("lob"), sim);
-    ok(run2.onPointEnd(sim)?.id === "lob", "lob ticks on a human lob");
-    run2.cardFor(sim);
-    sim.kitchenMode = "retreat";
-    run2.onFrame(sim);
-    ok(run2.onPointEnd(sim)?.id === "back" && run2.finished, "back ticks on BACK; all six → finished");
+    ok(run2.onPointEnd(sim)?.id === "lob" && run2.finished, "lob ticks on a human lob; all six → finished");
     for (const id of ["smash", "lob", "back"]) s.tutorialTick(id);
     const coins = s.tutorialComplete(T0 + 5, [...LESSON_IDS]);
     tutorialEvents.completed(120, false);
@@ -498,7 +504,20 @@ async function release102B() {
   ok(so.doc.settings.haptics === true, "old save without settings loads with haptics on");
 }
 
+// Release 11 Part A: you serve the tutorial's first point.
+async function release11A() {
+  const { GameSimulation } = await import("../sim/GameSimulation");
+  const { tutorialSetup } = await import("../meta/matchSetup");
+  let human = 0;
+  for (let i = 0; i < 40; i++) {
+    const sim = new GameSimulation(tutorialSetup("anli", 9000 + i).config);
+    if (sim.humanIsServer() && sim.serverSlot === sim.controllers.indexOf("LOCAL_HUMAN")) human++;
+  }
+  eq(human, 40, "R11: a fresh tutorial's first point is served by the human (40 seeds)");
+}
+
 (async () => {
+  await release11A();
   await commit4();
   await release101();
   await release102B();

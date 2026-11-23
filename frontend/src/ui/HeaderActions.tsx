@@ -37,7 +37,7 @@ function InboxBody({ save, onChange, onClose }: { save: SaveDoc | null; onChange
     if (unreadIds.length && meta.loaded && meta.markInboxRead(unreadIds)) onChange?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  if (!msgs.length) return <Text style={styles.empty} testID="inbox-empty">No messages yet. Play Career matches to hear from Mumbai.</Text>;
+  if (!msgs.length) return <Text style={styles.empty} testID="inbox-empty">No messages yet. Play Career matches to hear from the circuit.</Text>;
   return (
     <View>
       {[...msgs].reverse().map((m) => (
@@ -129,7 +129,7 @@ export function Overlay({ visible, title, onClose, children, testID }: { visible
         <View style={styles.sheetWrap}>
           <Card style={[styles.sheet, { backgroundColor: UI.cream }]} testID={testID}>
             <View style={styles.sheetHead}>
-              <Text style={styles.sheetTitle}>{title}</Text>
+              <Text style={styles.sheetTitle} numberOfLines={2}>{title}</Text>
               <Pressable testID="overlay-close" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
                 <Text style={styles.closeText}>✕</Text>
               </Pressable>
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   sheetWrap: { width: "100%", maxWidth: 420, alignSelf: "center", maxHeight: "100%" },
   sheet: { padding: 18, maxHeight: "100%", flexShrink: 1 },
   sheetHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  sheetTitle: { color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 24 },
+  sheetTitle: { flex: 1, flexShrink: 1, color: UI.ink, fontFamily: SERIF, fontWeight: "700", fontSize: 24 },
   close: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   closeText: { color: UI.inkSoft, fontSize: 20, fontWeight: "700" },
   empty: { color: UI.muted, fontSize: 15, paddingVertical: 12, lineHeight: 21 },

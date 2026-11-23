@@ -159,7 +159,7 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   const cv = (n: number) => homeCareerView({ career: { cleared: CAREER_MATCH_IDS.slice(0, n) as any, nextMatchId: CAREER_MATCH_IDS[Math.min(n, 11)], firstClearWins: n, firstClearLosses: 0, trophies: {}, talkSeen: [] } });
   ok(cv(0).button === "START CAREER", "Home card: START CAREER with nothing cleared");
   ok(cv(8).button === "PLAY MATCH 9" && cv(8).title === "Match 9 · Final", "Home card: PLAY MATCH 9 with Matches 1–8 cleared");
-  ok(cv(12).allCleared && cv(12).title === "Mumbai champions!" && cv(12).button === "REPLAY A MATCH", "Home card: all 12 cleared → Mumbai champions! + REPLAY A MATCH");
+  ok(cv(12).allCleared && cv(12).title === "Maharashtra champions!" && cv(12).button === "REPLAY A MATCH", "Home card: all 12 cleared → Maharashtra champions! + REPLAY A MATCH");
   ok(trainingTileText(0) === "2 left" && trainingTileText(2) === "Done today", "Training tile: 2 left / Done today");
 }
 
@@ -199,6 +199,32 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
     ok(JSON.parse(mem.get("pb.meta")!).trainingPartnerId === "upsi", "training partner persisted");
     report();
   })();
+}
+
+// Release 11 Part A: identity + circuit names.
+{
+  const fs = require("fs") as typeof import("fs");
+  const path = require("path") as typeof import("path");
+  const root = path.resolve(__dirname, "../../..");
+  const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e: any) => (e.isDirectory() ? (e.name === "__tests__" ? [] : walk(path.join(d, e.name))) : /\.(tsx?|json)$/.test(e.name) ? [path.join(d, e.name)] : []));
+  const files = [...walk(path.join(root, "src")), ...walk(path.join(root, "app"))];
+  const banned = ["Mumbai Journey", "Mumbai champions", "Mumbai trophies", "SOUTH CUP"];
+  const hits = files.filter((f) => banned.some((b) => fs.readFileSync(f, "utf8").includes(b)));
+  ok(hits.length === 0, "R11: no user-facing Mumbai Journey / champions / trophies / SOUTH CUP strings");
+  const cab = fs.readFileSync(path.join(root, "src/ui/CabinetBody.tsx"), "utf8");
+  ok(cab.includes("CIRCUIT_NAME.toUpperCase()") && cab.includes("NEXT_CIRCUIT_NAME.toUpperCase()") && cab.includes("of 4 won") && cab.includes("Coming soon"), "R11: CabinetBody shows the circuit names");
+  const econ = require("../meta/economyConfig");
+  ok(econ.CIRCUIT_NAME === "Maharashtra Circuit" && econ.NEXT_CIRCUIT_NAME === "South Circuit", "R11: circuit name constants");
+  const app = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8")).expo;
+  const splash = app.plugins.find((p: unknown) => Array.isArray(p) && p[0] === "expo-splash-screen")[1];
+  ok(app.ios.bundleIdentifier === "com.pickleballers.game" && app.android.package === "com.pickleballers.game", "R11: com.pickleballers.game on both platforms");
+  ok(app.owner === "pranamall15" && app.extra.eas.projectId === "663164d9-df03-4a00-af86-0cf062f1b4ac" && app.slug === "pickle-ballers" && app.scheme === "pickleballers", "R11: owner, project ID, slug, scheme");
+  ok(app.android.adaptiveIcon.backgroundColor === "#2150AC" && splash.backgroundColor === "#2150AC" && splash.image === "./assets/images/splash-icon.png", "R11: #2150AC adaptive + splash");
+  ok(!app.updates && !app.runtimeVersion && app.userInterfaceStyle === "light" && app.ios.supportsTablet === false, "R11: no OTA, light, no tablet");
+  const scan = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e: any) => (["node_modules", ".git", ".expo", "__tests__", "test_reports"].includes(e.name) ? [] : e.isDirectory() ? scan(path.join(d, e.name)) : /\.(tsx?|jsx?|json|plist|md)$/.test(e.name) ? [path.join(d, e.name)] : []));
+  const emergent = scan(root).filter((f) => fs.readFileSync(f, "utf8").includes("com" + ".emergent"));
+  ok(emergent.length === 0, "R11: no file contains com.emergent " + emergent.join());
+  ok(!fs.existsSync(path.resolve(root, "../backend")), "R11: backend/ is gone");
 }
 
 export function report() {

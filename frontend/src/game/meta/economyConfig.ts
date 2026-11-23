@@ -94,6 +94,9 @@ export function stageNameOf(careerMatchId: string): string {
   return STAGE_NAMES[careerMatchId.split(".")[1]] ?? STAGE_NAMES.community;
 }
 export const CAREER_CITY_LABEL = "Mumbai Gully";
+// Circuit names (UI copy): the current circuit and the one after it.
+export const CIRCUIT_NAME = "Maharashtra Circuit";
+export const NEXT_CIRCUIT_NAME = "South Circuit";
 
 type AiDiff = "ROOKIE" | "CLUB" | "PRO";
 type AiPers = "DEFENSIVE" | "AGGRESSIVE" | "KITCHEN" | "TACTICAL";

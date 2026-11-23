@@ -247,6 +247,11 @@ export class GameSimulation {
       this.score.servingTeam = config.startingScore.servingTeam;
       if (config.startingScore.serverNumber) this.score.serverNumber = config.startingScore.serverNumber;
     }
+    // Optional fixed first server (tutorial: the human). Absent ⇒ pickServerSlot as before.
+    if (config.firstServerSlot !== undefined) {
+      this.serverSlot = config.firstServerSlot;
+      this.score.servingTeam = this.players[config.firstServerSlot].team;
+    }
     this.setupServe();
   }
 

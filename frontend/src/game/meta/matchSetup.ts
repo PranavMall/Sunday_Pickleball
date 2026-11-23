@@ -181,6 +181,7 @@ export function tutorialSetup(partnerId: string, seed: number): MatchSetup {
     near: nearTeam(partnerId, 1),
     far: { controllers: ["AI", "AI"], difficulties: ["ROOKIE", "ROOKIE"], personalities: ["TUTOR", "TUTOR"], names: ["Tutor", "Tutor"] },
     ruleModifiers: { pointsToWin: 99, winBy: 1 },
+    firstServerSlot: 0, // you serve the first point (near slot 0 = LOCAL_HUMAN)
   });
   return { mode: "tutorial", config, rivalCode: "DRL", rivalName: "Practice pair", label: "tutorial", partnerId: partnerOf(partnerId).id, rivalLooks: [...CAREER_MATCHES[0].looks!] };
 }

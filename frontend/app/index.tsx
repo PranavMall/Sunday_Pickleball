@@ -140,7 +140,7 @@ export default function Home() {
               </View>
               <View style={styles.inner}>
                 {view.allCleared ? (
-                  <Text style={styles.rivalName} testID="career-card-soon">South Cup · coming soon</Text>
+                  <Text style={styles.rivalName} testID="career-card-soon">South Circuit · coming soon</Text>
                 ) : (
                   <>
                     <View style={styles.pair}>
@@ -182,7 +182,7 @@ export default function Home() {
                     <Ionicons name="school" size={16} color={UI.goldInk} />
                   </View>
                   <Text style={styles.tileTitle}>Tutorial</Text>
-                  <Text style={styles.tileSub}>2 min · +100</Text>
+                  <Text style={styles.tileSub}>3 min · +100</Text>
                 </Pressable>
                 <Pressable testID="tutorial-tile-hide" accessibilityRole="button" accessibilityLabel="Hide tutorial" onPress={() => hideTutorial("home")} style={styles.tutX}>
                   <Text style={styles.tutXText}>✕</Text>

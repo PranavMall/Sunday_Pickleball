@@ -701,8 +701,9 @@ export default function Match() {
         <TutorialFinish
           partnerId={match.setup.partnerId}
           coins={tutDone.coins}
-          button={meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id) ? "PLAY MATCH 1" : "CONTINUE"}
+          button={meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id) ? "BEGIN CAREER" : "CONTINUE"}
           onPress={tutorialNext}
+          onHome={meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id) ? goMenu : undefined}
         />
       ) : null}
       {!ready && (

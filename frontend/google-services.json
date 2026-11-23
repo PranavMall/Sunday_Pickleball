@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "803740379918",
+    "project_id": "pickle-ballers",
+    "storage_bucket": "pickle-ballers.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:803740379918:android:410a046418f34fc452455f",
+        "android_client_info": {
+          "package_name": "com.pickleballers.game"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBU_H7DaSsBxOGOf4RsXV7JHcyqk7w52u8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

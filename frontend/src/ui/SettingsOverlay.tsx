@@ -1,10 +1,11 @@
-// SETTINGS (gear on Home): Vibration, Edit name and team, Privacy policy (hidden
-// while PRIVACY_URL is empty), the app version.
+// SETTINGS (gear on Home): Vibration · Edit name and team · Replay the tutorial
+// (extraRows), then "Pickle-Ballers <version> (<build>) · Shapr Mall Studios".
 import { Ionicons } from "@react-native-vector-icons/ionicons";
+import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Linking, Pressable, StyleSheet, Switch, View } from "react-native";
+import { Pressable, StyleSheet, Switch, View } from "react-native";
 
 import { meta } from "@/src/game/meta";
 import type { SaveDoc } from "@/src/game/meta/metaStore";
@@ -12,7 +13,12 @@ import { Overlay } from "./HeaderActions";
 import { Text } from "./Text";
 import { UI, type IoniconName } from "./kit";
 
-export const PRIVACY_URL = ""; // gets the link in Release 15
+// Native build: "1.0.0 (11)"; Expo Go / web: the version only.
+export function versionLabel(): string {
+  const v = Application.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "";
+  const b = Constants.executionEnvironment === "storeClient" ? null : Application.nativeBuildVersion;
+  return b ? `${v} (${b})` : v;
+}
 
 export function SettingsOverlay({ visible, onClose, save, onChange, extraRows }: { visible: boolean; onClose: () => void; save: SaveDoc | null; onChange: () => void; extraRows?: React.ReactNode }) {
   const router = useRouter();
@@ -41,8 +47,7 @@ export function SettingsOverlay({ visible, onClose, save, onChange, extraRows }:
         }}
       />
       {extraRows}
-      {PRIVACY_URL ? <SettingsRow icon="shield-checkmark-outline" label="Privacy policy" testID="settings-privacy" onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})} /> : null}
-      <Text style={styles.version} testID="settings-version">Pickle-Ballers {Constants.expoConfig?.version ?? ""}</Text>
+      <Text style={styles.version} testID="settings-version">Pickle-Ballers {versionLabel()} · Shapr Mall Studios</Text>
     </Overlay>
   );
 }
