@@ -218,7 +218,7 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   const app = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8")).expo;
   const splash = app.plugins.find((p: unknown) => Array.isArray(p) && p[0] === "expo-splash-screen")[1];
   ok(app.ios.bundleIdentifier === "com.pickleballers.game" && app.android.package === "com.pickleballers.game", "R11: com.pickleballers.game on both platforms");
-  ok(app.owner === "pranamall15" && app.extra.eas.projectId === "663164d9-df03-4a00-af86-0cf062f1b4ac" && app.slug === "pickle-ballers" && app.scheme === "pickleballers", "R11: owner, project ID, slug, scheme");
+  ok(app.owner === "pranavmall15" && app.extra.eas.projectId === "663164d9-df03-4a00-af86-0cf062f1b4ac" && app.slug === "pickle-ballers" && app.scheme === "pickleballers", "R11: owner, project ID, slug, scheme");
   ok(app.android.adaptiveIcon.backgroundColor === "#2150AC" && splash.backgroundColor === "#2150AC" && splash.image === "./assets/images/splash-icon.png", "R11: #2150AC adaptive + splash");
   ok(!app.updates && !app.runtimeVersion && app.userInterfaceStyle === "light" && app.ios.supportsTablet === false, "R11: no OTA, light, no tablet");
   const scan = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e: any) => (["node_modules", ".git", ".expo", "__tests__", "test_reports"].includes(e.name) ? [] : e.isDirectory() ? scan(path.join(d, e.name)) : /\.(tsx?|jsx?|json|plist|md)$/.test(e.name) ? [path.join(d, e.name)] : []));
