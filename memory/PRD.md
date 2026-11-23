@@ -172,3 +172,11 @@ See CHANGELOG B2 entry. 236/236 tests. Next (only after user approval): Part C (
 - C: Tutorial mode (TUTOR personality row in ai.ts, src/game/meta/tutorial.ts TutorialRun), save.tutorial {done,hidden,steps,doneAt,careerPrompted}, entries: welcome step 2, Home tile, Match 1 prompt (once), Settings replay; +100 Coins once; tutorial_* analytics events.
 - md5 after A, B, C: 097a601037a7adc4e88b4ac8994948ea / 1238864370f30941b8b7966da795b3e6 (baseline).
 - Known low: LEARN THE BASICS label truncates at 320 px width (fine at 375); match screen web horizontal overflow (pre-existing).
+
+## Release 11 (branch `emergent`, 4 commits on top of 0814404)
+- A 4783236: com.pickleballers.game / owner pranamall15 / projectId 663164d9…; splash + adaptive #2150AC; Warming up screen (src/ui/WarmingUp.tsx); tutorial order serve,bounce,net,back,smash,lob, firstServerSlot (tutorial), 1 line per lesson, "Welcome back…" resume, BEGIN CAREER + Back to Home; CIRCUIT_NAME / NEXT_CIRCUIT_NAME; Overlay title wraps; Settings version line; backend/ deleted.
+- B 0c33799: expo-dev-client, eas.json, @react-native-firebase/{app,analytics,crashlytics} 27.1.1, expo-build-properties (iOS dynamic frameworks, Android SDK 36), react-native-purchases (Android key only); services/native.ts lazy loader (no-op in Expo Go/web/tests), analytics forwarder + setEnabled, Crashlytics capture + global handler + crashlytics_check, events.ts (section 11 table), settings.usageData, career.tries, app/privacy.tsx, Contact us, Send feedback (hidden while FEEDBACK_URL empty).
+- C a405d1c: sim smashArmed/toggleSmash/smashButtonCue (human only), SMASH button, tutorial freeze (TutorialRun.freezeDue), To15Pill, MatchConfig.humanRallyPressure + HUMAN_PRESSURE_MATCHES (Matches 10–12 human win 48–63%).
+- D ac7caf6: Daily challenge (meta/daily.ts, app/daily.tsx, Home third tile, save `dailyChallenge.wins`, +80 Coins first win/day).
+- md5 after A, B, C, D: 097a601037a7adc4e88b4ac8994948ea / 1238864370f30941b8b7966da795b3e6. Tests: run.ts 265, phase1a 190, phase1b 123, phase1c 182.
+- Open: trophy-handle-fix zip was not attached (3 trophy images not swapped); FEEDBACK_URL pending; /daily not URL-locked (only reachable via tile).
