@@ -56,10 +56,15 @@ const KB_GAP = 10;
 const ROW_W = KB_SIZE * 3 + KB_GAP * 2;
 const PILL_BASE = KB_BOTTOM + KB_SIZE + 12; // pills start above the row
 
+// Daily: plays of the day's challenge this app session (daily_win "tries").
+const dailyPlays: Record<string, number> = {};
+const dailyTries = (day: string) => dailyPlays[day] ?? 1;
+
 function buildMatch(p: LaunchParams): { sim: GameSimulation; config: MatchConfig; matchId: string; setup: MatchSetup } {
   const seed = (Math.random() * 1e9) | 0;
   const setup = buildSetup(p, seed, meta.loaded ? meta.doc : null);
   const config = setup.config;
+  if (setup.dailyDay) dailyPlays[setup.dailyDay] = (dailyPlays[setup.dailyDay] ?? 0) + 1;
   const sim = new GameSimulation(config);
   gameEvents.matchStart({ mode: setup.mode, careerId: setup.careerId, court: config.court, twist: setup.twist?.name, partner: config.format === "doubles" ? setup.partnerId : "none" });
   crashReporting.setAttribute("mode", setup.mode);
@@ -119,8 +124,8 @@ const PauseButton = memo(function PauseButton(props: { paused: boolean; top: num
 });
 
 export default function Match() {
-  const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string; from?: string }>();
-  const [launch, setLaunch] = useState<LaunchParams>(() => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court, from: params.from }));
+  const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string; from?: string; day?: string }>();
+  const [launch, setLaunch] = useState<LaunchParams>(() => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court, from: params.from, day: params.day }));
   const router = useRouter();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -399,11 +404,12 @@ export default function Match() {
         const won = sim.winner === "near";
         const firstClear = setup.mode === "career" && meta.loaded && !meta.doc.career.cleared.includes(setup.careerId ?? "");
         initMeta().then(() => {
-          const o = meta.completeMatch({ matchId, kind: setup.mode as Exclude<typeof setup.mode, "tutorial">, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
+          const o = meta.completeMatch({ matchId, kind: setup.mode as Exclude<typeof setup.mode, "tutorial">, won, dailyDay: setup.dailyDay, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
           const d = meta.doc;
           const goal = setup.mode === "career" ? nextGoal(d, won ? undefined : { careerMatchId: setup.careerId ?? "" }) : null;
           setOutcome({ ...o, goal, firstClear, trophyCount: trophiesWon(d).length, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
           if (firstClear && won && setup.careerId) gameEvents.careerCleared(setup.careerId, o.tries ?? 1);
+          if (setup.mode === "daily" && won) gameEvents.dailyWin(setup.twist?.name ?? "", dailyTries(setup.dailyDay ?? ""), !!o.dailyFirst);
         });
         sendEnd(false);
       }
@@ -844,7 +850,7 @@ export default function Match() {
             fans={outcome?.fans}
             partner={outcome?.partner ? partnerRow(outcome.partner, outcome.nextCareerId) : undefined}
             chips={(outcome?.moments ?? []).map(momentChip)}
-            lines={outcome?.capped ? outcome.lines : []}
+            lines={outcome?.capped ? outcome.lines : match.setup.mode === "daily" && nearWon && outcome && !outcome.dailyFirst ? ["Daily done for today"] : []}
             next={outcome?.goal}
             buttons={resultButtons()}
           />
@@ -883,6 +889,7 @@ export default function Match() {
       if (!outcome?.nextEnabled) return [btn("BACK TO CAREER", "back-career-button", goMenu, "primary"), share];
       return [btn("CAREER", "menu-button", goMenu), btn("NEXT MATCH", "next-match-button", nextMatch, "primary"), share];
     }
+    if (mode === "daily") return nearWon ? [btn("HOME", "menu-button", goMenu, "primary")] : [btn("HOME", "menu-button", goMenu), btn("TRY AGAIN", "try-again-button", rematch, "primary")];
     if (mode === "quick") return [btn("HOME", "menu-button", goMenu), btn("REMATCH", "rematch-button", rematch, "primary"), ...(nearWon ? [share] : [])];
     return [btn("BACK", "menu-button", goMenu), btn("PLAY AGAIN", "play-again-button", rematch, "primary")];
   }
@@ -898,6 +905,7 @@ function stageLabel(mode: string, careerId: string | undefined, difficulty: stri
   if (mode === "career") return careerMatchLabel(careerMatch(careerId));
   if (mode === "training") return "Training";
   if (mode === "scrimmage") return "Scrimmage";
+  if (mode === "daily") return "Daily challenge";
   return `Quick Play · ${difficulty}`;
 }
 

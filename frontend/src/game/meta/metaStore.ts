@@ -41,6 +41,9 @@ import {
 } from "./economyConfig";
 import { capLevel, growthCap, levelView } from "./levels";
 
+export const DAILY_REWARD_COINS = 80;
+export const DAILY_WINS_KEEP = 14;
+
 export interface StorageAdapter {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
@@ -90,6 +93,7 @@ export interface SaveDoc {
   inboxRead: string[];
   settings: { haptics: boolean; usageData: boolean };
   tutorial: { done: boolean; hidden: boolean; steps: string[]; doneAt?: number; careerPrompted: boolean };
+  dailyChallenge: { wins: string[] }; // Daily challenge: local dates won (last 14)
   rewardIds: string[]; // every applied rewardId (idempotency)
   ledger: LedgerEntry[]; // recent history (LEDGER_KEEP)
 }
@@ -103,7 +107,7 @@ export interface TrophyRecord {
   court: string; // display name
 }
 
-export type MatchKind = "career" | "training" | "scrimmage" | "quick";
+export type MatchKind = "career" | "training" | "scrimmage" | "quick" | "daily";
 
 // What one completed match granted (result screen). Lines = one per ledger
 // grant; events = discoveries / milestones that happened.
@@ -113,6 +117,7 @@ export interface MatchOutcome {
   events: string[];
   capped?: boolean; // training/scrimmage/quick after the daily cap
   tries?: number; // Career: plays of this match so far (this one included)
+  dailyFirst?: boolean; // daily: this win was the first of its day (+80 Coins)
   // Result-screen data, all taken from this match's ledger entries.
   coins?: CurrencyTile; // only when Coins changed
   fans?: CurrencyTile; // only when Fans changed
@@ -189,6 +194,7 @@ export function freshSave(now: number, rand: () => number = Math.random): SaveDo
     inboxRead: [],
     settings: { haptics: true, usageData: true },
     tutorial: { done: false, hidden: false, steps: [], careerPrompted: false },
+    dailyChallenge: { wins: [] },
     rewardIds: [],
     ledger: [],
   };
@@ -267,6 +273,7 @@ export function sanitiseSave(raw: unknown, now: number, rand: () => number = Mat
     inboxRead: strArr(r.inboxRead),
     settings: { haptics: !(r.settings && typeof r.settings === "object" && r.settings.haptics === false), usageData: !(r.settings && typeof r.settings === "object" && r.settings.usageData === false) },
     tutorial: tutorialOf(r.tutorial),
+    dailyChallenge: { wins: strArr(r.dailyChallenge?.wins).filter((k: string) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().slice(-14) },
     rewardIds: strArr(r.rewardIds),
     ledger: Array.isArray(r.ledger) ? r.ledger.slice(-LEDGER_KEEP) : [],
   };
@@ -504,6 +511,7 @@ export class MetaStore {
       singles?: boolean; // 1v1: no partner (no Chemistry fade)
       court?: string;
       score?: string; // final score "11–7" (trophy record)
+      dailyDay?: string; // daily: the local day the challenge was started
     },
     now: number,
   ): MatchOutcome {
@@ -627,6 +635,18 @@ export class MetaStore {
       partnerLine(m.partnerId ?? d.activePartnerId, pr.growth, pr.chemistry);
       if (m.court && !d.courtsPlayed.includes(m.court)) d.courtsPlayed.push(m.court);
       analytics.track("career_match_completed", { matchId: m.matchId, careerMatchId: id, won: m.won, replay: !firstAttempt });
+    } else if (m.kind === "daily") {
+      // +80 Coins for the first win of the local day the match started; nothing
+      // else (no Fans, Growth, Chemistry, Career progress, Quick Play cap).
+      const day = m.dailyDay ?? dayKeyOf(now);
+      const w = d.dailyChallenge.wins;
+      if (m.won && !w.includes(day)) {
+        coinsLine("coins", DAILY_REWARD_COINS, "", "Daily");
+        w.push(day);
+        w.sort();
+        if (w.length > DAILY_WINS_KEEP) w.splice(0, w.length - DAILY_WINS_KEEP);
+        out.dailyFirst = true;
+      }
     } else if (m.kind === "training" || m.kind === "scrimmage") {
       // Daily cap by local day key (rollDay above never moves backwards).
       // After the cap the match still counts and grants nothing. Never Coins/Fans.
@@ -652,7 +672,7 @@ export class MetaStore {
       analytics.track("quick_play_completed", { matchId: m.matchId, won: m.won, capped: !!out.capped });
     }
     // "Play for fun" (a capped Training / Scrimmage) never fades anyone.
-    if (!m.singles && !(out.capped && m.kind !== "quick")) this.fadeOthers(m.partnerId ?? (m.kind === "career" ? d.activePartnerId : m.kind === "quick" ? this.quickPartner() : d.trainingPartnerId), m, src, now);
+    if (m.kind !== "daily" && !m.singles && !(out.capped && m.kind !== "quick")) this.fadeOthers(m.partnerId ?? (m.kind === "career" ? d.activePartnerId : m.kind === "quick" ? this.quickPartner() : d.trainingPartnerId), m, src, now);
     this.save();
     return out;
   }

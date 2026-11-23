@@ -342,6 +342,16 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   ok(r11.seen.length === 0 && r11.text === null, "R11: no pill in a first-to-11 match");
 }
 
+// Release 11 Part D: week strip states for a fixture week.
+{
+  const { weekStrip, timeLeftText } = require("../meta/daily");
+  const now = new Date(2026, 10, 20, 17, 48).getTime(); // Friday 20 Nov
+  const w = weekStrip(now, ["2026-11-16", "2026-11-17", "2026-11-19"]);
+  ok(w.map((x: any) => `${x.label}:${x.state}`).join() === "MON:won,TUE:won,WED:missed,THU:won,FRI:today,SAT:future,SUN:future" && w[4].date === 20, "R11: week strip won / missed / today / future");
+  ok(weekStrip(now, ["2026-11-20"])[4].state === "won", "R11: today won → ✓");
+  ok(timeLeftText(now) === "6h 12m left", "R11: time left until local midnight");
+}
+
 export function report() {
   console.log(`=== PHASE 1B RESULT: ${pass} passed, ${fail} failed ===`);
   if (fail) process.exitCode = 1;

@@ -23,7 +23,8 @@ export type MatchType =
   | "challenge"
   | "event"
   | "friendly"
-  | "tutorial";
+  | "tutorial"
+  | "daily";
 
 export interface PlayerConfig {
   controller: ControllerType;

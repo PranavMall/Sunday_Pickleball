@@ -1,6 +1,8 @@
 // HOME (display): the Career card and the Training tile, derived from the save.
 import { CAREER_MATCH_IDS, TRAINING_MODES, careerMatch, type CareerMatchDef } from "./economyConfig";
 import type { SaveDoc } from "./metaStore";
+import { dailyUnlocked } from "./daily";
+import { showTutorialCard } from "./tutorial";
 
 export function homeCareerView(d: Pick<SaveDoc, "career">): { allCleared: boolean; match: CareerMatchDef; title: string; button: string } {
   const match = careerMatch(d.career.nextMatchId);
@@ -13,4 +15,11 @@ export function homeCareerView(d: Pick<SaveDoc, "career">): { allCleared: boolea
 export function trainingTileText(trainingUsedToday: number): string {
   const left = Math.max(0, TRAINING_MODES.training.dailyCap - trainingUsedToday);
   return left > 0 ? `${left} left` : "Done today";
+}
+
+// Home mode row, third slot: Daily once unlocked (after Match 2), else the
+// Tutorial tile while it is offered.
+export function homeThirdTile(d: (Pick<SaveDoc, "tutorial"> & { career: { cleared: string[] } }) | null | undefined): "daily" | "tutorial" | null {
+  if (dailyUnlocked(d)) return "daily";
+  return showTutorialCard(d) ? "tutorial" : null;
 }

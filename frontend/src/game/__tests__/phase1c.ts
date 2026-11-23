@@ -582,7 +582,50 @@ async function release11C() {
   ok(otherLessonFreeze === 0, "R11: the freeze happens in the smash lesson only");
 }
 
+// Release 11 Part D: Daily challenge.
+async function release11D() {
+  const daily = await import("../meta/daily");
+  const { homeThirdTile } = await import("../meta/home");
+  const { dayKeyOf } = await import("../meta/metaStore");
+  const { s } = await fresh();
+  ok(!daily.dailyUnlocked(s.doc) && homeThirdTile(s.doc) === "tutorial", "R11: Daily locked before Match 2; third tile = Tutorial (offered)");
+  career(s, 1, true);
+  ok(!daily.dailyUnlocked(s.doc), "R11: still locked after Match 1");
+  career(s, 2, true);
+  ok(daily.dailyUnlocked(s.doc) && homeThirdTile(s.doc) === "daily", "R11: unlocked after Match 2; third tile = Daily");
+  // Weekday → twist table (2026-11-16 is a Monday).
+  const names = [16, 17, 18, 19, 20, 21, 22].map((d) => daily.twistFor(`2026-11-${d}`));
+  eq(names.map((t) => t.name), ["Quick fire", "Clutch", "Late start", "Singles sprint", "Comeback", "Long game", "Classic"], "R11: weekday → twist names");
+  const cfg = (d: number, cleared: string[] = []) => daily.dailySetup(`2026-11-${d}`, cleared, "anli", 1).config;
+  ok(JSON.stringify(cfg(16).ruleModifiers) === '{"pointsToWin":7,"winBy":2}' && cfg(16).format === "doubles", "Mon: first to 7, win by 2");
+  ok(JSON.stringify(cfg(17).startingScore) === '{"near":8,"far":8,"servingTeam":"near","serverNumber":1}', "Tue: 8–8, you serve");
+  ok(JSON.stringify(cfg(18).startingScore) === '{"near":0,"far":3,"servingTeam":"near","serverNumber":1}', "Wed: 0–3, you serve");
+  ok(cfg(19).format === "singles" && cfg(19).far.players.length === 1 && cfg(19).near.players.length === 1 && JSON.stringify(cfg(19).ruleModifiers) === '{"pointsToWin":7,"winBy":2}', "Thu: singles to 7, first rival only");
+  ok(JSON.stringify(cfg(20).startingScore) === '{"near":3,"far":4,"servingTeam":"far","serverNumber":1}', "Fri: 3–4, they serve");
+  ok(JSON.stringify(cfg(21).ruleModifiers) === '{"pointsToWin":15,"winBy":2}', "Sat: first to 15");
+  ok(cfg(22).ruleModifiers === undefined && cfg(22).startingScore === undefined && cfg(22).format === "doubles", "Sun: classic");
+  const m3 = careerMatch(CAREER_MATCH_IDS[2]);
+  const c3 = cfg(22, CAREER_MATCH_IDS.slice(0, 2) as unknown as string[]);
+  ok(c3.far.players.map((p) => p.profileId).join() === m3.ai.join() && c3.far.players.map((p) => p.personality).join() === m3.personalities.join() && c3.court === m3.court, "R11: rivals + court = the next uncleared Career match's");
+  const press = CAREER_MATCH_IDS.map((_, i) => !!cfg(22, CAREER_MATCH_IDS.slice(0, i) as unknown as string[]).humanRallyPressure);
+  ok(press.join() === "false,false,false,false,false,false,false,false,false,true,true,true" && !!cfg(22, [...CAREER_MATCH_IDS]).humanRallyPressure, "R11: humanRallyPressure only when the rivals come from Matches 10–12");
+  // Rewards.
+  const day1 = new Date(2026, 10, 20, 10).getTime();
+  const coins0 = s.doc.coins, quick0 = s.doc.daily.quick;
+  const win = (t: number, won: boolean, id: string) => s.completeMatch({ matchId: id, kind: "daily", won, dailyDay: dayKeyOf(t), partnerId: "anli" }, t);
+  const o1 = win(day1, true, "d1");
+  ok(s.doc.coins === coins0 + 80 && o1.dailyFirst === true, "R11: first win of the day grants exactly 80 Coins");
+  win(day1 + 3600e3, true, "d2");
+  win(day1 + 7200e3, false, "d3");
+  ok(s.doc.coins === coins0 + 80, "R11: a second win the same day and a loss grant 0");
+  win(day1 + 86400e3, true, "d4");
+  ok(s.doc.coins === coins0 + 160 && s.doc.daily.quick === quick0, "R11: a win the next day grants 80; Quick Play cap unchanged");
+  for (let i = 2; i < 20; i++) win(day1 + i * 86400e3, true, `dx${i}`);
+  ok(s.doc.dailyChallenge.wins.length === 14, "R11: wins keeps at most 14 dates");
+}
+
 (async () => {
+  await release11D();
   await release11C();
   await release11B();
   await release11A();

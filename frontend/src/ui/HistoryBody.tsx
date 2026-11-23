@@ -69,7 +69,7 @@ export function HistoryBody() {
                   {r.finalScore?.near ?? 0} – {r.finalScore?.far ?? 0}
                 </Text>
                 <Text style={styles.rowMeta}>
-                  {r.format === "singles" ? "Singles" : "Doubles"} · vs {opponentLabel(r)}
+                  {r.matchType === "daily" ? "Daily · " : ""}{r.format === "singles" ? "Singles" : "Doubles"} · vs {opponentLabel(r)}
                 </Text>
               </View>
               <Text style={styles.rowSub}>Longest rally {r.rallyStats?.longestRally ?? 0}</Text>
