@@ -477,6 +477,8 @@ export default function Match() {
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        // A tutorial lesson line is showing: let the full-screen tap area take every touch.
+        .enabled(tutLines === null)
         .minDistance(0)
         .onBegin(() => {
           runOnJS(onGestureBegin)();
@@ -490,7 +492,7 @@ export default function Match() {
         .onFinalize(() => {
           runOnJS(resetArmed)();
         }),
-    [onGestureUpdate, onGestureEnd, resetArmed, onGestureBegin],
+    [onGestureUpdate, onGestureEnd, resetArmed, onGestureBegin, tutLines],
   );
 
   const resetEnd = () => {

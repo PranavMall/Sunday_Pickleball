@@ -29,7 +29,8 @@ export function platformOS(): string {
 }
 
 // internal (development / preview builds) or store (production); Expo Go / web: "dev".
-export const BUILD_TYPE: string = (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_BUILD_TYPE) || "dev";
+// Plain dotted form: Expo inlines process.env.EXPO_PUBLIC_* only when written exactly like this.
+export const BUILD_TYPE: string = process.env.EXPO_PUBLIC_BUILD_TYPE || "dev";
 
 function load<T>(get: () => T): T | null {
   if (!isNativeBuild()) return null;
