@@ -17,7 +17,8 @@ import { CourtRenderer } from "@/src/game/render/CourtRenderer";
 import { END_SEQ_S, FarSpriteAnimator, NearSpriteAnimator } from "@/src/game/render/spriteAnim";
 import { courtLoadStatus, portraitLoadStatus, sheetPrefetch, spriteLoadStatus } from "@/src/game/render/sprites";
 import { courtVisual } from "@/src/game/render/courts";
-import { analytics } from "@/src/game/services/analytics";
+import { analytics, crashReporting } from "@/src/game/services/analytics";
+import { gameEvents, PerfCounter } from "@/src/game/meta/events";
 import { sfx, SFX_AVAILABLE, SFX_ENABLED } from "@/src/game/services/sfx";
 import { logMatchResult } from "@/src/game/services/matchLog";
 import { initMeta, meta } from "@/src/game/meta";
@@ -33,8 +34,9 @@ import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_HINT_SECONDS, FAULT_LABEL_SECONDS, faultLabelFor, showHintForPoint } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
-import { KB_SIZE, KitchenButton, LobButton } from "@/src/ui/TacticalButtons";
-import { LESSON_IDS, TutorialRun, tutorialEvents, type LessonId, type TutorialFrom } from "@/src/game/meta/tutorial";
+import { KB_SIZE, KitchenButton, LobButton, SmashButton } from "@/src/ui/TacticalButtons";
+import { To15Pill } from "@/src/game/meta/to15";
+import { LESSON_IDS, SMASH_ARMED_LINE, SMASH_FREEZE_LINE, TutorialRun, tutorialEvents, type LessonId, type TutorialFrom } from "@/src/game/meta/tutorial";
 import { TutorialLayer } from "@/src/ui/TutorialLayer";
 import { TutorialFinish } from "@/src/ui/TutorialFinish";
 
@@ -44,22 +46,28 @@ import { TutorialFinish } from "@/src/ui/TutorialFinish";
 // Reserve a small edge margin from game swipe input. (The focused back handler
 // is the real Android-back protection — not this margin.)
 const EDGE_MARGIN = 24;
-// TACTICAL ROW (bottom-right, inside the bottom safe area): LOB + NET/BACK,
+// TACTICAL ROW (bottom-right, inside the bottom safe area): SMASH + LOB + NET/BACK,
 // same size, side by side. Clear of the pause button (top-right) and the
 // centred hint/cue pills (which sit ABOVE the row). Swipes that START anywhere
 // on the row are ignored.
 const KB_RIGHT = 14;
 const KB_BOTTOM = 14; // + safe-area bottom inset
 const KB_GAP = 10;
-const ROW_W = KB_SIZE * 2 + KB_GAP;
+const ROW_W = KB_SIZE * 3 + KB_GAP * 2;
 const PILL_BASE = KB_BOTTOM + KB_SIZE + 12; // pills start above the row
+
+// Daily: plays of the day's challenge this app session (daily_win "tries").
+const dailyPlays: Record<string, number> = {};
+const dailyTries = (day: string) => dailyPlays[day] ?? 1;
 
 function buildMatch(p: LaunchParams): { sim: GameSimulation; config: MatchConfig; matchId: string; setup: MatchSetup } {
   const seed = (Math.random() * 1e9) | 0;
   const setup = buildSetup(p, seed, meta.loaded ? meta.doc : null);
   const config = setup.config;
+  if (setup.dailyDay) dailyPlays[setup.dailyDay] = (dailyPlays[setup.dailyDay] ?? 0) + 1;
   const sim = new GameSimulation(config);
-  analytics.track("match_started", { mode: setup.mode, difficulty: setup.label, format: config.format, court: config.court });
+  gameEvents.matchStart({ mode: setup.mode, careerId: setup.careerId, court: config.court, twist: setup.twist?.name, partner: config.format === "doubles" ? setup.partnerId : "none" });
+  crashReporting.setAttribute("mode", setup.mode);
   return { sim, config, matchId: newMatchId(Date.now()), setup };
 }
 
@@ -116,8 +124,8 @@ const PauseButton = memo(function PauseButton(props: { paused: boolean; top: num
 });
 
 export default function Match() {
-  const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string; from?: string }>();
-  const [launch, setLaunch] = useState<LaunchParams>(() => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court, from: params.from }));
+  const params = useLocalSearchParams<{ mode?: string; difficulty?: string; singles?: string; careerId?: string; court?: string; from?: string; day?: string }>();
+  const [launch, setLaunch] = useState<LaunchParams>(() => ({ mode: params.mode, difficulty: params.difficulty, singles: params.singles, careerId: params.careerId, court: params.court, from: params.from, day: params.day }));
   const router = useRouter();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -173,6 +181,17 @@ export default function Match() {
   // Settings → Vibration, read once per match (never per contact).
   const hapticsOn = useMemo(() => !meta.loaded || meta.doc.settings.haptics, [sim]);
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
+  // match_end / perf_sample counters (numbers only; one object per match).
+  const mstats = useMemo(() => ({ t0: Date.now(), smashes: 0, smashTaps: 0, perf: new PerfCounter(), sent: false, to15: new To15Pill(), to15Text: null as string | null }), [sim]);
+  const sendEnd = useCallback(
+    (quit: boolean) => {
+      if (mstats.sent) return;
+      mstats.sent = true;
+      gameEvents.matchEnd({ mode: match.setup.mode, careerId: match.setup.careerId, won: !quit && sim.winner === "near", quit, near: sim.score.nearScore, far: sim.score.farScore, seconds: (Date.now() - mstats.t0) / 1000, smashes: mstats.smashes, smashTaps: mstats.smashTaps });
+      gameEvents.perfSample(mstats.perf);
+    },
+    [mstats, sim, match.setup],
+  );
   // TUTORIAL (mode "tutorial"): lessons between points; a replay starts all six
   // again and writes no steps. Lesson cards hold the sim like a pause.
   const tut = useMemo(() => {
@@ -185,6 +204,11 @@ export default function Match() {
   const [tutCurrent, setTutCurrent] = useState<LessonId | null>(null);
   const [tutSteps, setTutSteps] = useState<string[]>([]);
   const talkRef = useRef(false);
+  // Smash lesson FREEZE: the screen stops stepping the sim (no engine change)
+  // the first time per point the SMASH cue shows; a tap on SMASH resumes.
+  const freezeRef = useRef(false);
+  const [frozen, setFrozen] = useState(false);
+  const [tutBubble, setTutBubble] = useState<string | null>(null);
   useEffect(() => {
     if (!tut) return;
     setTutSteps([...tut.run.steps]);
@@ -274,7 +298,7 @@ export default function Match() {
         raf = requestAnimationFrame(loop);
         return;
       }
-      const idle = pausedRef.current || !readyRef.current || talkRef.current;
+      const idle = pausedRef.current || !readyRef.current || talkRef.current || freezeRef.current;
       if (idle) {
         if (!wasIdle) setFrame((f) => (f + 1) % 1000000); // one render to show the pause state
         wasIdle = true;
@@ -285,6 +309,7 @@ export default function Match() {
         return;
       }
       wasIdle = false;
+      if (sim.phase !== "game_over") mstats.perf.add(dt);
       fpsAcc += dt;
       fpsCount++;
       if (fpsAcc >= 0.5) {
@@ -319,6 +344,8 @@ export default function Match() {
         sfx.playForContact(ev);
         spriteAnim.onContact(ev, sim);
         if (tut) tut.run.onContact(ev, sim);
+        if (ev.slot === humanSlot && ev.shotType === "smash" && !ev.miss) mstats.smashes++;
+        if (tut && ev.slot === humanSlot) setTutBubble(null);
         farAnim.onContact(ev, sim);
         if (ev.slot === humanSlot && hapticsOn && Platform.OS !== "web") {
           Haptics.impactAsync(
@@ -329,9 +356,15 @@ export default function Match() {
       for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
       if (tut) {
         tut.run.onFrame(sim);
+        if (tut.run.freezeDue(sim)) {
+          freezeRef.current = true;
+          setFrozen(true);
+          setTutBubble(SMASH_FREEZE_LINE);
+        }
         if (sim.stats.pointsPlayed !== tut.points) {
           // Point over: tick (the only storage write, between points).
           tut.points = sim.stats.pointsPlayed;
+          setTutBubble(null);
           const tick = tut.run.onPointEnd(sim);
           if (tick) {
             if (!tut.replay && meta.loaded) meta.tutorialTick(tick.id);
@@ -349,6 +382,8 @@ export default function Match() {
           }
         }
       }
+      const to15 = mstats.to15.update(sim);
+      if (to15 !== mstats.to15Text) mstats.to15Text = to15;
       if (sim.phase !== "game_over") {
         spriteAnim.update(sim, -1);
         farAnim.update(sim, -1);
@@ -357,6 +392,7 @@ export default function Match() {
       if (sim.phase === "game_over" && !loggedRef.current && tut) {
         loggedRef.current = true;
         endT0.current = performance.now();
+        sendEnd(false);
         finishTutorial();
       } else if (sim.phase === "game_over" && !loggedRef.current) {
         loggedRef.current = true;
@@ -368,12 +404,14 @@ export default function Match() {
         const won = sim.winner === "near";
         const firstClear = setup.mode === "career" && meta.loaded && !meta.doc.career.cleared.includes(setup.careerId ?? "");
         initMeta().then(() => {
-          const o = meta.completeMatch({ matchId, kind: setup.mode as Exclude<typeof setup.mode, "tutorial">, won, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
+          const o = meta.completeMatch({ matchId, kind: setup.mode as Exclude<typeof setup.mode, "tutorial">, won, dailyDay: setup.dailyDay, careerMatchId: setup.careerId, partnerId: config.format === "doubles" ? setup.partnerId : undefined, singles: config.format !== "doubles", court: config.court, score: `${sim.score.nearScore}–${sim.score.farScore}` }, Date.now());
           const d = meta.doc;
           const goal = setup.mode === "career" ? nextGoal(d, won ? undefined : { careerMatchId: setup.careerId ?? "" }) : null;
           setOutcome({ ...o, goal, firstClear, trophyCount: trophiesWon(d).length, nextCareerId: d.career.nextMatchId, nextEnabled: careerMatch(d.career.nextMatchId).enabled });
+          if (firstClear && won && setup.careerId) gameEvents.careerCleared(setup.careerId, o.tries ?? 1);
+          if (setup.mode === "daily" && won) gameEvents.dailyWin(setup.twist?.name ?? "", dailyTries(setup.dailyDay ?? ""), !!o.dailyFirst);
         });
-        analytics.track("match_ended", { difficulty, format: config.format, near: sim.score.nearScore, far: sim.score.farScore });
+        sendEnd(false);
       }
       setFrame((f) => (f + 1) % 1000000);
       perf.current.workMs = perf.current.workMs * 0.9 + (performance.now() - w0) * 0.1;
@@ -381,7 +419,7 @@ export default function Match() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [sim, config, difficulty, humanSlot, hapticsOn, matchId, match.setup, spriteAnim, farAnim, tut, finishTutorial]);
+  }, [sim, config, difficulty, humanSlot, hapticsOn, matchId, match.setup, spriteAnim, farAnim, tut, finishTutorial, mstats, sendEnd]);
 
   // ---- Input: arm on finger-DOWN once past threshold, refresh while held ----
   // speed = average px/s since touch-down with a clamped minimum elapsed time
@@ -439,6 +477,8 @@ export default function Match() {
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        // A tutorial lesson line is showing: let the full-screen tap area take every touch.
+        .enabled(tutLines === null)
         .minDistance(0)
         .onBegin(() => {
           runOnJS(onGestureBegin)();
@@ -452,7 +492,7 @@ export default function Match() {
         .onFinalize(() => {
           runOnJS(resetArmed)();
         }),
-    [onGestureUpdate, onGestureEnd, resetArmed, onGestureBegin],
+    [onGestureUpdate, onGestureEnd, resetArmed, onGestureBegin, tutLines],
   );
 
   const resetEnd = () => {
@@ -506,9 +546,14 @@ export default function Match() {
   }, [paused]);
   // Back to the destination the match was launched from (bottom of the stack).
   const goMenu = () => (router.canDismiss() ? router.dismissAll() : router.replace("/"));
+  // Leave from the pause menu / Skip: match_end with quit 1 (once per match).
+  const quitMatch = () => {
+    if (!gameOverRef.current) sendEnd(true);
+    goMenu();
+  };
   const leaveTutorial = () => {
     if (tut) tutorialEvents.left(tut.run.steps.length);
-    goMenu();
+    quitMatch();
   };
   const tutorialNext = () => {
     if (meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id)) {
@@ -521,8 +566,19 @@ export default function Match() {
     if (!pausedRef.current) sim.toggleKitchenMode();
   }, [sim]);
   const toggleLob = useCallback(() => {
-    if (!pausedRef.current) sim.toggleLob();
+    if (!pausedRef.current && !freezeRef.current) sim.toggleLob();
   }, [sim]);
+  const toggleSmash = useCallback(() => {
+    if (pausedRef.current) return;
+    mstats.smashTaps++;
+    if (!sim.toggleSmash()) return;
+    if (hapticsOn && Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (freezeRef.current) {
+      freezeRef.current = false;
+      setFrozen(false);
+      setTutBubble(SMASH_ARMED_LINE);
+    }
+  }, [sim, mstats, hapticsOn]);
   const toggleMute = () => sfx.toggleMuted().then(setMuted);
 
   const gameOver = sim.phase === "game_over";
@@ -598,6 +654,7 @@ export default function Match() {
 
       {!gameOver && (
         <View style={[styles.tacticalRow, { bottom: insets.bottom + KB_BOTTOM }]} testID="tactical-row">
+          <SmashButton state={sim.smashArmed ? "armed" : !paused && sim.smashButtonCue() !== null ? "cue" : "off"} onPress={toggleSmash} />
           <LobButton armed={sim.lobArmed} onPress={toggleLob} />
           <KitchenButton
             mode={sim.kitchenMode ?? "hold"}
@@ -635,6 +692,11 @@ export default function Match() {
         >
           <Text style={[styles.bounceCueText, { textAlign: "center" }]}>{faultLabel.text}</Text>
           {faultHint && faultLabel.hint ? <Text style={styles.faultHintText} numberOfLines={1} testID="fault-hint">{faultLabel.hint}</Text> : null}
+        </View>
+      )}
+      {mstats.to15Text && !paused && !faultLabel && (
+        <View style={[styles.bounceCue, styles.faultRivals, { bottom: insets.bottom + PILL_BASE + 50 }]} pointerEvents="none" testID="to15-pill">
+          <Text style={[styles.bounceCueText, { textAlign: "center" }]}>{mstats.to15Text}</Text>
         </View>
       )}
       {twistPill && !faultLabel && (
@@ -697,12 +759,27 @@ export default function Match() {
           onSkip={leaveTutorial}
         />
       ) : null}
+      {frozen && !tutDone ? (
+        <>
+          <Pressable style={styles.freezeDim} testID="tutorial-freeze" onPress={() => {}} accessibilityLabel="Tap SMASH" />
+          <View style={[styles.freezeSmash, { bottom: insets.bottom + KB_BOTTOM, right: KB_RIGHT + 2 * (KB_SIZE + KB_GAP) }]}>
+            <SmashButton state="cue" spotlight onPress={toggleSmash} />
+          </View>
+          <PauseButton paused={paused} top={insets.top} onPause={togglePause} />
+        </>
+      ) : null}
+      {tutBubble && !tutDone && !paused ? (
+        <View style={[styles.tutBubble, { bottom: insets.bottom + KB_BOTTOM + KB_SIZE + 24 }]} pointerEvents="none" testID="tutorial-bubble">
+          <Text style={styles.tutBubbleText}>{tutBubble}</Text>
+        </View>
+      ) : null}
       {tutDone ? (
         <TutorialFinish
           partnerId={match.setup.partnerId}
           coins={tutDone.coins}
-          button={meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id) ? "PLAY MATCH 1" : "CONTINUE"}
+          button={meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id) ? "BEGIN CAREER" : "CONTINUE"}
           onPress={tutorialNext}
+          onHome={meta.loaded && !meta.doc.career.cleared.includes(careerMatch(undefined).id) ? goMenu : undefined}
         />
       ) : null}
       {!ready && (
@@ -739,7 +816,7 @@ export default function Match() {
                 <Pressable testID="restart-button" style={styles.pauseSecondaryBtn} onPress={rematch}>
                   <Text style={styles.secondaryText}>Restart</Text>
                 </Pressable>
-                <Pressable testID="quit-button" style={styles.pauseSecondaryBtn} onPress={goMenu}>
+                <Pressable testID="quit-button" style={styles.pauseSecondaryBtn} onPress={quitMatch}>
                   <Text style={styles.secondaryText}>Quit to Menu</Text>
                 </Pressable>
               </>
@@ -775,7 +852,7 @@ export default function Match() {
             fans={outcome?.fans}
             partner={outcome?.partner ? partnerRow(outcome.partner, outcome.nextCareerId) : undefined}
             chips={(outcome?.moments ?? []).map(momentChip)}
-            lines={outcome?.capped ? outcome.lines : []}
+            lines={outcome?.capped ? outcome.lines : match.setup.mode === "daily" && nearWon && outcome && !outcome.dailyFirst ? ["Daily done for today"] : []}
             next={outcome?.goal}
             buttons={resultButtons()}
           />
@@ -791,7 +868,7 @@ export default function Match() {
       testID: "share-button",
       kind: "share",
       onPress: () => {
-        analytics.track("share_clicked", { difficulty });
+        gameEvents.share("result");
         const cm = careerMatch(match.setup.careerId);
         const message = shareMessage({
           mode,
@@ -814,6 +891,7 @@ export default function Match() {
       if (!outcome?.nextEnabled) return [btn("BACK TO CAREER", "back-career-button", goMenu, "primary"), share];
       return [btn("CAREER", "menu-button", goMenu), btn("NEXT MATCH", "next-match-button", nextMatch, "primary"), share];
     }
+    if (mode === "daily") return nearWon ? [btn("HOME", "menu-button", goMenu, "primary")] : [btn("HOME", "menu-button", goMenu), btn("TRY AGAIN", "try-again-button", rematch, "primary")];
     if (mode === "quick") return [btn("HOME", "menu-button", goMenu), btn("REMATCH", "rematch-button", rematch, "primary"), ...(nearWon ? [share] : [])];
     return [btn("BACK", "menu-button", goMenu), btn("PLAY AGAIN", "play-again-button", rematch, "primary")];
   }
@@ -829,6 +907,7 @@ function stageLabel(mode: string, careerId: string | undefined, difficulty: stri
   if (mode === "career") return careerMatchLabel(careerMatch(careerId));
   if (mode === "training") return "Training";
   if (mode === "scrimmage") return "Scrimmage";
+  if (mode === "daily") return "Daily challenge";
   return `Quick Play · ${difficulty}`;
 }
 
@@ -912,6 +991,10 @@ const useStyles = makeStyles((c) => ({
   secondaryText: { color: c.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
   resultRow: { flexDirection: "row", gap: 12, marginTop: 12, width: "100%" },
   tacticalRow: { position: "absolute", right: KB_RIGHT, flexDirection: "row", gap: KB_GAP },
+  freezeDim: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)" },
+  freezeSmash: { position: "absolute" },
+  tutBubble: { position: "absolute", left: 16, right: 16, backgroundColor: "#FBF4E2", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: "#E2D6B8" },
+  tutBubbleText: { color: "#2A2A22", fontSize: 17, fontWeight: "800", textAlign: "center" },
   smashCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(214,96,60,0.95)", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 5 },
   smashCueText: { color: "#FBF6E9", fontSize: 13, fontWeight: "900", letterSpacing: 2 },
   smashReady: { backgroundColor: "rgba(20,26,18,0.7)", borderWidth: 1.5, borderColor: "rgba(214,96,60,0.95)" },

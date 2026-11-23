@@ -159,7 +159,7 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   const cv = (n: number) => homeCareerView({ career: { cleared: CAREER_MATCH_IDS.slice(0, n) as any, nextMatchId: CAREER_MATCH_IDS[Math.min(n, 11)], firstClearWins: n, firstClearLosses: 0, trophies: {}, talkSeen: [] } });
   ok(cv(0).button === "START CAREER", "Home card: START CAREER with nothing cleared");
   ok(cv(8).button === "PLAY MATCH 9" && cv(8).title === "Match 9 · Final", "Home card: PLAY MATCH 9 with Matches 1–8 cleared");
-  ok(cv(12).allCleared && cv(12).title === "Mumbai champions!" && cv(12).button === "REPLAY A MATCH", "Home card: all 12 cleared → Mumbai champions! + REPLAY A MATCH");
+  ok(cv(12).allCleared && cv(12).title === "Maharashtra champions!" && cv(12).button === "REPLAY A MATCH", "Home card: all 12 cleared → Maharashtra champions! + REPLAY A MATCH");
   ok(trainingTileText(0) === "2 left" && trainingTileText(2) === "Done today", "Training tile: 2 left / Done today");
 }
 
@@ -199,6 +199,157 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
     ok(JSON.parse(mem.get("pb.meta")!).trainingPartnerId === "upsi", "training partner persisted");
     report();
   })();
+}
+
+// Release 11 Part A: identity + circuit names.
+{
+  const fs = require("fs") as typeof import("fs");
+  const path = require("path") as typeof import("path");
+  const root = path.resolve(__dirname, "../../..");
+  const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e: any) => (e.isDirectory() ? (e.name === "__tests__" ? [] : walk(path.join(d, e.name))) : /\.(tsx?|json)$/.test(e.name) ? [path.join(d, e.name)] : []));
+  const files = [...walk(path.join(root, "src")), ...walk(path.join(root, "app"))];
+  const banned = ["Mumbai Journey", "Mumbai champions", "Mumbai trophies", "SOUTH CUP"];
+  const hits = files.filter((f) => banned.some((b) => fs.readFileSync(f, "utf8").includes(b)));
+  ok(hits.length === 0, "R11: no user-facing Mumbai Journey / champions / trophies / SOUTH CUP strings");
+  const cab = fs.readFileSync(path.join(root, "src/ui/CabinetBody.tsx"), "utf8");
+  ok(cab.includes("CIRCUIT_NAME.toUpperCase()") && cab.includes("NEXT_CIRCUIT_NAME.toUpperCase()") && cab.includes("of 4 won") && cab.includes("Coming soon"), "R11: CabinetBody shows the circuit names");
+  const econ = require("../meta/economyConfig");
+  ok(econ.CIRCUIT_NAME === "Maharashtra Circuit" && econ.NEXT_CIRCUIT_NAME === "South Circuit", "R11: circuit name constants");
+  const app = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8")).expo;
+  const splash = app.plugins.find((p: unknown) => Array.isArray(p) && p[0] === "expo-splash-screen")[1];
+  ok(app.ios.bundleIdentifier === "com.pickleballers.game" && app.android.package === "com.pickleballers.game", "R11: com.pickleballers.game on both platforms");
+  ok(app.owner === "pranamall15" && app.extra.eas.projectId === "663164d9-df03-4a00-af86-0cf062f1b4ac" && app.slug === "pickle-ballers" && app.scheme === "pickleballers", "R11: owner, project ID, slug, scheme");
+  ok(app.android.adaptiveIcon.backgroundColor === "#2150AC" && splash.backgroundColor === "#2150AC" && splash.image === "./assets/images/splash-icon.png", "R11: #2150AC adaptive + splash");
+  ok(!app.updates && !app.runtimeVersion && app.userInterfaceStyle === "light" && app.ios.supportsTablet === false, "R11: no OTA, light, no tablet");
+  const scan = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e: any) => (["node_modules", ".git", ".expo", "__tests__", "test_reports"].includes(e.name) ? [] : e.isDirectory() ? scan(path.join(d, e.name)) : /\.(tsx?|jsx?|json|plist|md)$/.test(e.name) ? [path.join(d, e.name)] : []));
+  const emergent = scan(root).filter((f) => fs.readFileSync(f, "utf8").includes("com" + ".emergent"));
+  ok(emergent.length === 0, "R11: no file contains com.emergent " + emergent.join());
+  ok(!fs.existsSync(path.resolve(root, "../backend")), "R11: backend/ is gone");
+}
+
+// Release 11 Part B: events + build config.
+{
+  const fs = require("fs") as typeof import("fs");
+  const path = require("path") as typeof import("path");
+  const root = path.resolve(__dirname, "../../..");
+  const { analytics } = require("../services/analytics");
+  const { gameEvents } = require("../meta/events");
+  const { tutorialEvents } = require("../meta/tutorial");
+  const got: { n: string; p: Record<string, unknown> }[] = [];
+  analytics.setForwarder({ logEvent: (n: string, p: Record<string, unknown>) => void got.push({ n, p }), setEnabled: () => {}, setUserProperty: () => {}, logScreenView: () => {} });
+  gameEvents.matchStart({ mode: "career", careerId: "mumbai.local.04", court: "mumbai_local", twist: null, partner: "anli" });
+  gameEvents.matchEnd({ mode: "quick", won: true, quit: false, near: 11, far: 4, seconds: 93.4, smashes: 2, smashTaps: 1 });
+  gameEvents.careerCleared("mumbai.community.02", 3);
+  gameEvents.perfSample({ frames: 600, slowFrames: 12, dtSum: 10 });
+  gameEvents.share("cabinet");
+  gameEvents.dailyView("Clutch");
+  gameEvents.dailyStart("Clutch");
+  gameEvents.dailyWin("Clutch", 2, true);
+  gameEvents.privacyOpen();
+  gameEvents.contactOpen();
+  gameEvents.feedbackOpen();
+  analytics.setEnabled(false);
+  analytics.setEnabled(true);
+  tutorialEvents.started("settings", true);
+  const want: Record<string, Record<string, unknown>> = {
+    match_start: { mode: "career", career_n: 4, court: "mumbai_local", twist: "none", partner: "anli" },
+    match_end: { mode: "quick", career_n: 0, won: 1, quit: 0, near: 11, far: 4, seconds: 93, smashes: 2, smash_taps: 1 },
+    career_cleared: { career_n: 2, tries: 3 },
+    perf_sample: { fps_avg: 60, slow_pct: 2, frames: 600 },
+    share: { from: "cabinet" },
+    daily_view: { twist: "Clutch" },
+    daily_start: { twist: "Clutch" },
+    daily_win: { twist: "Clutch", tries: 2, first_today: 1 },
+    privacy_open: {},
+    contact_open: {},
+    feedback_open: {},
+    tutorial_started: { from: "settings", replay: 1 },
+  };
+  for (const [n, p] of Object.entries(want)) {
+    const e = got.find((x) => x.n === n);
+    ok(!!e && JSON.stringify(e.p) === JSON.stringify(p), `R11 event ${n} params ${JSON.stringify(e?.p)}`);
+  }
+  const ud = got.filter((x) => x.n === "usage_data").map((x) => x.p.on);
+  ok(ud.join() === "0,1", "R11 event usage_data { on } on toggle");
+  analytics.setForwarder(null);
+  const eas = JSON.parse(fs.readFileSync(path.join(root, "eas.json"), "utf8"));
+  ok(["development", "preview", "production"].every((k) => eas.build[k]) && eas.build.development.developmentClient && eas.build.preview.android.buildType === "apk" && eas.build.production.autoIncrement && eas.cli.appVersionSource === "remote", "R11: eas.json has the three profiles");
+  ok(eas.build.development.env.EXPO_PUBLIC_BUILD_TYPE === "internal" && eas.build.preview.env.EXPO_PUBLIC_BUILD_TYPE === "internal" && eas.build.production.env.EXPO_PUBLIC_BUILD_TYPE === "store", "R11: build_type per profile");
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const rnfb = Object.entries(pkg.dependencies).filter(([k]) => k.startsWith("@react-native-firebase/"));
+  ok(rnfb.length === 3 && new Set(rnfb.map(([, v]) => v)).size === 1 && /^\d+\.\d+\.\d+$/.test(String(rnfb[0][1])) && String(rnfb[0][1]).startsWith("27."), "R11: @react-native-firebase/* on one exact v27 version");
+  ok(!!pkg.dependencies["expo-dev-client"] && !!pkg.dependencies["react-native-purchases"] && pkg.dependencies.expo.startsWith("57."), "R11: dev client + RevenueCat, still SDK 57");
+}
+
+// Release 11 Part C: rally pressure (Matches 10–12) + "It's to 15" pill.
+{
+  const { HUMAN_PRESSURE_MATCHES } = require("../meta/economyConfig");
+  const { To15Pill } = require("../meta/to15");
+  function play(sim: GameSimulation, style: string, n: number) {
+    if (sim.humanSmashWindow()) return sim.submitSwipe({ dx: 20, dy: -150, power: 0.7, tap: false, speed: 1600 });
+    const k = n % 5;
+    if (style === "drive") return k === 4 ? sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 }) : sim.submitSwipe({ dx: k % 2 ? 40 : -40, dy: -160, power: 0.75, tap: false, speed: 1500 });
+    if (k === 0) sim.submitSwipe({ dx: 30, dy: -50, power: 0.22, tap: false, speed: 450 });
+    else if (k === 1) sim.submitSwipe({ dx: -40, dy: -90, power: 0.4, tap: false, speed: 1400 });
+    else if (k === 2) sim.submitSwipe({ dx: 10, dy: -160, power: 0.7, tap: false, speed: 800 });
+    else if (k === 3) { if (!sim.lobArmed) sim.toggleLob(); sim.submitSwipe({ dx: 0, dy: -150, power: 0.65, tap: false, speed: 700 }); }
+    else sim.submitSwipe({ dx: -20, dy: -60, power: 0.3, tap: false, speed: 500 });
+  }
+  const LIMIT: Record<number, number> = { 10: 0.65, 11: 0.7, 12: 0.62 };
+  for (const num of [10, 11, 12]) {
+    const m = CAREER_MATCHES.find((x) => x.number === num)!;
+    const rates: string[] = [];
+    let okAll = true;
+    for (const style of ["drive", "mix"]) {
+      let wins = 0;
+      for (let i = 0; i < 40; i++) {
+        const cfg = careerSetup(m, "anli", 7000 + i, () => false, 1.4).config;
+        cfg.near.players[1] = { ...cfg.near.players[1], profileId: "CLUB", personality: "KITCHEN", chemistry: 1.4 };
+        const sim = new GameSimulation(cfg);
+        let n = 0;
+        for (let t = 0; t < 60 * 60 * 60 && sim.phase !== "game_over"; t++) {
+          if (sim.humanIsServer() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 0, dy: -140, power: 0.6, tap: false });
+          else if (sim.humanCanHit() && !sim.hasBufferedSwipe()) play(sim, style, n++);
+          sim.step();
+          sim.consumeContactEvents();
+          sim.consumeBounceEvents();
+        }
+        if (sim.winner === "near") wins++;
+      }
+      rates.push(`${style} ${Math.round((wins / 40) * 100)}%`);
+      if (wins / 40 > LIMIT[num]) okAll = false;
+    }
+    console.log(`  R11 rally pressure Match ${num}: human wins ${rates.join(" · ")}`);
+    ok(okAll, `R11: Match ${num} human win rate ≤ ${LIMIT[num] * 100}% with rally pressure (${rates.join(", ")})`);
+  }
+  ok(CAREER_MATCHES.every((m) => !!careerSetup(m, "anli", 1).config.humanRallyPressure === HUMAN_PRESSURE_MATCHES.includes(m.id)) && HUMAN_PRESSURE_MATCHES.length === 3, "R11: humanRallyPressure only in Matches 10–12");
+  ok(!quickPlaySetup("PRO", false, "anli", 1).config.humanRallyPressure && !quickPlaySetup("PRO", true, "anli", 1).config.humanRallyPressure && !trainingSetup("training", "anli", 1).config.humanRallyPressure && !trainingSetup("scrimmage", "anli", 1).config.humanRallyPressure && !tutorialSetup("anli", 1).config.humanRallyPressure, "R11: no rally pressure in Quick Play, Training, Tutorial");
+  const run = (ptw: number) => {
+    const pill = new To15Pill();
+    const sim = { pointsToWin: ptw, winBy: 2, phase: "waiting_serve", time: 0, score: { nearScore: 10, farScore: 9 } };
+    const seen: string[] = [];
+    const tick = (secs: number) => { for (let k = 0; k < secs * 60; k++) { sim.time += 1 / 60; const x = pill.update(sim); if (x && seen[seen.length - 1] !== `${sim.score.nearScore}-${sim.score.farScore}`) seen.push(`${sim.score.nearScore}-${sim.score.farScore}`); } };
+    tick(1); sim.phase = "rally"; tick(1);
+    sim.score.nearScore = 11; sim.phase = "waiting_serve"; tick(1);
+    const text = pill.update(sim);
+    sim.phase = "rally"; tick(1);
+    sim.score.farScore = 11; sim.phase = "waiting_serve"; tick(1);
+    sim.score.nearScore = 12; tick(2);
+    return { seen, text };
+  };
+  const r15 = run(15), r11 = run(11);
+  ok(r15.seen.join() === "11-9" && r15.text === "IT'S TO 15 · WIN BY 2", `R11: "It's to 15" pill once at 11–x in a first-to-15 match (${r15.seen.join()})`);
+  ok(r11.seen.length === 0 && r11.text === null, "R11: no pill in a first-to-11 match");
+}
+
+// Release 11 Part D: week strip states for a fixture week.
+{
+  const { weekStrip, timeLeftText } = require("../meta/daily");
+  const now = new Date(2026, 10, 20, 17, 48).getTime(); // Friday 20 Nov
+  const w = weekStrip(now, ["2026-11-16", "2026-11-17", "2026-11-19"]);
+  ok(w.map((x: any) => `${x.label}:${x.state}`).join() === "MON:won,TUE:won,WED:missed,THU:won,FRI:today,SAT:future,SUN:future" && w[4].date === 20, "R11: week strip won / missed / today / future");
+  ok(weekStrip(now, ["2026-11-20"])[4].state === "won", "R11: today won → ✓");
+  ok(timeLeftText(now) === "6h 12m left", "R11: time left until local midnight");
 }
 
 export function report() {

@@ -140,7 +140,7 @@ export default function Team() {
           <View style={[styles.card, styles.soon]} testID="roster-new-players">
             <View style={styles.q}><Text style={styles.qText}>?</Text></View>
             <Text style={styles.soonTitle}>New players</Text>
-            <Text style={styles.soonSub}>Join in the South Cup</Text>
+            <Text style={styles.soonSub}>Join in the South Circuit</Text>
           </View>
         </View>
       </View>

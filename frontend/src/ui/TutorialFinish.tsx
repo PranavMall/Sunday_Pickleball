@@ -9,7 +9,8 @@ import { Text } from "./Text";
 import { SkillChips } from "./TutorialLayer";
 import { Badge, Coin, SERIF, UI } from "./kit";
 
-export function TutorialFinish({ partnerId, coins, button, onPress }: { partnerId: string; coins: number; button: string; onPress: () => void }) {
+// Match 1 not cleared: BEGIN CAREER + a "Back to Home" text button; otherwise one CONTINUE.
+export function TutorialFinish({ partnerId, coins, button, onPress, onHome }: { partnerId: string; coins: number; button: string; onPress: () => void; onHome?: () => void }) {
   const p = PARTNERS[partnerId as PartnerId] ?? PARTNERS.anli;
   return (
     <View style={styles.wrap} testID="tutorial-finish">
@@ -18,7 +19,7 @@ export function TutorialFinish({ partnerId, coins, button, onPress }: { partnerI
         <Badge id={p.id} name={p.name} color={p.color} size={128} ring />
         <Text style={styles.title}>You're ready!</Text>
         <SkillChips done={LESSON_IDS} testID="tutorial-finish-chips" />
-        <Text style={styles.body}>You know the basics. Your Mumbai journey starts at Bandra Garden.</Text>
+        <Text style={styles.body}>You know the basics. Your career starts at Bandra Garden.</Text>
         {coins > 0 ? (
           <View style={styles.coins} testID="tutorial-finish-coins">
             <Coin size={24} />
@@ -29,6 +30,11 @@ export function TutorialFinish({ partnerId, coins, button, onPress }: { partnerI
           <Text style={styles.btnText}>{button}</Text>
           <Ionicons name="chevron-forward" size={18} color={UI.goldInk} />
         </Pressable>
+        {onHome ? (
+          <Pressable testID="tutorial-finish-home" accessibilityRole="button" onPress={onHome} style={styles.homeBtn}>
+            <Text style={styles.homeText}>Back to Home</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -43,5 +49,7 @@ const styles = StyleSheet.create({
   coins: { flexDirection: "row", alignItems: "center", gap: 8 },
   coinText: { color: "#FBF4E2", fontSize: 18, fontWeight: "900" },
   btn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, alignSelf: "stretch", minHeight: 56, borderRadius: 16, backgroundColor: UI.gold, marginTop: 6 },
+  homeBtn: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
+  homeText: { color: "#FBF4E2", fontSize: 15, fontWeight: "700", textDecorationLine: "underline" },
   btnText: { color: UI.goldInk, fontSize: 18, fontWeight: "900", letterSpacing: 1 },
 });

@@ -1,6 +1,6 @@
 // "New to pickleball?" pop-up: the welcome step 2 on Home, and once before Match 1.
 import React from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
 import { TUTORIAL_REWARD_COINS } from "@/src/game/meta/tutorial";
 import { Text } from "./Text";
@@ -8,6 +8,8 @@ import { SkillChips } from "./TutorialLayer";
 import { Coin, GoldButton, SERIF, UI } from "./kit";
 
 export function TutorialOffer({ visible, kicker, partnerName, secondary, onLearn, onSecondary, onClose, testID }: { visible: boolean; kicker: string; partnerName: string; secondary: string; onLearn: () => void; onSecondary: () => void; onClose: () => void; testID: string }) {
+  // "LEARN THE BASICS" fits a 320 pt phone: 18 pt there, never cut.
+  const narrow = useWindowDimensions().width < 360;
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.scrim}>
@@ -20,7 +22,7 @@ export function TutorialOffer({ visible, kicker, partnerName, secondary, onLearn
             </Pressable>
           </View>
           <Text style={styles.title}>New to pickleball?</Text>
-          <Text style={styles.sub}>Learn the six shots in a short practice match with {partnerName}. About 2 minutes.</Text>
+          <Text style={styles.sub}>Learn the six shots in a short practice match with {partnerName}. About 3 minutes.</Text>
           <View style={{ alignItems: "flex-start", marginTop: 10 }}>
             <SkillChips done={[]} testID={`${testID}-chips`} />
           </View>
@@ -28,7 +30,7 @@ export function TutorialOffer({ visible, kicker, partnerName, secondary, onLearn
             <Coin size={22} />
             <Text style={styles.rewardText}>+{TUTORIAL_REWARD_COINS} Coins when you finish</Text>
           </View>
-          <GoldButton testID={`${testID}-learn`} label="LEARN THE BASICS" onPress={onLearn} style={{ marginTop: 12, minHeight: 56 }} />
+          <GoldButton testID={`${testID}-learn`} label="LEARN THE BASICS" onPress={onLearn} fontSize={narrow ? 18 : undefined} style={{ marginTop: 12, minHeight: 56, paddingHorizontal: 10 }} />
           <Pressable testID={`${testID}-secondary`} accessibilityRole="button" onPress={onSecondary} style={styles.textBtn}>
             <Text style={styles.textBtnText}>{secondary}</Text>
           </Pressable>

@@ -1,0 +1,22 @@
+{
+  "summary": "Frontend-only retest of the tutorial lesson-card tap fix (Gesture.Pan().enabled(tutLines === null)) and the 3 swapped trophy images. All requested flows PASS on a 390x844 viewport, using both mouse clicks and real CDP touch events (Input.dispatchTouchEvent). Lesson 1 card: taps at court centre and other court spots (195,300 / 100,500 / 300,600 / 195,400) first finish the typing line, then go to the next line, then close the card. It took 4 taps per card, and the 300 ms lock worked as intended. Lesson 2 card (scoring + bounce lines) after a side-out also closed with court taps. A swipe-up during a lesson card did NOT serve (rally stayed 0), so pan is correctly turned off. After the card closed, a touch swipe-up served (rally 0->1), so pan is turned back on. All 3 entry points open the lesson card and taps clear it: welcome LEARN THE BASICS, Home menu-tutorial tile, and Settings -> Replay the tutorial. Quick Play: the first touch swipe serves (rally 0->1) and no tutorial layer is present. Records -> Trophies: all 8 shelf images load (naturalWidth 382), including trophy_community_cup / district_cup / maharashtra_championship.webp. The trophy popup image loads too. A won trophy (save injected) shows in full colour and the count reads '1 of 4 won'. No page errors. No deprecated Expo packages detected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/tests/pw_helpers_tut.py", ".screenshots/t2_after_serve.png", ".screenshots/t4_trophies.png", ".screenshots/t5_won.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "match.tsx:481 .enabled(tutLines === null) is correct and is included in the useMemo deps. TutorialLayer renders the lesson when lines is truthy (even []), so the pan-disabled condition always matches when the dialogue overlay is shown.",
+    "match.tsx is 1011 lines (>700). Consider splitting it (pre-existing, not part of this fix)."
+  ],
+  "updated_files": ["/app/tests/pw_helpers_tut.py (new reference snippet only)"],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100%"},
+  "seed_data_creation": "None. Each browser context is fresh (localStorage only). For the won-trophy render check, career.trophies.community was injected into that test context's localStorage only.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Offline Expo app, no backend. Fresh context: identity-prompt (player-name-input, team-name-input, click text \"Let's play\"), then welcome-tutorial (welcome-tutorial-learn / welcome-tutorial-close). Home: menu-tutorial, menu-quick-match, home-settings -> settings-replay-tutorial, nav-records -> records-tab-trophies -> cabinet-screen, trophy-<stage>, trophy-popup, shelf-mumbai-count. Match: tutorial-lesson, dialogue-tap, dialogue-text, score-rally, tutorial-skip, loading-cover. For real touch, use page.context.new_cdp_session(page) and Input.dispatchTouchEvent. Touch swipe from (150,640) to (170,380) in 8 steps x 20 ms serves reliably. The 300 ms tap lock after a line finishes typing is intended. The tutorial serve lesson only shows while the human is serving; after a side-out the next lesson is bounce."
+}

@@ -8,9 +8,11 @@ import { PARTNER_DIFFICULTY } from "../config/ai";
 import { buildMatchConfig, devSinglesConfig, type MatchConfig } from "../config/matchConfig";
 import type { Difficulty } from "../sim/types";
 import { levelView } from "./levels";
-import { CAREER_MATCHES, careerMatch, partnerBoost, PARTNERS, QUICK_PLAY_COURT, SHORT_FORMAT, STARTER_PARTNER_ID, TRAINING_MODES, type CareerMatchDef, type CourtId, type MatchTwist, type PartnerId } from "./economyConfig";
+import { CAREER_MATCHES, careerMatch, HUMAN_PRESSURE_MATCHES, partnerBoost, PARTNERS, QUICK_PLAY_COURT, SHORT_FORMAT, STARTER_PARTNER_ID, TRAINING_MODES, type CareerMatchDef, type CourtId, type MatchTwist, type PartnerId } from "./economyConfig";
+import { dailySetup } from "./daily";
+import { dayKeyOf } from "./metaStore";
 
-export type MatchMode = "quick" | "career" | "training" | "scrimmage" | "tutorial";
+export type MatchMode = "quick" | "career" | "training" | "scrimmage" | "tutorial" | "daily";
 
 export interface LaunchParams {
   mode?: string;
@@ -19,6 +21,7 @@ export interface LaunchParams {
   careerId?: string;
   court?: string; // dev-only override
   from?: string; // tutorial entry (welcome | match1 | home | settings)
+  day?: string; // daily: the local day the challenge was started (YYYY-MM-DD)
 }
 
 export interface MatchSetup {
@@ -31,10 +34,14 @@ export interface MatchSetup {
   careerId?: string;
   rivalLooks: string[]; // RIVAL_SHEETS key per far player ("" → placeholder)
   twist?: MatchTwist;
+  dailyDay?: string; // daily: the day it counts for
 }
 
 // Looks only (names, codes, difficulties unchanged): a Career match's pair,
 // with the recruit's slot switching to reserveLook once that partner is signed.
+export function careerLooksOf(m: CareerMatchDef, signed: (id: string) => boolean): string[] {
+  return careerLooks(m, signed);
+}
 function careerLooks(m: CareerMatchDef, signed: (id: string) => boolean): string[] {
   if (!m.looks) return ["", ""];
   return m.looks.map((l, i) => (m.recruit?.slot === i && m.reserveLook && signed(m.recruit.partnerId) ? m.reserveLook : l));
@@ -92,6 +99,10 @@ export function buildSetup(p: LaunchParams, seed: number, save: SetupSave | null
     const id = save?.activePartnerId ?? STARTER_PARTNER_ID;
     return careerSetup(careerMatch(p.careerId), id, seed, (x) => !!save?.partners?.[x]?.signed, boostFor(save, id));
   }
+  if (p.mode === "daily") {
+    const id = save?.activePartnerId ?? STARTER_PARTNER_ID;
+    return dailySetup(p.day ?? dayKeyOf(Date.now()), save?.career && "cleared" in save.career ? (save.career as { cleared: string[] }).cleared : [], id, seed, (x) => !!save?.partners?.[x]?.signed, boostFor(save, id));
+  }
   if (p.mode === "tutorial") return tutorialSetup(save?.activePartnerId ?? STARTER_PARTNER_ID, seed);
   if (p.mode === "training" || p.mode === "scrimmage") {
     const id = save?.trainingPartnerId ?? STARTER_PARTNER_ID;
@@ -134,6 +145,7 @@ export function careerSetup(m: CareerMatchDef, partnerId: string, seed: number, 
     far: { controllers: ["AI", "AI"], difficulties: [...m.ai], personalities: [...m.personalities], names },
     ...(m.twist?.startingScore ? { startingScore: { ...m.twist.startingScore } } : {}),
     ...(m.twist?.ruleModifiers ? { ruleModifiers: { ...m.twist.ruleModifiers } } : {}),
+    ...(HUMAN_PRESSURE_MATCHES.includes(m.id) ? { humanRallyPressure: true } : {}),
   });
   return { mode: "career", config, rivalCode: m.code, rivalName: m.rival, label: m.id, partnerId: partnerOf(partnerId).id, careerId: m.id, rivalLooks: careerLooks(m, signed), twist: m.twist };
 }
@@ -181,6 +193,7 @@ export function tutorialSetup(partnerId: string, seed: number): MatchSetup {
     near: nearTeam(partnerId, 1),
     far: { controllers: ["AI", "AI"], difficulties: ["ROOKIE", "ROOKIE"], personalities: ["TUTOR", "TUTOR"], names: ["Tutor", "Tutor"] },
     ruleModifiers: { pointsToWin: 99, winBy: 1 },
+    firstServerSlot: 0, // you serve the first point (near slot 0 = LOCAL_HUMAN)
   });
   return { mode: "tutorial", config, rivalCode: "DRL", rivalName: "Practice pair", label: "tutorial", partnerId: partnerOf(partnerId).id, rivalLooks: [...CAREER_MATCHES[0].looks!] };
 }

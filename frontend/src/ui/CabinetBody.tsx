@@ -1,14 +1,15 @@
-// TROPHY CABINET (Records → Trophies tab): one shelf per tour; every Mumbai
+// TROPHY CABINET (Records → Trophies tab): one shelf per circuit; every
 // trophy opens a pop-up (won: how; locked: what wins it).
 import { Ionicons } from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import React, { useState } from "react";
 import { Pressable, Share, StyleSheet, View } from "react-native";
 
-import { PARTNERS, STAGE_NAMES, type PartnerId } from "@/src/game/meta/economyConfig";
+import { CIRCUIT_NAME, NEXT_CIRCUIT_NAME, PARTNERS, STAGE_NAMES, type PartnerId } from "@/src/game/meta/economyConfig";
 import { finalOf, lockedLine, shareText, STAGE_ORDER, TROPHY_SHORT, trophiesWon } from "@/src/game/meta/trophies";
 import type { SaveDoc, TrophyRecord } from "@/src/game/meta/metaStore";
 import { withLink } from "@/src/game/meta/share";
+import { gameEvents } from "@/src/game/meta/events";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import { Overlay } from "./HeaderActions";
 import { Text } from "./Text";
@@ -25,8 +26,14 @@ export function CabinetBody({ save }: { save: SaveDoc | null }) {
     <View style={{ gap: 12 }} testID="cabinet-screen">
         <Card testID="shelf-mumbai">
           <View style={styles.head}>
-            <Kicker>MUMBAI · {won.length} OF 4</Kicker>
-            <Pressable testID="cabinet-share" accessibilityRole="button" accessibilityLabel="Share" onPress={() => Share.share({ message: withLink(shareText(won)) }).catch(() => {})} style={({ pressed }) => [styles.share, pressed && { opacity: 0.85 }]}>
+            <View style={{ flex: 1 }}>
+              <Kicker>{CIRCUIT_NAME.toUpperCase()}</Kicker>
+              <Text style={styles.sub} testID="shelf-mumbai-count">{won.length} of 4 won</Text>
+            </View>
+            <Pressable testID="cabinet-share" accessibilityRole="button" accessibilityLabel="Share" onPress={() => {
+              gameEvents.share("cabinet");
+              Share.share({ message: withLink(shareText(won)) }).catch(() => {});
+            }} style={({ pressed }) => [styles.share, pressed && { opacity: 0.85 }]}>
               <Ionicons name="share-social" size={18} color={UI.woodDark} />
               <Text style={styles.shareText}>Share</Text>
             </Pressable>
@@ -46,7 +53,8 @@ export function CabinetBody({ save }: { save: SaveDoc | null }) {
         </Card>
 
         <Card testID="shelf-south">
-          <Kicker>SOUTH CUP · COMING SOON</Kicker>
+          <Kicker>{NEXT_CIRCUIT_NAME.toUpperCase()}</Kicker>
+          <Text style={styles.sub}>Coming soon</Text>
           <View style={styles.shelf}>
             {STAGE_ORDER.map((k) => (
               <View key={k} style={styles.slot}>
@@ -97,6 +105,7 @@ function fmtDate(t: number): string {
 }
 
 const styles = StyleSheet.create({
+  sub: { color: UI.inkSoft, fontSize: 12, marginTop: 2 },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   share: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, paddingHorizontal: 12, borderRadius: 14, backgroundColor: UI.cream, borderWidth: 1, borderColor: UI.line, elevation: 4 },
   shareText: { color: UI.woodDark, fontSize: 14, fontWeight: "800" },

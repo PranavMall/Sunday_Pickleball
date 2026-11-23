@@ -94,7 +94,7 @@ export function Kicker({ children, style }: { children: React.ReactNode; style?:
 }
 
 // Primary yellow button.
-export function GoldButton({ label, onPress, testID, big = false, disabled = false, style }: { label: string; onPress: () => void; testID?: string; big?: boolean; disabled?: boolean; style?: StyleProp<ViewStyle> }) {
+export function GoldButton({ label, onPress, testID, big = false, disabled = false, style, fontSize }: { label: string; onPress: () => void; testID?: string; big?: boolean; disabled?: boolean; style?: StyleProp<ViewStyle>; fontSize?: number }) {
   return (
     <Pressable
       testID={testID}
@@ -104,7 +104,7 @@ export function GoldButton({ label, onPress, testID, big = false, disabled = fal
       onPress={onPress}
       style={({ pressed }) => [kit.gold, big && kit.goldBig, disabled && kit.disabled, pressed && kit.pressed, style]}
     >
-      <Text style={[kit.goldText, big && kit.goldTextBig]} numberOfLines={1}>
+      <Text style={[kit.goldText, big && kit.goldTextBig, fontSize ? { fontSize } : null, { flexShrink: 1 }]} numberOfLines={1}>
         {label}
       </Text>
       <Ionicons name="chevron-forward" size={big ? 24 : 18} color={UI.goldInk} />

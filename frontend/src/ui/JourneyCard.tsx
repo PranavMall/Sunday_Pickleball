@@ -1,4 +1,4 @@
-// MUMBAI JOURNEY: the Career progress card. Four stage columns (trophy,
+// CIRCUIT JOURNEY: the Career progress card. Four stage columns (trophy,
 // WON ribbon, lock, two-line name, three match nodes), built from
 // CAREER_MATCHES (never hard-coded counts). Tapping a ✓ node picks a replay.
 import { Ionicons } from "@react-native-vector-icons/ionicons";
@@ -6,7 +6,7 @@ import { Image } from "expo-image";
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { CAREER_MATCHES, COURT_NAMES, PLAYER_BADGE_COLOR, STAGE_NAMES, type CareerMatchDef } from "@/src/game/meta/economyConfig";
+import { CAREER_MATCHES, CIRCUIT_NAME, COURT_NAMES, PLAYER_BADGE_COLOR, STAGE_NAMES, type CareerMatchDef } from "@/src/game/meta/economyConfig";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
 import { Badge, Card, Kicker, UI } from "./kit";
 import { Text } from "./Text";
@@ -29,7 +29,7 @@ export function JourneyCard({ cleared, nextOpen, picked, playerName, onPick }: {
   return (
     <Card style={styles.card} testID="career-progress">
       <View style={styles.head}>
-        <Kicker style={styles.kicker}>MUMBAI JOURNEY</Kicker>
+        <Kicker style={styles.kicker}>{CIRCUIT_NAME.toUpperCase()}</Kicker>
         <Text style={styles.of} testID="journey-of">Match {nextOpen.number} of {CAREER_MATCHES.length}</Text>
       </View>
       <View style={styles.cols}>
@@ -92,7 +92,7 @@ export function JourneyCard({ cleared, nextOpen, picked, playerName, onPick }: {
       </View>
       <Text style={styles.next} testID="journey-next">
         {allDone ? (
-          "Mumbai Journey complete"
+          `${CIRCUIT_NAME} complete`
         ) : (
           <>
             Next: <Text style={styles.nextHi}>Match {nextOpen.number}</Text>

@@ -14,7 +14,8 @@ import { Fullscreen } from "@/src/components/fullscreen";
 import { IdentityEditor } from "@/src/components/identity-editor";
 import { meta } from "@/src/game/meta";
 import { COURT_NAMES, PLAYER_BADGE_COLOR, STAGE_NAMES } from "@/src/game/meta/economyConfig";
-import { homeCareerView, trainingTileText } from "@/src/game/meta/home";
+import { homeCareerView, homeThirdTile, trainingTileText } from "@/src/game/meta/home";
+import { timeLeftText, wonToday } from "@/src/game/meta/daily";
 import { hasUnread } from "@/src/game/meta/inbox";
 import { partnerOf } from "@/src/game/meta/matchSetup";
 import { TROPHY_BY_STAGE } from "@/src/game/render/sprites";
@@ -72,12 +73,21 @@ export default function Home() {
     tutorialEvents.hidden(from);
     refresh();
   };
-  const tutorialTile = showTutorialCard(save);
+  const third = homeThirdTile(save);
+  const tutorialTile = third === "tutorial";
+  const dailyTile = third === "daily";
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!dailyTile) return;
+    const t = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, [dailyTile]);
+  const dailyDone = dailyTile && wonToday(save, nowMs);
   useEffect(() => {
     if (tutorialTile) tutorialEvents.offered("home");
   }, [tutorialTile]);
 
-  const view = homeCareerView(save ?? { career: { cleared: [], nextMatchId: "mumbai.community.01", firstClearWins: 0, firstClearLosses: 0, trophies: {}, talkSeen: [] } });
+  const view = homeCareerView(save ?? { career: { cleared: [], nextMatchId: "mumbai.community.01", firstClearWins: 0, firstClearLosses: 0, trophies: {}, talkSeen: [], tries: {} } });
   const m = view.match;
   const playerName = identity?.playerName ?? "";
   const partner = partnerOf(save?.activePartnerId);
@@ -140,7 +150,7 @@ export default function Home() {
               </View>
               <View style={styles.inner}>
                 {view.allCleared ? (
-                  <Text style={styles.rivalName} testID="career-card-soon">South Cup · coming soon</Text>
+                  <Text style={styles.rivalName} testID="career-card-soon">South Circuit · coming soon</Text>
                 ) : (
                   <>
                     <View style={styles.pair}>
@@ -175,6 +185,16 @@ export default function Home() {
               <Text style={styles.tileTitle}>Training</Text>
               <Text style={styles.tileSub} testID="training-tile-left">{trainingTileText(trainingUsed)}</Text>
             </Pressable>
+            {dailyTile ? (
+              <Pressable testID="menu-daily" accessibilityRole="button" accessibilityLabel={dailyDone ? "Daily challenge, done today" : "Daily challenge"} onPress={() => router.push("/daily")} style={({ pressed }) => [styles.tile, styles.dailyTile, { height: tileH }, pressed && { transform: [{ scale: 0.98 }] }]}>
+                <View style={styles.tutIcon}>
+                  <Ionicons name="calendar" size={16} color={UI.goldInk} />
+                </View>
+                <Text style={styles.tileTitle}>Daily</Text>
+                <Text style={styles.tileSub} testID="daily-tile-sub">{dailyDone ? "Done today" : timeLeftText(nowMs)}</Text>
+                {!dailyDone ? <View style={styles.dailyDot} testID="daily-tile-dot" /> : null}
+              </Pressable>
+            ) : null}
             {tutorialTile ? (
               <View style={[styles.tile, styles.tutTile, { height: tileH }]}>
                 <Pressable testID="menu-tutorial" accessibilityRole="button" accessibilityLabel="Tutorial" onPress={() => startTutorial(router, "home")} style={styles.tutPress}>
@@ -182,7 +202,7 @@ export default function Home() {
                     <Ionicons name="school" size={16} color={UI.goldInk} />
                   </View>
                   <Text style={styles.tileTitle}>Tutorial</Text>
-                  <Text style={styles.tileSub}>2 min · +100</Text>
+                  <Text style={styles.tileSub}>3 min · +100</Text>
                 </Pressable>
                 <Pressable testID="tutorial-tile-hide" accessibilityRole="button" accessibilityLabel="Hide tutorial" onPress={() => hideTutorial("home")} style={styles.tutX}>
                   <Text style={styles.tutXText}>✕</Text>
@@ -278,6 +298,8 @@ const styles = StyleSheet.create({
   trIcon: { width: 26, height: 22, borderRadius: 7, backgroundColor: UI.green, alignItems: "center", justifyContent: "center" },
   tileTitle: { color: UI.ink, fontSize: 14, fontWeight: "800", marginTop: 2 },
   tileSub: { color: UI.inkSoft, fontSize: 11 },
+  dailyTile: { backgroundColor: "rgba(251,240,206,0.92)", borderWidth: 2, borderColor: UI.gold },
+  dailyDot: { position: "absolute", top: -3, right: -3, width: 12, height: 12, borderRadius: 6, backgroundColor: "#D6403C", borderWidth: 2, borderColor: "#fff" },
   tutTile: { backgroundColor: "rgba(251,240,206,0.92)", borderWidth: 2, borderColor: UI.gold, paddingHorizontal: 0 },
   tutPress: { flex: 1, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
   tutIcon: { width: 26, height: 22, borderRadius: 7, backgroundColor: UI.gold, alignItems: "center", justifyContent: "center" },

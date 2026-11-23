@@ -1,4 +1,4 @@
-// TACTICAL BUTTONS (match HUD): LOB + NET / BACK. Same positions and 1-tap
+// TACTICAL BUTTONS (match HUD): SMASH + LOB + NET / BACK. Same positions and 1-tap
 // rules as before; round (≥ 64 pt), cream 2 pt ring, soft shadow, press-down
 // scale 0.94. The NET / BACK cooldown is a ring of segments filling around the
 // button (static geometry, precomputed once; no per-frame allocation).
@@ -68,7 +68,42 @@ export const LobButton = memo(function LobButton(props: { armed: boolean; onPres
   );
 });
 
+// SMASH: grey (no high ball; a tap does nothing) · red + slow pulse (high ball
+// coming: tap to arm) · armed (red, 4 pt gold ring, soft gold glow, scale-up).
+export type SmashState = "off" | "cue" | "armed";
+export const SmashButton = memo(function SmashButton(props: { state: SmashState; onPress: () => void; spotlight?: boolean }) {
+  const s = useSharedValue(1);
+  useEffect(() => {
+    if (props.state === "cue") s.value = withRepeat(withTiming(1.07, { duration: 700 }), -1, true);
+    else if (props.state === "armed") s.value = withRepeat(withTiming(1.06, { duration: 450 }), -1, true);
+    else {
+      cancelAnimation(s);
+      s.value = 1;
+    }
+  }, [props.state, s]);
+  const pulse = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  const off = props.state === "off";
+  return (
+    <Animated.View style={[pulse, off && { opacity: 0.45 }, props.spotlight && styles.spotlight]}>
+      <Pressable
+        testID="smash-button"
+        accessibilityLabel={props.state === "armed" ? "Smash armed. Swipe now" : props.state === "cue" ? "High ball coming. Tap to arm a smash" : "Smash. Nothing to smash yet"}
+        accessibilityState={{ disabled: off, selected: props.state === "armed" }}
+        onPress={props.onPress}
+        style={({ pressed }) => [styles.btn, off ? styles.grey : styles.red, props.state === "armed" && styles.armed, pressed && !off && styles.pressed]}
+      >
+        <Ionicons name="flash" size={22} color="#FBF4E2" />
+        <Text style={styles.label} testID="smash-button-state">SMASH</Text>
+      </Pressable>
+    </Animated.View>
+  );
+});
+
 const styles = StyleSheet.create({
+  grey: { backgroundColor: "rgba(70,70,70,0.9)" },
+  red: { backgroundColor: "#D6603C" },
+  armed: { borderColor: "#F6C94A", borderWidth: 4, shadowColor: "#F6C94A", shadowOpacity: 0.9, shadowRadius: 10, elevation: 12 },
+  spotlight: { borderRadius: KB_SIZE, shadowColor: "#F6C94A", shadowOpacity: 1, shadowRadius: 16, elevation: 16 },
   btn: {
     width: KB_SIZE, height: KB_SIZE, borderRadius: KB_SIZE / 2, alignItems: "center", justifyContent: "center",
     borderWidth: 2, borderColor: "#FBF4E2",

@@ -1,16 +1,21 @@
 <analysis>**original_problem_statement**: 
-Pickle-Ballers — Release 10.1: Implement reliable loading (memory/network fixes), match talk + twists (5 specific matches with rule/score changes), partner levels that affect simulation via chemistry, a new Trophy cabinet UI, grid-based Team screen, and polished LOB/NET/BACK buttons. Maintain strictly byte-identical deterministic gameplay matching the MD5 hashes  (b3Report) and  (shotMix). Make exactly one revertable commit, then STOP.
+Pickle-Ballers — Release 10.2: Implement fixes (Part A), new Home and bottom navigation (Part B), and a new interactive Tutorial match (Part C). Maintain strictly byte-identical deterministic gameplay matching the MD5 hashes  (b3Report) and  (shotMix). Make three revertable commits for each part in one session, then STOP.
+
+PRODUCT REQUIREMENTS:
+- **Part A**: Fix Mahabaleshwar court display, route NEXT MATCH to Match talk, update Next Match layout (TWIST/NEW tags), change goal string on loss, create Trophy cabinet popups with short names, add tap lock to dialogue, delay twist pill until serve, update share text mapping.
+- **Part B**: New bottom navigation (Team, Passport, Home, Locker, Records). Rebuild Home screen with career cards, modular Records screen (Trophies/Stats/History), and Settings overlay (haptics toggle). 
+- **Part C**: 6-step interactive Tutorial match with TUTOR AI personality. Shown optionally via Home tile, Settings, or Match 1 prompt. Triggers specific analytics events (). 
 
 **User's preferred language**: English (INSTRUCT next agent to respond in English only)
 
 **what currently exists?** 
-A React Native Skia pickleball simulation with a robust offline MetaStore. Release 10.1 is fully implemented. The app now includes dynamic asset loading retries, interactive pre-match talk dialogues, pre-match twists that modify rules/scores, partner leveling and chemistry that directly influence game AI difficulty, a new Trophy cabinet, a grid-based Team screen, and polished tactical buttons. Determinism is strictly maintained, with all 265 headless tests and MD5 hashes passing perfectly.
+A React Native Skia pickleball simulation with a robust offline MetaStore. Release 10.2 is fully implemented across 3 specific commits. It introduces a new Home Screen, modular bottom navigation, an onboarding Tutorial Match with a custom TUTOR AI, and numerous QoL/UI fixes (Trophy popups, Next Match routing, dynamic Share text). Determinism is strictly maintained, with all test suites and MD5 hashes passing perfectly.
 
 **Last working item**:
-    - Last item agent was working: Finalizing Release 10.1. The agent fixed two minor web UI bugs found by the  (a hit box issue on the Team Sign button and text cutoff on the Match screen), verified tests, created the final commit (), and stopped execution as requested.
+    - Last item agent was working: Finalizing Release 10.2 Part C (Tutorial). Addressed UI bugs identified by the  (navigation stack resets, dialogue state pausing, text wrapping), verified regression hashes, logged PRD updates, and completed the session exactly as requested by the user. 
     - Status: USER VERIFICATION PENDING
     - Agent Testing Done: Y
-    - Which testing method agent to use? NA
+    - Which testing method agent to use? NA (Testing already done)
     - User Testing Done: N
 
 **All Pending/In progress Issue list**: 
@@ -21,7 +26,7 @@ None.
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
-- **Release 10.1 Approval** (P0): Wait for Pranav's phone test results to confirm the Release 10.1 build (UI, match talk, twists, partner levels, and trophy cabinet). *(CRITICAL: DO NOT START ANY NEW TASK until the user explicitly approves Release 10.1).*
+- **Release 10.2 Approval** (P0): Wait for Pranav's phone test results to confirm the Release 10.2 build (UI flows, Navigation, Settings, Tutorial logic, Trophies). *(CRITICAL: DO NOT START ANY NEW TASK until the user explicitly approves Release 10.2).*
 - **Milestone 2 - It feels great (Part C)** (P1): Singles menu/UI, new AI profiles, asset step.
 - **Milestone 3 - Ready for beta** (P2): Onboarding, How to Play screens, Settings, Privacy policy, Sentry/Analytics integration.
 
@@ -29,25 +34,18 @@ Future Tasks:
 - Online multiplayer architecture, cosmetic store.
 
 **Completed work in this session**
-- Release 10.1 features implemented and committed (Commit ):
-  - Asset memory/network loading retries and sheet eviction (, ).
-  - Inbox scrolling fix and read/done state tidying (, ).
-  - DEV Jump to Match N functionality (, ).
-  - Match Twists configuration and UI (, , , ).
-  - Match Talk Pokemon-style dialogue scene (, ).
-  - Partner level and chemistry affecting simulation parameters + UI popups (, , ).
-  - Trophy cabinet UI and logic (, , ).
-  - Polished LOB and NET/BACK buttons (, ).
-  - Team screen grid UI with pop-ups ().
-  - All tests updated and passing perfectly; MD5 hashes match exactly.
+- Release 10.2 Part A fixes committed (): Mahabaleshwar court fix (), NEXT MATCH talk logic, Next Match card layout, Try again goal, trophy pop-ups, dialogue tap lock, twist pill logic, share messages.
+- Release 10.2 Part B committed (): New Home screen, bottom navigation (Team, Passport, Home, Locker, Records), modular Records tabs, Settings overlay with Vibration toggle.
+- Release 10.2 Part C committed (): Tutorial flow,  AI personality config, six active lessons in a match, welcome / Match 1 / Settings triggers, and tutorial analytics events.
+- Addressed  feedback for Part C (navigation resets, layout wraps).
 
 **Earlier issues found/mentioned but not fixed**
--  is still very large (~850+ lines) and could be split further (noted previously).
+-  is still very large, though parts were stripped out in previous runs (Deferred).
 - Singles performance is marginally slower than doubles gameplay on device (Deferred to Milestone 2 Part C).
 - Non-blocking technical debt from React Native Skia: Deprecation warnings for  mutators,  prop, and  (Deferred).
 
 **Known issue recurrence from previous fork**
-- Issue recurrence in previous fork: NA
+- Issue recurrence in previous fork: None
 - Recurrence count: 0
 - Status: NOT STARTED
 
@@ -55,45 +53,47 @@ Future Tasks:
 
 
 **Key Technical Concepts**
-React Native Skia, Deterministic Fixed-Timestep Simulation, Single-Document JSON MetaStore (), Seeded RNG, Byte-identical regression testing.  explicitly utilized to preload Skia Images. 
+React Native Skia, Deterministic Fixed-Timestep Simulation, Single-Document JSON MetaStore (), Seeded RNG, Byte-identical regression testing.  preloading. Custom bottom bar overriding Router stacks.
 
 **key DB schema**
-- Local  / . Single JSON document () containing schemaVersion, currencies, Inbox, Career progression, Daily caps, Partner Chemistry/Growth, and now  (wonAt, score, rival, partnerId, court).
+- Local . Single JSON document (). 
+- **New schema additions**:
+  -  (boolean)
+  -  ({ done: boolean; hidden: boolean; steps: string[]; doneAt?: number; careerPrompted?: boolean })
 
 **changes in tech stack**
 - None.
 
 **All files of reference**
--  & : Updated to handle memory caching and network retries for assets.
--  & : Added for match-talk dialogue sequences.
--  & : Added for the Trophy cabinet feature.
-- : Rewritten to show the player grid and modal pop-ups.
-- : Split out from  for cleaner button logic.
--  & : Updated  to properly hook chemistry/level into AI difficulty parameters.
-- : Phase 1 A, B, C tests updated to validate new configurations.
+- , , , : Heavily modified to fit the new Navigation paradigm. 
+- : Manages bottom tab navigation.
+-  & : Controls tutorial state, offerings, and match layers.
+- : Extracts share messages contextually.
+- : Phase 1 A, B, C tests fully passing and validating new config.
 
 **Areas that need refactoring**
--  (still a very large file, though  were moved out).
-- React Native Skia deprecations.
+-  is a monolithic file handling match engine binding, UI layers, stats overlays, and now tutorial logic.
 
 **key api endpoints**
 - NA (Offline App).
 
 **Critical Info for New Agent**
-- **STOP RULE ACTIVE / USER TEST PENDING**: The user explicitly requested to stop after Commit Release 10.1 so Pranav can verify the build natively on his phone. **DO NOT start new tasks until the user gives explicit approval.**
-- **Strict Determinism**: The game engine is frozen. Any future changes to the simulation must strictly maintain the byte-identical MD5 hashes for  () and  ().
+- **STOP RULE ACTIVE / USER TEST PENDING**: The user explicitly requested to stop after the three commits so Pranav can verify the build natively on his phone. **DO NOT start new tasks until the user gives explicit approval.**
+- **Strict Determinism**: The game engine is frozen. Any changes must strictly maintain the byte-identical MD5 hashes for  () and  ().
 
 **documents and test reports created in this job**
-- Relying on console outputs from the test suites. Test reports output by  are saved internally in the workspace logs.
+-  (Updated with Release 10.2 changes)
+-  &  (Testing agent UI validations)
 
 **Last 10 User Messages and any pending HUMAN messages** 
-- *User*: Provided handoff summary.
-- *Assistant*: Asked for confirmation.
-- *User*: Provided zip assets and instructions for Release 10.1. Requested exactly one commit, then STOP.
-- *Assistant*: Implemented features, verified MD5 hashes, fixed web prefetch bugs, called .
-- *Assistant (via User feedback)*:  reported 2 minor web visual bugs (hitbox on Sign button, text cutoff).
-- *Assistant*: Fixed bugs, successfully passed regression tests, finalized the commit (), and stopped.
-*(Pending Human message: Awaiting user Pranav to test the Release 10.1 build natively, confirm UI and features, and provide the next prompt).*
+- *User*: Provided handoff summary of 10.1.
+- *Assistant*: Asked for confirmation on plan.
+- *User*: Provided 10.2 Requirements in Parts A, B, and C with assets zip. Ordered 3 commits and to STOP for user testing.
+- *Assistant*: Performed Part A (Bug fixes). MD5 matched. Committed.
+- *Assistant*: Performed Part B (Home & Navigation). MD5 matched. Committed. 
+- *Assistant*: Performed Part C (Tutorial). Called . MD5 matched. Committed.
+- *Assistant*: Wrapped up session and used finish tool.
+*(Pending Human message: Awaiting user Pranav to test the Release 10.2 build natively, confirm fixes, UI, and tutorial features, and provide the next prompt).*
 
 **Project Health Check:**
 - Broken: None
@@ -112,10 +112,10 @@ React Native Skia, Deterministic Fixed-Timestep Simulation, Single-Document JSON
 - NA (Offline mode)
 
 **What agent forgot to execute**
-- Nothing. All requirements and strictly deterministic tests were fully satisfied as requested.
+- Nothing. All requirements and strictly deterministic tests were successfully implemented.
 
 **Debugging checklist for current issue**
-No active issues. Await user feedback on Release 10.1.
+No active issues. Await user feedback on Release 10.2.
 
 Note:
 - You are currently working in a dev (or preview) environment.

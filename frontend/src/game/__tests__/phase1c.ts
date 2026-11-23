@@ -351,7 +351,7 @@ async function release101() {
     const so = new MetaStore({ getItem: async (k) => old.get(k) ?? null, setItem: async (k, v) => void old.set(k, v) }, () => 0.5);
     await so.load(T0);
     ok(JSON.stringify(so.doc.career.trophies) === "{}" && trophiesWon(so.doc).join() === "community,local", "old save loads; Community Cup + Local Series show as won");
-    eq(shareText(["community", "local"]), "🏆 2 of 4 Mumbai trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "share text");
+    eq(shareText(["community", "local"]), "🏆 2 of 4 Maharashtra Circuit trophies in Pickle-Ballers: Community Cup, Mumbai Local. Next stop: Maharashtra Tour.", "share text");
   }
   {
     // DEV jump to Match 7.
@@ -405,7 +405,10 @@ async function release102C() {
     analytics.recent();
     tutorialEvents.started("welcome", false);
     const run = new TutorialRun(s.doc.tutorial.steps, 0);
-    ok(run.cardFor(sim)!.join(" ").includes("Practice match") && run.current === "bounce", "intro + bounce lesson first");
+    eq([...LESSON_IDS], ["serve", "bounce", "net", "back", "smash", "lob"], "R11: LESSON_IDS order");
+    const card0 = run.cardFor(sim)!;
+    ok(card0[0] === "Practice match. Six shots and you're ready." && run.current === "bounce", "intro + bounce lesson first (the rival serves)");
+    ok(card0.length === 2, "R11: one short intro line + one lesson line");
     run.onContact(contact("drive"), sim);
     const t1 = run.onPointEnd(sim)!;
     ok(t1.id === "bounce" && !t1.auto, "bounce ticks on a ball that bounced");
@@ -436,10 +439,17 @@ async function release102C() {
     // Leave: steps kept; a new run starts at the first unticked lesson.
     tutorialEvents.left(run.steps.length);
     await s.flush();
-    ok(s.doc.tutorial.steps.join() === "bounce,serve,net" && !s.doc.tutorial.done, "Leave keeps ticked steps");
+    ok([...s.doc.tutorial.steps].sort().join() === "bounce,net,serve" && !s.doc.tutorial.done, "Leave keeps ticked steps (LESSON_IDS order)");
     const run2 = new TutorialRun(s.doc.tutorial.steps, 0);
+    const resumeCard = run2.cardFor(sim)!;
+    ok(resumeCard[0] === "Welcome back. Let's pick up where we left off." && !resumeCard.join(" ").includes("Practice match"), "R11: a resumed tutorial opens with Welcome back…");
+    ok(run2.current === "back", "next start begins at the first unticked lesson (back)");
+    sim.kitchenMode = "retreat";
+    run2.onFrame(sim);
+    ok(run2.onPointEnd(sim)?.id === "back", "back ticks on BACK");
+    sim.kitchenMode = "hold";
     run2.cardFor(sim);
-    ok(run2.current === "smash", "next start begins at the first unticked lesson");
+    ok(run2.current === "smash", "smash after back");
     sim.cue = "ready";
     run2.onFrame(sim);
     run2.onContact(contact("smash", { isVolley: true }), sim);
@@ -447,11 +457,7 @@ async function release102C() {
     sim.cue = null;
     run2.cardFor(sim);
     run2.onContact(contact("lob"), sim);
-    ok(run2.onPointEnd(sim)?.id === "lob", "lob ticks on a human lob");
-    run2.cardFor(sim);
-    sim.kitchenMode = "retreat";
-    run2.onFrame(sim);
-    ok(run2.onPointEnd(sim)?.id === "back" && run2.finished, "back ticks on BACK; all six → finished");
+    ok(run2.onPointEnd(sim)?.id === "lob" && run2.finished, "lob ticks on a human lob; all six → finished");
     for (const id of ["smash", "lob", "back"]) s.tutorialTick(id);
     const coins = s.tutorialComplete(T0 + 5, [...LESSON_IDS]);
     tutorialEvents.completed(120, false);
@@ -498,7 +504,131 @@ async function release102B() {
   ok(so.doc.settings.haptics === true, "old save without settings loads with haptics on");
 }
 
+// Release 11 Part A: you serve the tutorial's first point.
+async function release11A() {
+  const { GameSimulation } = await import("../sim/GameSimulation");
+  const { tutorialSetup } = await import("../meta/matchSetup");
+  let human = 0;
+  for (let i = 0; i < 40; i++) {
+    const sim = new GameSimulation(tutorialSetup("anli", 9000 + i).config);
+    if (sim.humanIsServer() && sim.serverSlot === sim.controllers.indexOf("LOCAL_HUMAN")) human++;
+  }
+  eq(human, 40, "R11: a fresh tutorial's first point is served by the human (40 seeds)");
+}
+
+// Release 11 Part B: settings.usageData + old saves.
+async function release11B() {
+  const { s, mem } = await fresh();
+  ok(s.doc.settings.usageData === true, "R11: usageData defaults to on");
+  s.setUsageData(false);
+  await s.flush();
+  const s2 = new MetaStore({ getItem: async (k) => mem.get(k) ?? null, setItem: async () => {} }, () => 0.5);
+  await s2.load(T0);
+  ok(s2.doc.settings.usageData === false, "R11: usageData survives a reload");
+  const { sanitiseSave } = await import("../meta/metaStore");
+  const old = JSON.parse(JSON.stringify(s.doc));
+  delete old.settings.usageData;
+  delete old.career.tries;
+  ok(sanitiseSave(old, T0).settings.usageData === true, "R11: an old save without usageData loads as on");
+  // A 10.2-shaped save (no R11 fields).
+  const r102 = { schemaVersion: 1, coins: 640, gems: 0, fans: 85, career: { cleared: ["mumbai.community.01"], nextMatchId: "mumbai.community.02", firstClearWins: 1, firstClearLosses: 0, trophies: {}, talkSeen: ["mumbai.community.01"] }, settings: { haptics: false }, tutorial: { done: false, hidden: false, steps: ["bounce"] } };
+  const l = sanitiseSave(r102, T0);
+  ok(l.coins === 640 && l.settings.haptics === false && l.settings.usageData === true && JSON.stringify(l.career.tries) === "{}" && l.career.cleared.length === 1 && l.tutorial.steps.join() === "bounce", "R11: a 10.2-shaped save loads with every new field defaulted");
+}
+
+// Release 11 Part C: tutorial smash freeze.
+async function release11C() {
+  const { GameSimulation } = await import("../sim/GameSimulation");
+  const { tutorialSetup } = await import("../meta/matchSetup");
+  const { MAX_CHANCES } = await import("../meta/tutorial");
+  let lessons = 0, badFreeze = 0, otherLessonFreeze = 0;
+  for (let i = 0; i < 40; i++) {
+    const sim = new GameSimulation(tutorialSetup("anli", 7000 + i).config);
+    const run = new TutorialRun(["serve", "bounce", "net", "back", "lob"], 0);
+    const other = new TutorialRun(["serve", "bounce", "net", "smash", "lob"], 0);
+    let cardKey = -1, points = 0, ticked: any = null;
+    const freezesPerPoint = new Map<number, number>();
+    for (let t = 0; t < 60 * 60 * 30 && !ticked; t++) {
+      if (sim.phase === "waiting_serve" && cardKey !== sim.stats.pointsPlayed) {
+        cardKey = sim.stats.pointsPlayed;
+        run.cardFor(sim);
+        other.cardFor(sim);
+      }
+      if (other.freezeDue(sim)) otherLessonFreeze++;
+      if (run.freezeDue(sim)) {
+        freezesPerPoint.set(sim.stats.pointsPlayed, (freezesPerPoint.get(sim.stats.pointsPlayed) ?? 0) + 1);
+        sim.toggleSmash(); // the scripted human taps SMASH during the freeze
+        sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 }); // then swipes ("Gold ring: now swipe!")
+      }
+      if (sim.kitchenMode !== "hold" && sim.kitchenCooldownLeft() === 0) sim.toggleKitchenMode();
+      if (sim.humanIsServer() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 0, dy: -140, power: 0.6, tap: false });
+      if (sim.humanCanHit() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 });
+      sim.step();
+      for (const ev of sim.consumeContactEvents()) run.onContact(ev, sim);
+      sim.consumeBounceEvents();
+      run.onFrame(sim);
+      if (sim.stats.pointsPlayed !== points) {
+        points = sim.stats.pointsPlayed;
+        ticked = run.onPointEnd(sim);
+        other.onPointEnd(sim);
+      }
+    }
+    if (ticked && ticked.id === "smash" && !ticked.auto && ticked.chances <= MAX_CHANCES) lessons++;
+    if ([...freezesPerPoint.values()].some((n) => n > 1)) badFreeze++;
+  }
+  console.log(`  R11 smash lesson: tap SMASH in the freeze, then swipe → smash in ${lessons}/40`);
+  ok(lessons >= 30, "R11: tutorial smash via the freeze in ≥ 30 of 40 seeds");
+  ok(badFreeze === 0, "R11: at most one freeze per point");
+  ok(otherLessonFreeze === 0, "R11: the freeze happens in the smash lesson only");
+}
+
+// Release 11 Part D: Daily challenge.
+async function release11D() {
+  const daily = await import("../meta/daily");
+  const { homeThirdTile } = await import("../meta/home");
+  const { dayKeyOf } = await import("../meta/metaStore");
+  const { s } = await fresh();
+  ok(!daily.dailyUnlocked(s.doc) && homeThirdTile(s.doc) === "tutorial", "R11: Daily locked before Match 2; third tile = Tutorial (offered)");
+  career(s, 1, true);
+  ok(!daily.dailyUnlocked(s.doc), "R11: still locked after Match 1");
+  career(s, 2, true);
+  ok(daily.dailyUnlocked(s.doc) && homeThirdTile(s.doc) === "daily", "R11: unlocked after Match 2; third tile = Daily");
+  // Weekday → twist table (2026-11-16 is a Monday).
+  const names = [16, 17, 18, 19, 20, 21, 22].map((d) => daily.twistFor(`2026-11-${d}`));
+  eq(names.map((t) => t.name), ["Quick fire", "Clutch", "Late start", "Singles sprint", "Comeback", "Long game", "Classic"], "R11: weekday → twist names");
+  const cfg = (d: number, cleared: string[] = []) => daily.dailySetup(`2026-11-${d}`, cleared, "anli", 1).config;
+  ok(JSON.stringify(cfg(16).ruleModifiers) === '{"pointsToWin":7,"winBy":2}' && cfg(16).format === "doubles", "Mon: first to 7, win by 2");
+  ok(JSON.stringify(cfg(17).startingScore) === '{"near":8,"far":8,"servingTeam":"near","serverNumber":1}', "Tue: 8–8, you serve");
+  ok(JSON.stringify(cfg(18).startingScore) === '{"near":0,"far":3,"servingTeam":"near","serverNumber":1}', "Wed: 0–3, you serve");
+  ok(cfg(19).format === "singles" && cfg(19).far.players.length === 1 && cfg(19).near.players.length === 1 && JSON.stringify(cfg(19).ruleModifiers) === '{"pointsToWin":7,"winBy":2}', "Thu: singles to 7, first rival only");
+  ok(JSON.stringify(cfg(20).startingScore) === '{"near":3,"far":4,"servingTeam":"far","serverNumber":1}', "Fri: 3–4, they serve");
+  ok(JSON.stringify(cfg(21).ruleModifiers) === '{"pointsToWin":15,"winBy":2}', "Sat: first to 15");
+  ok(cfg(22).ruleModifiers === undefined && cfg(22).startingScore === undefined && cfg(22).format === "doubles", "Sun: classic");
+  const m3 = careerMatch(CAREER_MATCH_IDS[2]);
+  const c3 = cfg(22, CAREER_MATCH_IDS.slice(0, 2) as unknown as string[]);
+  ok(c3.far.players.map((p) => p.profileId).join() === m3.ai.join() && c3.far.players.map((p) => p.personality).join() === m3.personalities.join() && c3.court === m3.court, "R11: rivals + court = the next uncleared Career match's");
+  const press = CAREER_MATCH_IDS.map((_, i) => !!cfg(22, CAREER_MATCH_IDS.slice(0, i) as unknown as string[]).humanRallyPressure);
+  ok(press.join() === "false,false,false,false,false,false,false,false,false,true,true,true" && !!cfg(22, [...CAREER_MATCH_IDS]).humanRallyPressure, "R11: humanRallyPressure only when the rivals come from Matches 10–12");
+  // Rewards.
+  const day1 = new Date(2026, 10, 20, 10).getTime();
+  const coins0 = s.doc.coins, quick0 = s.doc.daily.quick;
+  const win = (t: number, won: boolean, id: string) => s.completeMatch({ matchId: id, kind: "daily", won, dailyDay: dayKeyOf(t), partnerId: "anli" }, t);
+  const o1 = win(day1, true, "d1");
+  ok(s.doc.coins === coins0 + 80 && o1.dailyFirst === true, "R11: first win of the day grants exactly 80 Coins");
+  win(day1 + 3600e3, true, "d2");
+  win(day1 + 7200e3, false, "d3");
+  ok(s.doc.coins === coins0 + 80, "R11: a second win the same day and a loss grant 0");
+  win(day1 + 86400e3, true, "d4");
+  ok(s.doc.coins === coins0 + 160 && s.doc.daily.quick === quick0, "R11: a win the next day grants 80; Quick Play cap unchanged");
+  for (let i = 2; i < 20; i++) win(day1 + i * 86400e3, true, `dx${i}`);
+  ok(s.doc.dailyChallenge.wins.length === 14, "R11: wins keeps at most 14 dates");
+}
+
 (async () => {
+  await release11D();
+  await release11C();
+  await release11B();
+  await release11A();
   await commit4();
   await release101();
   await release102B();

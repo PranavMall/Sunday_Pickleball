@@ -1,0 +1,32 @@
+{
+  "summary": "Release 11 frontend-only verification on the live Expo web preview (public URL, 390x844 and 375x667, fresh localStorage per run). 7 Playwright runs, ZERO console/page errors, no red screens on /, /privacy, /daily, /records, /quickplay, /match (quick, daily, tutorial). PASS: (A) warming-up overlay is shown on first load (tip 'A short lob is a gift: SMASH it.') then removed before Home is usable. Identity prompt -> welcome-tutorial ('About 3 minutes', chips Serve Bounce Net Back Smash Lob, +100 Coins, LEARN THE BASICS / I know pickleball). Home tutorial tile reads 'Tutorial | 3 min · +100' with a hide ✕. Records -> Trophies: 'MAHARASHTRA CIRCUIT | 0 of 4 won' and 'SOUTH CIRCUIT | Coming soon'. Trophy popup (Community Cup, Maharashtra Tour) shows the title with overlay-close ✕ visible (44x44) and closes it. Tutorial (via Settings, Home tile and welcome LEARN THE BASICS): progress 'TUTORIAL · 1 OF 6', chips in order Serve Bounce Net Back Smash Lob, first card 'Practice match. Six shots and you're ready.' (one line). First tap finishes the typewriter, second tap advances. Taps away from the bubble also advance. The human serves first ('Your serve. Swipe up...', chip-serve-current). Skip goes back to Home. (B) Settings rows in order: Vibration, Usage data (+ sub-line), Edit name and team, Replay the tutorial, Contact us (pickleballers.support@gmail.com), Privacy policy, then 'Pickle-Ballers 1.0.0 · Shapr Mall Studios'. The Send feedback row is absent. Both toggles flip true->false->true. Privacy policy opens /privacy with full text, and back returns Home (also when /privacy is opened directly). (C) Quick Play ROOKIE match: tactical row is SMASH(149) | LOB(223) | BACK(297), all 64x64. SMASH is grey (opacity 0.45, rgba(70,70,70)). Tapping it when grey changes nothing (aria-label stays 'Nothing to smash yet'). LOB arms and disarms, BACK toggles to NET, and pause/resume/quit return Home. (D) The Daily tile is hidden on a fresh save. After setting career.cleared=[01,02] in the test browser's localStorage, Home shows menu-daily 'Daily | 9h 29m left' with daily-tile-dot, replacing the tutorial tile. /daily shows the THIS WEEK strip (MON..SUN, today highlighted), TODAY card with daily-twist-name 'Quick fire', reward '+80 Coins for your first win today', and 'Tomorrow: Clutch · from 8–8'. PLAY opens /match?mode=daily&day=2026-11-23 with rival DLY, the twist pill and SMASH/LOB/BACK. Issues are minor only (see below). NOT verified: the tutorial finish card (BEGIN CAREER + Back to Home), because it needs a full tutorial played through RNGH swipes. This was checked by code review only (TutorialFinish.tsx + match.tsx:774-781).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Daily unlock gating", "issue": "/daily and /match?mode=daily open and run a daily match on a fresh save (Match 2 not cleared). Only the Home tile is gated by dailyUnlocked(); the routes themselves are not. It can only be reached by deep link or URL, so this is low impact.", "affected_testIDs": ["daily-screen", "daily-play"]}
+    ],
+    "design_issues": [
+      {"screen": "Match (daily) 375x667", "issues": ["twist-pill ('QUICK FIRE — First to 7. No time to warm up.') at y=503 sits on top of the near baseline server sprite. The translucent rgba(20,26,18,0.62) background and 11px gold text make the end of the line hard to read ('...to warm up.' is crossed by the player's head). Suggest a more opaque background or placing it above the serve hint at small heights. At 390x844 it is clear."]},
+      {"screen": "Privacy", "issues": ["'Effective date: 1 December 2026' is in the future relative to the current device date (23 Nov 2026). Check this is intended."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_22.json"],
+  "action_items": [
+    "(Optional) Gate /daily (and mode=daily in match setup) with dailyUnlocked(save): redirect to / when it is locked.",
+    "(Optional) Improve twist-pill legibility at 375x667: use a more opaque background (about 0.85) or move it so it does not overlap the near baseline player."
+  ],
+  "critical_code_review_comments": [
+    "match.tsx is 1009 lines (>700). Consider splitting the HUD/overlays (pause, result, tutorial finish) into components.",
+    "SmashButton sets accessibilityState.disabled when off, but the Pressable is not disabled. The no-op relies on toggleSmash ignoring it. This was verified to work, but `disabled={off}` would be more robust.",
+    "Settings Switch has no aria-checked on the row on web (accessibilityState is not mapped). The state is readable through the inner input.checked. This only matters for accessibility on web.",
+    "No deprecated Expo packages (expo-av / expo-barcode-scanner / expo-background-fetch) and no react-native SafeAreaView usage found."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (offline app, backend intentionally removed)", "frontend": "100% of requested flows that were executed (tutorial finish card checked by code review only)"},
+  "seed_data_creation": "None in any shared DB. Each Playwright run used a fresh browser context with TEST_ names in localStorage. One run edited its own localStorage pb.meta career.cleared to unlock Daily.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Offline Expo app with no backend. Save is in localStorage 'pb.meta' (JSON). To unlock Daily, set career.cleared to include 'mumbai.community.02' and reload. Each browser_automation run starts with a fresh context (identity-prompt with 2 inputs + 'Let's play', then welcome-tutorial). testIDs: warming-up, warming-up-tip, home-settings, settings-* rows (toggle state = inner input.checked), overlay-close, cabinet-screen, shelf-mumbai, shelf-south, trophy-<stage>, trophy-popup, tutorial-lesson (click anywhere advances), tutorial-progress, tutorial-chips, tutorial-skip, smash-button/lob-button/kitchen-button, pause-button/resume-button/quit-button, menu-daily, daily-tile-dot, daily-screen, daily-week, daily-twist-name, daily-reward, daily-play, daily-tomorrow, twist-pill. The tutorial finish card needs real swipes (not reachable easily via Playwright)."
+}

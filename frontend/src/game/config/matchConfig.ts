@@ -23,7 +23,8 @@ export type MatchType =
   | "challenge"
   | "event"
   | "friendly"
-  | "tutorial";
+  | "tutorial"
+  | "daily";
 
 export interface PlayerConfig {
   controller: ControllerType;
@@ -59,6 +60,8 @@ export interface MatchConfig {
   far: TeamConfig; // the opponents
   startingScore?: StartingScore;
   ruleModifiers?: RuleModifiers;
+  firstServerSlot?: number; // the first point's server (tutorial); absent ⇒ the usual pick
+  humanRallyPressure?: boolean; // the long-rally miss ramp also applies to the human (Matches 10–12)
   objectives?: unknown[]; // opaque to the engine (used by meta layer later)
   statNormalization: boolean; // true for ranked play (neutralise gear/partner stats)
 }
@@ -83,6 +86,8 @@ export interface BuildArgs {
   statNormalization?: boolean;
   startingScore?: StartingScore;
   ruleModifiers?: RuleModifiers;
+  firstServerSlot?: number;
+  humanRallyPressure?: boolean;
   objectives?: unknown[];
 }
 
@@ -108,6 +113,8 @@ export function buildMatchConfig(a: BuildArgs): MatchConfig {
     far: team(a.far, ["Rival", "Rival"]),
     startingScore: a.startingScore,
     ruleModifiers: a.ruleModifiers,
+    ...(a.firstServerSlot !== undefined ? { firstServerSlot: a.firstServerSlot } : {}),
+    ...(a.humanRallyPressure ? { humanRallyPressure: true } : {}),
     objectives: a.objectives,
     statNormalization: a.statNormalization ?? false,
   };
