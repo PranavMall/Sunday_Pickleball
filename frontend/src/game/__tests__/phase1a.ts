@@ -94,7 +94,72 @@ export const suites: { name: string; run: () => void | Promise<void> }[] = [
   { name: "chemistryIsolation", run: chemistryIsolationTests },
   { name: "inboxDone", run: inboxDoneTests },
   { name: "release11", run: release11Tests },
+  { name: "release11Smash", run: release11SmashTests },
 ];
+
+// Drive a tutorial sim (TUTOR lobs) with a scripted human at the net until the
+// SMASH cue shows in a rally; returns the sim (or null).
+async function toSmashCue(seed: number) {
+  const { tutorialSetup } = await import("../meta/matchSetup");
+  const sim = new GameSimulation(tutorialSetup("anli", seed).config);
+  for (let t = 0; t < 60 * 60 * 20; t++) {
+    if (sim.phase === "rally" && sim.smashButtonCue() !== null) return sim;
+    if (sim.kitchenMode !== "hold" && sim.kitchenCooldownLeft() === 0) sim.toggleKitchenMode();
+    if (sim.humanIsServer() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 0, dy: -140, power: 0.6, tap: false });
+    if (sim.humanCanHit() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 });
+    sim.step();
+    sim.consumeContactEvents();
+    sim.consumeBounceEvents();
+  }
+  return null;
+}
+function nextHumanShot(sim: GameSimulation): string | null {
+  const pts = sim.stats.pointsPlayed;
+  for (let t = 0; t < 60 * 10 && sim.stats.pointsPlayed === pts; t++) {
+    sim.step();
+    for (const ev of sim.consumeContactEvents()) if (ev.slot === 0 && !ev.isServe) return ev.shotType;
+    sim.consumeBounceEvents();
+  }
+  return null;
+}
+
+async function release11SmashTests() {
+  console.log("\n[Release 11: SMASH button]");
+  const fresh = new GameSimulation(quickMatchConfig("CLUB", 3));
+  ok(fresh.toggleSmash() === false && !fresh.smashArmed, "a SMASH tap while the cue is null does not arm");
+  const soft = { dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 };
+  let armedSmash = 0, unarmedSmash = 0, tried = 0, cleared = 0, lobRules = 0;
+  for (let seed = 1; seed <= 30; seed++) {
+    const a = await toSmashCue(seed);
+    const b = await toSmashCue(seed);
+    const c = await toSmashCue(seed);
+    if (!a || !b || !c) continue;
+    // A high ball at contact: the same moment with a firm swipe smashes (unchanged rule).
+    c.submitSwipe({ dx: 20, dy: -150, power: 0.7, tap: false, speed: 1600 });
+    const high = nextHumanShot(c) === "smash";
+    if (!high) continue;
+    tried++;
+    a.toggleLob();
+    const armed = a.toggleSmash();
+    const lobCleared = armed && !a.lobArmed;
+    a.toggleLob();
+    const smashCleared = a.lobArmed && !a.smashArmed;
+    a.toggleLob();
+    a.toggleSmash();
+    if (lobCleared && smashCleared && a.smashArmed) lobRules++;
+    a.submitSwipe(soft);
+    if (nextHumanShot(a) === "smash") armedSmash++;
+    if (!a.smashArmed) cleared++;
+    b.submitSwipe(soft);
+    if (nextHumanShot(b) === "smash") unarmedSmash++;
+  }
+  console.log(`  SMASH probe: ${tried} cues · armed soft → smash ${armedSmash} · unarmed soft → smash ${unarmedSmash}`);
+  ok(tried >= 5, "SMASH cue + high ball reached in the probe seeds (firm swipe still smashes)");
+  ok(lobRules === tried, "arming SMASH clears LOB; LOB clears SMASH");
+  ok(armedSmash === tried && tried > 0, "armed + soft swipe (power 0.3, speed 500) on a high ball ⇒ smash");
+  ok(unarmedSmash === 0, "the same soft swipe unarmed ⇒ not a smash");
+  ok(cleared === tried, "the arm clears after the strike (or when the cue goes)");
+}
 
 async function release11Tests() {
   console.log("\n[Release 11: firstServerSlot, native wrappers]");

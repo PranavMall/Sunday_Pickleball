@@ -135,6 +135,10 @@ export class GameSimulation {
   // LOB ARM (near human): the next legal strike by ME is a lob. Clears on my
   // team's next strike (mine or my partner's), at point end, or a second tap.
   lobArmed = false;
+  // SMASH arm (human only; the AI never reads it): set by toggleSmash while the
+  // smash cue shows; cleared at my strike, at point end, or when the cue goes.
+  smashArmed = false;
+  private smashArmLatch = false;
   // Shot type of the last real strike (AI reads an incoming smash → block).
   lastShotType: ShotType | null = null;
   // GAME FEEL (renderer reads these; updated in place, no per-frame allocation):
@@ -361,7 +365,10 @@ export class GameSimulation {
   private latchWorthy(input: SwipeInput): boolean {
     if (input.tap || this.humanSlot < 0) return false;
     const firm = (input.speed ?? 0) >= INPUT.DRIVE_SPEED_MIN || input.power >= INPUT.DRIVE_POWER_MIN;
-    return firm && this.humanSmashCuePhase() !== null;
+    if (!firm && !this.smashArmed) return false;
+    const cue = this.humanSmashCuePhase() !== null;
+    if (cue && this.smashArmed) this.smashArmLatch = true; // armed: any swipe smashes
+    return cue;
   }
 
   // Drop a latched swipe (bounce / strike / point end): the latch and its
@@ -486,7 +493,29 @@ export class GameSimulation {
   toggleLob(): boolean {
     if (this.phase === "game_over") return false;
     this.lobArmed = !this.lobArmed;
+    if (this.lobArmed) this.smashArmed = false;
     return this.lobArmed;
+  }
+  // The SMASH button's cue: as humanSmashCuePhase, read as if no lob were armed
+  // (arming SMASH clears LOB).
+  smashButtonCue(): "ready" | "smash" | null {
+    if (!this.lobArmed) return this.humanSmashCuePhase();
+    this.lobArmed = false;
+    const cue = this.humanSmashCuePhase();
+    this.lobArmed = true;
+    return cue;
+  }
+  // Tap SMASH: arms only while the cue shows (otherwise nothing); a second tap clears.
+  toggleSmash(): boolean {
+    if (this.phase === "game_over" || this.humanSlot < 0) return false;
+    if (this.smashArmed) {
+      this.smashArmed = false;
+      return false;
+    }
+    if (this.smashButtonCue() === null) return false;
+    this.smashArmed = true;
+    this.lobArmed = false;
+    return true;
   }
   // Is the human in a legal SMASH window right now (high, hittable, legal)?
   humanSmashWindow(): boolean {
@@ -548,6 +577,8 @@ export class GameSimulation {
   // ---- Main fixed-timestep step -------------------------------------------
   step(dt = MATCH.FIXED_DT) {
     this.time += dt;
+    // The ball dropped (cue gone): an armed SMASH clears.
+    if (this.smashArmed && this.humanSmashCuePhase() === null) this.smashArmed = false;
 
     // decay floating messages
     this.messages = this.messages.filter((m) => (m.life -= dt) > 0);
@@ -999,7 +1030,9 @@ export class GameSimulation {
       this.ball.bouncesSinceHit === 0 &&
       this.ball.z >= TACTIC.SMASH_MIN_Z - INPUT.SMASH_LATCH_Z_TOLERANCE &&
       this.apexSinceHit >= TACTIC.SMASH_MIN_APEX;
-    const shotType = classifyHumanShot(p, input, (this.highBall() || latchHigh) && smashPositionOk(p), this.lobArmed);
+    const armedSmash = this.smashArmed || this.smashArmLatch; // SMASH armed: any swipe on a high ball smashes
+    const shotType = classifyHumanShot(p, input, (this.highBall() || latchHigh) && (armedSmash || smashPositionOk(p)), this.lobArmed, armedSmash);
+    this.smashArmed = this.smashArmLatch = false; // the arm clears at my strike
 
     // Aim from the FULL swipe vector: lateral from dx, depth from power & shot
     // type. A downward/backward swipe (dy > 0) is a mishit — it overcooks the
@@ -1101,7 +1134,8 @@ export class GameSimulation {
     // less and wins more; the ramp only bites in long grinds. AI only.
     const rally = this.rallyStrikeCount;
     const pressure = opts.isServe ? 0 : Math.min(0.6, rally * 0.015 + Math.max(0, rally - 20) * 0.03);
-    const effUnforced = opts.unforcedError + (opts.isServe ? 0 : p.controller === "AI" ? pressure : 0);
+    // humanRallyPressure (Matches 10–12): the same ramp on the human's shots too.
+    const effUnforced = opts.unforcedError + (opts.isServe ? 0 : p.controller === "AI" || this.config.humanRallyPressure ? pressure : 0);
     const forcedMiss = effUnforced > 0 && this.rng.chance(effUnforced);
 
     if (forcedMiss) {
@@ -1251,6 +1285,7 @@ export class GameSimulation {
     this.smashPredicted = false;
     if (this.smashLatched) this.clearSmashLatch();
     this.lobArmed = false; // point end clears an armed lob
+    this.smashArmed = this.smashArmLatch = false; // … and an armed smash
     this.ball.inPlay = false;
     this.phase = "point_over";
     this.pointResetTimer = MATCH.POINT_RESET_DELAY;
@@ -1395,12 +1430,13 @@ export function classifyHumanShot(
   input: { power: number; speed?: number },
   highBall: boolean,
   lobArmed: boolean,
+  smashArmed = false,
 ): ShotType {
   if (lobArmed) return "lob";
   const power = input.power;
   const fast = (input.speed ?? 0) >= INPUT.DRIVE_SPEED_MIN;
   const firm = fast || power >= INPUT.DRIVE_POWER_MIN;
-  if (highBall && firm) return "smash";
+  if (highBall && (firm || smashArmed)) return "smash";
   if (fast) return "drive";
   const kitchenLineY = p.team === "near" ? COURT.NEAR_KITCHEN_Y : COURT.FAR_KITCHEN_Y;
   const nearKitchen = Math.abs(p.y - kitchenLineY) < INPUT.DINK_RANGE_FT || p.inKitchen;

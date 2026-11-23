@@ -536,7 +536,54 @@ async function release11B() {
   ok(l.coins === 640 && l.settings.haptics === false && l.settings.usageData === true && JSON.stringify(l.career.tries) === "{}" && l.career.cleared.length === 1 && l.tutorial.steps.join() === "bounce", "R11: a 10.2-shaped save loads with every new field defaulted");
 }
 
+// Release 11 Part C: tutorial smash freeze.
+async function release11C() {
+  const { GameSimulation } = await import("../sim/GameSimulation");
+  const { tutorialSetup } = await import("../meta/matchSetup");
+  const { MAX_CHANCES } = await import("../meta/tutorial");
+  let lessons = 0, badFreeze = 0, otherLessonFreeze = 0;
+  for (let i = 0; i < 40; i++) {
+    const sim = new GameSimulation(tutorialSetup("anli", 7000 + i).config);
+    const run = new TutorialRun(["serve", "bounce", "net", "back", "lob"], 0);
+    const other = new TutorialRun(["serve", "bounce", "net", "smash", "lob"], 0);
+    let cardKey = -1, points = 0, ticked: any = null;
+    const freezesPerPoint = new Map<number, number>();
+    for (let t = 0; t < 60 * 60 * 30 && !ticked; t++) {
+      if (sim.phase === "waiting_serve" && cardKey !== sim.stats.pointsPlayed) {
+        cardKey = sim.stats.pointsPlayed;
+        run.cardFor(sim);
+        other.cardFor(sim);
+      }
+      if (other.freezeDue(sim)) otherLessonFreeze++;
+      if (run.freezeDue(sim)) {
+        freezesPerPoint.set(sim.stats.pointsPlayed, (freezesPerPoint.get(sim.stats.pointsPlayed) ?? 0) + 1);
+        sim.toggleSmash(); // the scripted human taps SMASH during the freeze
+        sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 }); // then swipes ("Gold ring: now swipe!")
+      }
+      if (sim.kitchenMode !== "hold" && sim.kitchenCooldownLeft() === 0) sim.toggleKitchenMode();
+      if (sim.humanIsServer() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 0, dy: -140, power: 0.6, tap: false });
+      if (sim.humanCanHit() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 });
+      sim.step();
+      for (const ev of sim.consumeContactEvents()) run.onContact(ev, sim);
+      sim.consumeBounceEvents();
+      run.onFrame(sim);
+      if (sim.stats.pointsPlayed !== points) {
+        points = sim.stats.pointsPlayed;
+        ticked = run.onPointEnd(sim);
+        other.onPointEnd(sim);
+      }
+    }
+    if (ticked && ticked.id === "smash" && !ticked.auto && ticked.chances <= MAX_CHANCES) lessons++;
+    if ([...freezesPerPoint.values()].some((n) => n > 1)) badFreeze++;
+  }
+  console.log(`  R11 smash lesson: tap SMASH in the freeze, then swipe → smash in ${lessons}/40`);
+  ok(lessons >= 30, "R11: tutorial smash via the freeze in ≥ 30 of 40 seeds");
+  ok(badFreeze === 0, "R11: at most one freeze per point");
+  ok(otherLessonFreeze === 0, "R11: the freeze happens in the smash lesson only");
+}
+
 (async () => {
+  await release11C();
   await release11B();
   await release11A();
   await commit4();

@@ -281,6 +281,67 @@ ok(JSON.stringify(rosterStatus(matz(1200, { signable: true }), "matz")) === JSON
   ok(!!pkg.dependencies["expo-dev-client"] && !!pkg.dependencies["react-native-purchases"] && pkg.dependencies.expo.startsWith("57."), "R11: dev client + RevenueCat, still SDK 57");
 }
 
+// Release 11 Part C: rally pressure (Matches 10–12) + "It's to 15" pill.
+{
+  const { HUMAN_PRESSURE_MATCHES } = require("../meta/economyConfig");
+  const { To15Pill } = require("../meta/to15");
+  function play(sim: GameSimulation, style: string, n: number) {
+    if (sim.humanSmashWindow()) return sim.submitSwipe({ dx: 20, dy: -150, power: 0.7, tap: false, speed: 1600 });
+    const k = n % 5;
+    if (style === "drive") return k === 4 ? sim.submitSwipe({ dx: 10, dy: -60, power: 0.3, tap: false, speed: 500 }) : sim.submitSwipe({ dx: k % 2 ? 40 : -40, dy: -160, power: 0.75, tap: false, speed: 1500 });
+    if (k === 0) sim.submitSwipe({ dx: 30, dy: -50, power: 0.22, tap: false, speed: 450 });
+    else if (k === 1) sim.submitSwipe({ dx: -40, dy: -90, power: 0.4, tap: false, speed: 1400 });
+    else if (k === 2) sim.submitSwipe({ dx: 10, dy: -160, power: 0.7, tap: false, speed: 800 });
+    else if (k === 3) { if (!sim.lobArmed) sim.toggleLob(); sim.submitSwipe({ dx: 0, dy: -150, power: 0.65, tap: false, speed: 700 }); }
+    else sim.submitSwipe({ dx: -20, dy: -60, power: 0.3, tap: false, speed: 500 });
+  }
+  const LIMIT: Record<number, number> = { 10: 0.65, 11: 0.7, 12: 0.62 };
+  for (const num of [10, 11, 12]) {
+    const m = CAREER_MATCHES.find((x) => x.number === num)!;
+    const rates: string[] = [];
+    let okAll = true;
+    for (const style of ["drive", "mix"]) {
+      let wins = 0;
+      for (let i = 0; i < 40; i++) {
+        const cfg = careerSetup(m, "anli", 7000 + i, () => false, 1.4).config;
+        cfg.near.players[1] = { ...cfg.near.players[1], profileId: "CLUB", personality: "KITCHEN", chemistry: 1.4 };
+        const sim = new GameSimulation(cfg);
+        let n = 0;
+        for (let t = 0; t < 60 * 60 * 60 && sim.phase !== "game_over"; t++) {
+          if (sim.humanIsServer() && !sim.hasBufferedSwipe()) sim.submitSwipe({ dx: 0, dy: -140, power: 0.6, tap: false });
+          else if (sim.humanCanHit() && !sim.hasBufferedSwipe()) play(sim, style, n++);
+          sim.step();
+          sim.consumeContactEvents();
+          sim.consumeBounceEvents();
+        }
+        if (sim.winner === "near") wins++;
+      }
+      rates.push(`${style} ${Math.round((wins / 40) * 100)}%`);
+      if (wins / 40 > LIMIT[num]) okAll = false;
+    }
+    console.log(`  R11 rally pressure Match ${num}: human wins ${rates.join(" · ")}`);
+    ok(okAll, `R11: Match ${num} human win rate ≤ ${LIMIT[num] * 100}% with rally pressure (${rates.join(", ")})`);
+  }
+  ok(CAREER_MATCHES.every((m) => !!careerSetup(m, "anli", 1).config.humanRallyPressure === HUMAN_PRESSURE_MATCHES.includes(m.id)) && HUMAN_PRESSURE_MATCHES.length === 3, "R11: humanRallyPressure only in Matches 10–12");
+  ok(!quickPlaySetup("PRO", false, "anli", 1).config.humanRallyPressure && !quickPlaySetup("PRO", true, "anli", 1).config.humanRallyPressure && !trainingSetup("training", "anli", 1).config.humanRallyPressure && !trainingSetup("scrimmage", "anli", 1).config.humanRallyPressure && !tutorialSetup("anli", 1).config.humanRallyPressure, "R11: no rally pressure in Quick Play, Training, Tutorial");
+  const run = (ptw: number) => {
+    const pill = new To15Pill();
+    const sim = { pointsToWin: ptw, winBy: 2, phase: "waiting_serve", time: 0, score: { nearScore: 10, farScore: 9 } };
+    const seen: string[] = [];
+    const tick = (secs: number) => { for (let k = 0; k < secs * 60; k++) { sim.time += 1 / 60; const x = pill.update(sim); if (x && seen[seen.length - 1] !== `${sim.score.nearScore}-${sim.score.farScore}`) seen.push(`${sim.score.nearScore}-${sim.score.farScore}`); } };
+    tick(1); sim.phase = "rally"; tick(1);
+    sim.score.nearScore = 11; sim.phase = "waiting_serve"; tick(1);
+    const text = pill.update(sim);
+    sim.phase = "rally"; tick(1);
+    sim.score.farScore = 11; sim.phase = "waiting_serve"; tick(1);
+    sim.score.nearScore = 12; tick(2);
+    return { seen, text };
+  };
+  const r15 = run(15), r11 = run(11);
+  ok(r15.seen.join() === "11-9" && r15.text === "IT'S TO 15 · WIN BY 2", `R11: "It's to 15" pill once at 11–x in a first-to-15 match (${r15.seen.join()})`);
+  ok(r11.seen.length === 0 && r11.text === null, "R11: no pill in a first-to-11 match");
+}
+
 export function report() {
   console.log(`=== PHASE 1B RESULT: ${pass} passed, ${fail} failed ===`);
   if (fail) process.exitCode = 1;

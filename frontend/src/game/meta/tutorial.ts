@@ -135,6 +135,15 @@ export class TutorialRun {
     return lines.length ? lines : null;
   }
 
+  // Smash lesson freeze: due the first time per point the SMASH cue shows (at
+  // most once per point; only while the smash lesson is in play).
+  private freezePoint = -1;
+  freezeDue(sim: { phase: string; stats: { pointsPlayed: number }; smashButtonCue(): string | null }): boolean {
+    if (this.current !== "smash" || sim.phase !== "rally" || this.freezePoint === sim.stats.pointsPlayed || sim.smashButtonCue() === null) return false;
+    this.freezePoint = sim.stats.pointsPlayed;
+    return true;
+  }
+
   // Every frame during play (reads only).
   onFrame(sim: TutorSim) {
     if (this.current === "back" && sim.kitchenMode === "retreat") this.success = true;

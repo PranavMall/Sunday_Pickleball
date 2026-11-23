@@ -34,8 +34,9 @@ import { getIdentity, teamCode } from "@/src/game/services/profile";
 import { Fullscreen } from "@/src/components/fullscreen";
 import { FAULT_HINT_SECONDS, FAULT_LABEL_SECONDS, faultLabelFor, showHintForPoint } from "@/src/game/faultLabel";
 import { makeStyles } from "@/src/theme";
-import { KB_SIZE, KitchenButton, LobButton } from "@/src/ui/TacticalButtons";
-import { LESSON_IDS, TutorialRun, tutorialEvents, type LessonId, type TutorialFrom } from "@/src/game/meta/tutorial";
+import { KB_SIZE, KitchenButton, LobButton, SmashButton } from "@/src/ui/TacticalButtons";
+import { To15Pill } from "@/src/game/meta/to15";
+import { LESSON_IDS, SMASH_ARMED_LINE, SMASH_FREEZE_LINE, TutorialRun, tutorialEvents, type LessonId, type TutorialFrom } from "@/src/game/meta/tutorial";
 import { TutorialLayer } from "@/src/ui/TutorialLayer";
 import { TutorialFinish } from "@/src/ui/TutorialFinish";
 
@@ -45,14 +46,14 @@ import { TutorialFinish } from "@/src/ui/TutorialFinish";
 // Reserve a small edge margin from game swipe input. (The focused back handler
 // is the real Android-back protection — not this margin.)
 const EDGE_MARGIN = 24;
-// TACTICAL ROW (bottom-right, inside the bottom safe area): LOB + NET/BACK,
+// TACTICAL ROW (bottom-right, inside the bottom safe area): SMASH + LOB + NET/BACK,
 // same size, side by side. Clear of the pause button (top-right) and the
 // centred hint/cue pills (which sit ABOVE the row). Swipes that START anywhere
 // on the row are ignored.
 const KB_RIGHT = 14;
 const KB_BOTTOM = 14; // + safe-area bottom inset
 const KB_GAP = 10;
-const ROW_W = KB_SIZE * 2 + KB_GAP;
+const ROW_W = KB_SIZE * 3 + KB_GAP * 2;
 const PILL_BASE = KB_BOTTOM + KB_SIZE + 12; // pills start above the row
 
 function buildMatch(p: LaunchParams): { sim: GameSimulation; config: MatchConfig; matchId: string; setup: MatchSetup } {
@@ -176,7 +177,7 @@ export default function Match() {
   const hapticsOn = useMemo(() => !meta.loaded || meta.doc.settings.haptics, [sim]);
   const humanSlot = useMemo(() => sim.controllers.findIndex((c) => c === "LOCAL_HUMAN"), [sim]);
   // match_end / perf_sample counters (numbers only; one object per match).
-  const mstats = useMemo(() => ({ t0: Date.now(), smashes: 0, smashTaps: 0, perf: new PerfCounter(), sent: false }), [sim]);
+  const mstats = useMemo(() => ({ t0: Date.now(), smashes: 0, smashTaps: 0, perf: new PerfCounter(), sent: false, to15: new To15Pill(), to15Text: null as string | null }), [sim]);
   const sendEnd = useCallback(
     (quit: boolean) => {
       if (mstats.sent) return;
@@ -198,6 +199,11 @@ export default function Match() {
   const [tutCurrent, setTutCurrent] = useState<LessonId | null>(null);
   const [tutSteps, setTutSteps] = useState<string[]>([]);
   const talkRef = useRef(false);
+  // Smash lesson FREEZE: the screen stops stepping the sim (no engine change)
+  // the first time per point the SMASH cue shows; a tap on SMASH resumes.
+  const freezeRef = useRef(false);
+  const [frozen, setFrozen] = useState(false);
+  const [tutBubble, setTutBubble] = useState<string | null>(null);
   useEffect(() => {
     if (!tut) return;
     setTutSteps([...tut.run.steps]);
@@ -287,7 +293,7 @@ export default function Match() {
         raf = requestAnimationFrame(loop);
         return;
       }
-      const idle = pausedRef.current || !readyRef.current || talkRef.current;
+      const idle = pausedRef.current || !readyRef.current || talkRef.current || freezeRef.current;
       if (idle) {
         if (!wasIdle) setFrame((f) => (f + 1) % 1000000); // one render to show the pause state
         wasIdle = true;
@@ -334,6 +340,7 @@ export default function Match() {
         spriteAnim.onContact(ev, sim);
         if (tut) tut.run.onContact(ev, sim);
         if (ev.slot === humanSlot && ev.shotType === "smash" && !ev.miss) mstats.smashes++;
+        if (tut && ev.slot === humanSlot) setTutBubble(null);
         farAnim.onContact(ev, sim);
         if (ev.slot === humanSlot && hapticsOn && Platform.OS !== "web") {
           Haptics.impactAsync(
@@ -344,9 +351,15 @@ export default function Match() {
       for (const ev of sim.consumeBounceEvents()) sfx.playForBounce(ev);
       if (tut) {
         tut.run.onFrame(sim);
+        if (tut.run.freezeDue(sim)) {
+          freezeRef.current = true;
+          setFrozen(true);
+          setTutBubble(SMASH_FREEZE_LINE);
+        }
         if (sim.stats.pointsPlayed !== tut.points) {
           // Point over: tick (the only storage write, between points).
           tut.points = sim.stats.pointsPlayed;
+          setTutBubble(null);
           const tick = tut.run.onPointEnd(sim);
           if (tick) {
             if (!tut.replay && meta.loaded) meta.tutorialTick(tick.id);
@@ -364,6 +377,8 @@ export default function Match() {
           }
         }
       }
+      const to15 = mstats.to15.update(sim);
+      if (to15 !== mstats.to15Text) mstats.to15Text = to15;
       if (sim.phase !== "game_over") {
         spriteAnim.update(sim, -1);
         farAnim.update(sim, -1);
@@ -543,8 +558,19 @@ export default function Match() {
     if (!pausedRef.current) sim.toggleKitchenMode();
   }, [sim]);
   const toggleLob = useCallback(() => {
-    if (!pausedRef.current) sim.toggleLob();
+    if (!pausedRef.current && !freezeRef.current) sim.toggleLob();
   }, [sim]);
+  const toggleSmash = useCallback(() => {
+    if (pausedRef.current) return;
+    mstats.smashTaps++;
+    if (!sim.toggleSmash()) return;
+    if (hapticsOn && Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (freezeRef.current) {
+      freezeRef.current = false;
+      setFrozen(false);
+      setTutBubble(SMASH_ARMED_LINE);
+    }
+  }, [sim, mstats, hapticsOn]);
   const toggleMute = () => sfx.toggleMuted().then(setMuted);
 
   const gameOver = sim.phase === "game_over";
@@ -620,6 +646,7 @@ export default function Match() {
 
       {!gameOver && (
         <View style={[styles.tacticalRow, { bottom: insets.bottom + KB_BOTTOM }]} testID="tactical-row">
+          <SmashButton state={sim.smashArmed ? "armed" : !paused && sim.smashButtonCue() !== null ? "cue" : "off"} onPress={toggleSmash} />
           <LobButton armed={sim.lobArmed} onPress={toggleLob} />
           <KitchenButton
             mode={sim.kitchenMode ?? "hold"}
@@ -657,6 +684,11 @@ export default function Match() {
         >
           <Text style={[styles.bounceCueText, { textAlign: "center" }]}>{faultLabel.text}</Text>
           {faultHint && faultLabel.hint ? <Text style={styles.faultHintText} numberOfLines={1} testID="fault-hint">{faultLabel.hint}</Text> : null}
+        </View>
+      )}
+      {mstats.to15Text && !paused && !faultLabel && (
+        <View style={[styles.bounceCue, styles.faultRivals, { bottom: insets.bottom + PILL_BASE + 50 }]} pointerEvents="none" testID="to15-pill">
+          <Text style={[styles.bounceCueText, { textAlign: "center" }]}>{mstats.to15Text}</Text>
         </View>
       )}
       {twistPill && !faultLabel && (
@@ -718,6 +750,20 @@ export default function Match() {
           }}
           onSkip={leaveTutorial}
         />
+      ) : null}
+      {frozen && !tutDone ? (
+        <>
+          <Pressable style={styles.freezeDim} testID="tutorial-freeze" onPress={() => {}} accessibilityLabel="Tap SMASH" />
+          <View style={[styles.freezeSmash, { bottom: insets.bottom + KB_BOTTOM, right: KB_RIGHT + 2 * (KB_SIZE + KB_GAP) }]}>
+            <SmashButton state="cue" spotlight onPress={toggleSmash} />
+          </View>
+          <PauseButton paused={paused} top={insets.top} onPause={togglePause} />
+        </>
+      ) : null}
+      {tutBubble && !tutDone && !paused ? (
+        <View style={[styles.tutBubble, { bottom: insets.bottom + KB_BOTTOM + KB_SIZE + 24 }]} pointerEvents="none" testID="tutorial-bubble">
+          <Text style={styles.tutBubbleText}>{tutBubble}</Text>
+        </View>
       ) : null}
       {tutDone ? (
         <TutorialFinish
@@ -935,6 +981,10 @@ const useStyles = makeStyles((c) => ({
   secondaryText: { color: c.onSurfaceSecondary, fontSize: 15, fontWeight: "700" },
   resultRow: { flexDirection: "row", gap: 12, marginTop: 12, width: "100%" },
   tacticalRow: { position: "absolute", right: KB_RIGHT, flexDirection: "row", gap: KB_GAP },
+  freezeDim: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.6)" },
+  freezeSmash: { position: "absolute" },
+  tutBubble: { position: "absolute", left: 16, right: 16, backgroundColor: "#FBF4E2", borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: "#E2D6B8" },
+  tutBubbleText: { color: "#2A2A22", fontSize: 17, fontWeight: "800", textAlign: "center" },
   smashCue: { position: "absolute", alignSelf: "center", backgroundColor: "rgba(214,96,60,0.95)", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 5 },
   smashCueText: { color: "#FBF6E9", fontSize: 13, fontWeight: "900", letterSpacing: 2 },
   smashReady: { backgroundColor: "rgba(20,26,18,0.7)", borderWidth: 1.5, borderColor: "rgba(214,96,60,0.95)" },

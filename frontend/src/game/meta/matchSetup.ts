@@ -8,7 +8,7 @@ import { PARTNER_DIFFICULTY } from "../config/ai";
 import { buildMatchConfig, devSinglesConfig, type MatchConfig } from "../config/matchConfig";
 import type { Difficulty } from "../sim/types";
 import { levelView } from "./levels";
-import { CAREER_MATCHES, careerMatch, partnerBoost, PARTNERS, QUICK_PLAY_COURT, SHORT_FORMAT, STARTER_PARTNER_ID, TRAINING_MODES, type CareerMatchDef, type CourtId, type MatchTwist, type PartnerId } from "./economyConfig";
+import { CAREER_MATCHES, careerMatch, HUMAN_PRESSURE_MATCHES, partnerBoost, PARTNERS, QUICK_PLAY_COURT, SHORT_FORMAT, STARTER_PARTNER_ID, TRAINING_MODES, type CareerMatchDef, type CourtId, type MatchTwist, type PartnerId } from "./economyConfig";
 
 export type MatchMode = "quick" | "career" | "training" | "scrimmage" | "tutorial";
 
@@ -134,6 +134,7 @@ export function careerSetup(m: CareerMatchDef, partnerId: string, seed: number, 
     far: { controllers: ["AI", "AI"], difficulties: [...m.ai], personalities: [...m.personalities], names },
     ...(m.twist?.startingScore ? { startingScore: { ...m.twist.startingScore } } : {}),
     ...(m.twist?.ruleModifiers ? { ruleModifiers: { ...m.twist.ruleModifiers } } : {}),
+    ...(HUMAN_PRESSURE_MATCHES.includes(m.id) ? { humanRallyPressure: true } : {}),
   });
   return { mode: "career", config, rivalCode: m.code, rivalName: m.rival, label: m.id, partnerId: partnerOf(partnerId).id, careerId: m.id, rivalLooks: careerLooks(m, signed), twist: m.twist };
 }
